@@ -231,8 +231,8 @@ Eventos tratados: `payment_intent.succeeded`, `payment_intent.payment_failed` (s
 
 ```http
 POST /api/v1/orders
-Idempotency-Key: 3b6f1c5e-0a52-4c39-9e5f-0f6d0a0b9c2a
-X-CSRF-Token: <token>
+Idempotency-Key: <uuid-gerado-pelo-cliente>
+X-CSRF-Token: <token-csrf>
 Content-Type: application/json
 
 {
@@ -264,7 +264,7 @@ Location: /api/v1/orders/01929e80-...
 POST /api/v1/checkin/scan
 Content-Type: application/json
 
-{ "eventId": "01929e7a-...", "token": "v1.k1.AZKeexXq....Q2h4" }
+{ "eventId": "01929e7a-...", "token": "<token-lido-do-qr>" }
 ```
 
 ```json
