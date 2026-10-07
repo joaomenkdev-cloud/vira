@@ -1,0 +1,27 @@
+name: Sugestão
+description: Proponha uma melhoria ou funcionalidade.
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema
+      description: Qual problema de quem organiza ou compra isso resolve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposta
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Dados pessoais
+      options:
+        - label: Esta proposta exige coletar ou exibir algum dado pessoal novo (se sim, explique acima — ver docs/PRIVACY.md)
