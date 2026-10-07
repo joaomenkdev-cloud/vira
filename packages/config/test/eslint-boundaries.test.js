@@ -41,13 +41,21 @@ describe("workspace boundaries", () => {
   // Relative escapes such as "../../api/src" carry no "apps" segment; dependency-cruiser
   // catches those by resolving the real path.
   it("forbids an app from importing another app by package name", async () => {
-    const messages = await restrictedImports(app, "src/page.ts", 'import "@vira/api/modules/orders";');
+    const messages = await restrictedImports(
+      app,
+      "src/page.ts",
+      'import "@vira/api/modules/orders";',
+    );
     expect(messages).toHaveLength(1);
     expect(messages[0]?.message).toMatch(/Apps never import other apps/);
   });
 
   it("forbids reaching into apps through a path", async () => {
-    const messages = await restrictedImports(app, "src/page.ts", 'import "../../../apps/api/src/main";');
+    const messages = await restrictedImports(
+      app,
+      "src/page.ts",
+      'import "../../../apps/api/src/main";',
+    );
     expect(messages).toHaveLength(1);
   });
 
