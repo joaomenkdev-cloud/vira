@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Vira ESM library (packages/*)",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "verbatimModuleSyntax": true
+  }
+}

@@ -18,6 +18,8 @@ importers:
         specifier: ^2.11.7
         version: 2.11.7
 
+  packages/config: {}
+
 packages:
 
   '@nodelib/fs.scandir@2.1.5':
