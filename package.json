@@ -9,11 +9,17 @@
     "pnpm": ">=9"
   },
   "scripts": {
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "lint:md": "markdownlint-cli2",
+    "check": "pnpm lint:md && turbo run lint typecheck test build",
     "prepare": "lefthook install"
   },
   "devDependencies": {
     "lefthook": "^2.2.0",
-    "markdownlint-cli2": "^0.23.3"
+    "markdownlint-cli2": "^0.23.3",
+    "turbo": "^2.11.7"
   }
 }
