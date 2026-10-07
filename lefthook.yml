@@ -6,3 +6,6 @@ pre-commit:
     markdownlint:
       glob: "*.md"
       run: pnpm exec markdownlint-cli2 {staged_files}
+    prettier:
+      glob: "*.{js,mjs,cjs,ts,tsx,json,jsonc,yml,yaml}"
+      run: pnpm exec prettier --check {staged_files}
