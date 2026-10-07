@@ -95,13 +95,13 @@ Todo erro é `application/problem+json`:
 | <a id="unauthenticated"></a>`unauthenticated` | 401 | Sem sessão ou token expirado |
 | <a id="invalid-credentials"></a>`invalid-credentials` | 401 | Login falhou (mensagem genérica, sem dizer se o e-mail existe) |
 | <a id="csrf-failed"></a>`csrf-failed` | 403 | Token CSRF ausente/inválido ou origem não permitida |
+| <a id="email-not-verified"></a>`email-not-verified` | 403 | Senha correta, mas e-mail ainda não verificado (só revelado a quem acertou a senha) |
 | <a id="forbidden"></a>`forbidden` | 403 | Papel insuficiente para a **função** (ex.: BUYER chamando rota de organizador) |
 | <a id="not-found"></a>`not-found` | 404 | Recurso inexistente **ou de outra pessoa** |
 | <a id="insufficient-inventory"></a>`insufficient-inventory` | 409 | Estoque não comporta a quantidade |
 | <a id="pending-order-exists"></a>`pending-order-exists` | 409 | Já existe pedido PENDING do comprador para o evento |
 | <a id="invalid-state-transition"></a>`invalid-state-transition` | 409 | Ex.: pagar pedido expirado, publicar evento incompleto |
 | <a id="request-in-progress"></a>`request-in-progress` | 409 | Mesma `Idempotency-Key` em processamento |
-| <a id="email-taken"></a>`email-taken` | 409 | Cadastro com e-mail existente (apenas no cadastro; ver nota de enumeração no SECURITY_MODEL) |
 | <a id="idempotency-key-reused"></a>`idempotency-key-reused` | 422 | Mesma chave com outro corpo |
 | <a id="sales-closed"></a>`sales-closed` | 422 | Fora da janela de vendas ou evento não publicado/encerrado |
 | <a id="rate-limited"></a>`rate-limited` | 429 | Limite excedido |
@@ -124,14 +124,14 @@ Legenda de papel: `PUBLIC`, `BUYER` (qualquer usuário autenticado), `ORGANIZER*
 | Método | Rota | Papel | Corpo | Sucesso | Erros | Rate limit |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/auth/csrf` | PUBLIC | — | `200 { csrfToken }` + cookie | — | — |
-| POST | `/auth/register` | PUBLIC | `{ name, email, password }` | `201 { user }` + cookies; e-mail de verificação | 400, 409 `email-taken`, 429 | 5/h/ip |
-| POST | `/auth/login` | PUBLIC | `{ email, password }` | `200 { user }` + cookies | 400, 401 `invalid-credentials`, 429 | 10/15 min/ip e 5/15 min/conta |
+| POST | `/auth/register` | PUBLIC | `{ name, email, password }` | `202` sempre, com a mesma resposta para e-mail novo ou existente; envia link de verificação (ou aviso "você já tem conta") | 400, 429 | 5/h/ip |
+| POST | `/auth/login` | PUBLIC | `{ email, password }` | `200 { user }` + cookies | 400, 401 `invalid-credentials`, 403 `email-not-verified`, 429 | 10/15 min/ip e 5/15 min/conta |
 | POST | `/auth/refresh` | cookie de refresh | — | `204` + cookies rotacionados | 401 (inclusive reuso detectado → família revogada) | 30/min/ip |
 | POST | `/auth/logout` | BUYER | — | `204`, revoga a sessão e limpa cookies | 401 | — |
 | POST | `/auth/logout-all` | BUYER | — | `204`, revoga todas as sessões | 401 | — |
 | GET | `/auth/oauth/{provider}` | PUBLIC | `provider ∈ google, github` | `302` para o provedor (state + PKCE) | 404 | 20/min/ip |
 | GET | `/auth/oauth/{provider}/callback` | PUBLIC | `code`, `state` | `302` para o web + cookies | `302` para tela de erro | 20/min/ip |
-| POST | `/auth/email/verify` | PUBLIC | `{ token }` | `204` | 400, 410 (expirado/usado) | 10/h/ip |
+| POST | `/auth/email/verify` | PUBLIC | `{ token }` | `200 { user }` + cookies (verificar o e-mail inicia a sessão) | 400, 410 (expirado/usado) | 10/h/ip |
 | POST | `/auth/email/resend` | BUYER | — | `204` | 429 | 3/h/conta |
 | POST | `/auth/password/forgot` | PUBLIC | `{ email }` | `202` sempre (não revela se o e-mail existe) | 429 | 5/h/ip |
 | POST | `/auth/password/reset` | PUBLIC | `{ token, password }` | `204`; revoga todas as sessões | 400, 410 | 10/h/ip |
@@ -181,7 +181,7 @@ Legenda de papel: `PUBLIC`, `BUYER` (qualquer usuário autenticado), `ORGANIZER*
 
 | Método | Rota | Papel | Corpo | Sucesso | Erros | Rate limit |
 | --- | --- | --- | --- | --- | --- | --- |
-| POST | `/orders` | BUYER (e-mail verificado) | `{ eventId, items: [{ ticketTypeId, quantity }] }` + `Idempotency-Key` | `201 Order` (PENDING, `expiresAt`) | 400, 401, 403 (e-mail não verificado), 404, 409, 422, 429 | 10/min/conta, 30/min/ip |
+| POST | `/orders` | BUYER | `{ eventId, items: [{ ticketTypeId, quantity }] }` + `Idempotency-Key` | `201 Order` (PENDING, `expiresAt`) | 400, 401, 404, 409, 422, 429 | 10/min/conta, 30/min/ip |
 | GET | `/orders` | BUYER | `limit`, `cursor` | `200 { data: OrderSummary[], page }` — **só os próprios** | 401 | — |
 | GET | `/orders/{id}` | OWNER | — | `200 Order` | 404 | — |
 | PUT | `/orders/{id}/holders` | OWNER | `{ holders: [{ orderItemId, names: string[] }] }` | `200 Order` | 400, 404, 409 (não PENDING) | — |
