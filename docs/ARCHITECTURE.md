@@ -67,6 +67,7 @@ vira/
 │   ├── api/                 # NestJS: HTTP API + worker (dois entrypoints)
 │   │   ├── src/
 │   │   │   ├── main.ts           # API HTTP
+│   │   │   ├── bootstrap/        # AppModule, configuração do app HTTP, run()
 │   │   │   ├── main.worker.ts    # consumidores BullMQ + agendamentos
 │   │   │   ├── modules/          # um diretório por módulo de negócio
 │   │   │   └── platform/         # transversal: config, logger, errors, db, queue, security
@@ -101,7 +102,7 @@ Regras entre módulos:
 
 - Um módulo só acessa outro pela **API pública** dele (`<modulo>/application/public-api.ts`) ou por **eventos de domínio** — nunca pelas tabelas ou repositórios do outro.
 - Fluxos que cruzam módulos com efeitos colaterais (ex.: pedido pago → emitir ingresso → enviar e-mail) usam **eventos de domínio** gravados na **outbox** na mesma transação (seção 6).
-- As fronteiras são verificadas no CI com `dependency-cruiser`.
+- As fronteiras são verificadas no CI em duas camadas: o ESLint barra imports por **pacote** (`@vira/config/eslint`) e o `dependency-cruiser` barra imports por **caminho** (`apps/api/.dependency-cruiser.js`), ambos rodando no `lint`.
 
 ## 4. Camadas
 
@@ -290,9 +291,9 @@ Rate limiting usa Redis (`@nestjs/throttler` com storage Redis) e é independent
 | Tema | Decisão |
 | --- | --- |
 | Configuração | Variáveis de ambiente validadas com Zod no boot; a aplicação **não sobe** com configuração inválida. `.env.example` documenta tudo, sem valores reais. |
-| Logs | `pino` (via `nestjs-pino`), JSON estruturado, `requestId` em todo log (gerado ou aceito de `X-Request-Id` confiável), redação de `authorization`, `cookie`, `set-cookie`, `password`, `token`, `email`, `name`. Nenhum dado pessoal em log. |
+| Logs | `pino` (via `nestjs-pino`), JSON estruturado, `requestId` no topo de toda linha (gerado, ou aceito de `X-Request-Id` quando tem formato seguro), sem headers, corpo, query string ou IP do cliente, redação de `authorization`, `cookie`, `set-cookie`, `password`, `token`, `email`, `name`. Nenhum dado pessoal em log. |
 | Erros | Filtro global converte exceções em `application/problem+json` (RFC 9457) com `type`, `title`, `status`, `detail`, `instance` e `requestId`. Erros 5xx nunca vazam stack ou mensagem interna. |
-| Validação | Schemas Zod de `packages/shared` validam corpo, query e params na borda (`http`). O domínio revalida invariantes. |
+| Validação | Schemas Zod de `packages/shared` validam corpo, query e params na borda (`http`) com o suporte nativo a Standard Schema do NestJS 12 (`@Body({ schema })` + `StandardSchemaValidationPipe`). O domínio revalida invariantes. |
 | OpenAPI | Gerado a partir dos schemas Zod e servido em `/docs` (desligado em produção ou protegido, configurável). |
 | Segurança HTTP | Helmet, CSP (no web, com nonce), CORS restrito à origem do web, limite de body (100 kB JSON; webhook com body bruto), `trust proxy` configurado para o provedor. Detalhes em [SECURITY_MODEL.md](SECURITY_MODEL.md). |
 | Tempo e dinheiro | Datas em UTC (`timestamptz`) com o fuso IANA do evento salvo à parte; formatação para exibição sempre no fuso do evento. Dinheiro em centavos (`int`), moeda `BRL`. |

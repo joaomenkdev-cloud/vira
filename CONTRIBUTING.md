@@ -36,6 +36,20 @@ pnpm install
 
 Rode `pnpm check` antes de abrir um PR.
 
+### Rodando a API
+
+```bash
+cp apps/api/.env.example apps/api/.env
+pnpm --filter @vira/api dev
+```
+
+- `http://localhost:3000/api/v1/health/live` — o processo está no ar;
+- `http://localhost:3000/docs` — OpenAPI (desligado por padrão em produção).
+
+A API não sobe com variáveis de ambiente inválidas: a mensagem lista cada variável e a regra quebrada, nunca o valor.
+
+Toda rota nova precisa declarar `@Public()` ou `@RequireRole(...)`; um teste varre as rotas e falha se alguma não declarar. Erros esperados são lançados como `ProblemException` com um tipo documentado em [`docs/API.md`](docs/API.md#tipos-de-problema).
+
 ### Configuração compartilhada
 
 Todo workspace estende `@vira/config` (`packages/config`):

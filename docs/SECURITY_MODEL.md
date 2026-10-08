@@ -163,7 +163,7 @@ Status: ⬜ planejado · 🟨 em andamento · ✅ implementado e testado. O marc
 | V1 Encoding and Sanitization | Escapamento por contexto (React), markdown sanitizado com allowlist, Prisma parametrizado (sem SQL cru concatenado), saída JSON sempre serializada. | Núcleo | ⬜ |
 | V2 Validation and Business Logic | Zod estrito em toda entrada; regras de negócio no `domain`; limites anti-abuso no fluxo de compra; operações sensíveis em ordem garantida (transições condicionais). | Núcleo / MVP | ⬜ |
 | V3 Web Frontend Security | CSP com nonce, cookies `__Host-`, `SameSite`, HSTS, proteção contra clickjacking, `Sec-Fetch-*`. | Fundação / MVP | ⬜ |
-| V4 API and Web Service | Métodos HTTP corretos, `Content-Type` verificado, limites de tamanho, OpenAPI coerente com o código. | Fundação | ⬜ |
+| V4 API and Web Service | Métodos HTTP corretos, `Content-Type` verificado, limites de tamanho, OpenAPI coerente com o código. | Fundação | 🟨 |
 | V5 File Handling | Upload pré-assinado com tipo e tamanho fixados, verificação de magic bytes, re-encode, bucket privado, nomes gerados pelo servidor. | Núcleo | ⬜ |
 | V6 Authentication | argon2id, política de senha (8–128, checagem contra senhas vazadas via k-anonymity HIBP), anti-enumeração, rate limit e bloqueio, redefinição com token de uso único. | Núcleo | ⬜ |
 | V7 Session Management | Refresh opaco com hash, rotação, detecção de reuso, expiração ociosa e absoluta, logout e logout global, revogação ao trocar senha. | Núcleo | ⬜ |
@@ -172,10 +172,10 @@ Status: ⬜ planejado · 🟨 em andamento · ✅ implementado e testado. O marc
 | V10 OAuth and OIDC | Authorization Code + PKCE, `state`, validação do `id_token` (Google), vínculo só com e-mail verificado, sem guardar tokens do provedor. | Núcleo | ⬜ |
 | V11 Cryptography | Bibliotecas padrão (`node:crypto`, argon2), aleatoriedade com CSPRNG, comparação em tempo constante, chaves ≥ 256 bits, rotação por `kid`. | Núcleo / MVP | ⬜ |
 | V12 Secure Communication | TLS em todos os saltos (web, API, banco, Redis), HSTS. | MVP (deploy) | ⬜ |
-| V13 Configuration | Config validada no boot, segredos fora do código, gitleaks, dependências monitoradas, modo debug desligado em produção. | Fundação | ⬜ |
+| V13 Configuration | Config validada no boot, segredos fora do código, gitleaks, dependências monitoradas, modo debug desligado em produção. | Fundação | 🟨 |
 | V14 Data Protection | Minimização (LGPD), inventário de dados, exportação e anonimização, sem PII em logs/Sentry/outbox, `Cache-Control: no-store` em respostas com dados pessoais. | MVP | ⬜ |
-| V15 Secure Coding and Architecture | Camadas com dependências para dentro verificadas no CI, integrações atrás de portas, revisão de dependências, documentação de ameaças (este arquivo). | Fundação | ⬜ |
-| V16 Security Logging and Error Handling | Logs estruturados com `requestId`, auditoria append-only, eventos de segurança registrados, erros RFC 9457 sem detalhes internos. | Fundação | ⬜ |
+| V15 Secure Coding and Architecture | Camadas com dependências para dentro verificadas no CI, integrações atrás de portas, revisão de dependências, documentação de ameaças (este arquivo). | Fundação | 🟨 |
+| V16 Security Logging and Error Handling | Logs estruturados com `requestId`, auditoria append-only, eventos de segurança registrados, erros RFC 9457 sem detalhes internos. | Fundação | 🟨 |
 | V17 WebRTC | Não se aplica (sem WebRTC). | — | — |
 
 A cada marco, a coluna de status é atualizada no mesmo PR que entrega o controle.

@@ -167,6 +167,8 @@ export function viraConfig({ kind, tsconfigRootDir, typeChecked = true, ignores 
           "error",
           { fixStyle: "inline-type-imports" },
         ],
+        // NestJS modules are classes that exist only for their decorators.
+        "@typescript-eslint/no-extraneous-class": ["error", { allowWithDecorator: true }],
         "@typescript-eslint/no-unused-vars": [
           "error",
           { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },

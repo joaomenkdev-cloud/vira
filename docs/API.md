@@ -85,6 +85,8 @@ Todo erro é `application/problem+json`:
 - `type` aponta para a âncora correspondente na tabela abaixo.
 - `errors` aparece em `validation-failed`: `[{ "path": "items.0.quantity", "message": "..." }]`.
 - `5xx` nunca expõe detalhes internos; o `requestId` permite achar o log.
+- Status 4xx sem tipo próprio na tabela usam `type: "about:blank"` (RFC 9457, seção 4.2.1).
+- Todo response traz o header `X-Request-Id`; um id enviado pelo cliente é mantido se tiver de 8 a 64 caracteres `[A-Za-z0-9_-]`.
 - Rate limit responde `429` com `Retry-After` e headers `RateLimit-Limit`/`RateLimit-Remaining`/`RateLimit-Reset`.
 
 #### Tipos de problema
@@ -104,6 +106,8 @@ Todo erro é `application/problem+json`:
 | <a id="request-in-progress"></a>`request-in-progress` | 409 | Mesma `Idempotency-Key` em processamento |
 | <a id="idempotency-key-reused"></a>`idempotency-key-reused` | 422 | Mesma chave com outro corpo |
 | <a id="sales-closed"></a>`sales-closed` | 422 | Fora da janela de vendas ou evento não publicado/encerrado |
+| <a id="payload-too-large"></a>`payload-too-large` | 413 | Corpo acima de 100 kB |
+| <a id="unsupported-media-type"></a>`unsupported-media-type` | 415 | `Content-Type` não aceito pela rota |
 | <a id="rate-limited"></a>`rate-limited` | 429 | Limite excedido |
 | <a id="internal-error"></a>`internal-error` | 500 | Falha inesperada |
 
