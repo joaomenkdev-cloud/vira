@@ -311,7 +311,7 @@ Rate limiting usa Redis (`@nestjs/throttler` com storage Redis) e é independent
 
 | Ambiente | Web | API + worker | Banco | Redis | Storage | E-mail | Stripe |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Local | `next dev` | `nest start --watch` | Postgres 16 (Docker) | Redis (Docker) | MinIO (Docker) | Mailpit (Docker) | modo de teste + Stripe CLI (`stripe listen`) |
+| Local | `next dev` | `nest start --watch` | Postgres 16 (Docker) | Redis (Docker) | SeaweedFS (Docker, [ADR-0012](adr/0012-armazenamento-local-seaweedfs.md)) | Mailpit (Docker) | modo de teste + Stripe CLI (`stripe listen`) |
 | Testes (CI) | — | Supertest | Testcontainers | Testcontainers | fake em memória | fake em memória | fake + fixtures de webhook assinadas |
 | Demo pública | Vercel | Render | Neon | Upstash | Cloudflare R2 | Resend | modo de teste |
 

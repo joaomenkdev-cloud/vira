@@ -77,13 +77,18 @@ Technical documentation is written in Portuguese.
 
 ## Running it
 
-There is no runnable code yet. Local setup instructions (Docker with Postgres, Redis, MinIO and Mailpit) arrive in roadmap delivery F4.
+The API is under construction (skeleton, database and local infrastructure). With Docker:
 
 ```bash
 corepack enable
 pnpm install
-pnpm lint:md
+pnpm infra:up
+cp apps/api/.env.example apps/api/.env
+pnpm --filter @vira/api db:deploy
+pnpm --filter @vira/api dev
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) (in Portuguese) for details.
 
 ## Contributing
 

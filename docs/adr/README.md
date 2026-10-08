@@ -16,4 +16,5 @@ Formato: [template](0000-template.md), inspirado no MADR.
 | [0008](0008-qr-code-assinado.md) | QR Code com token assinado por HMAC | Aceito |
 | [0009](0009-design-system-proprio.md) | Design system próprio sobre shadcn/ui | Aceito |
 | [0010](0010-dados-da-demo.md) | Dados de demonstração só via seed, sinalizados | Aceito |
-| [0011](0011-hospedagem.md) | Hospedagem: Vercel, Render, Neon, Upstash, R2 | Aceito |
+| [0011](0011-hospedagem.md) | Hospedagem: Vercel, Render, Neon, Upstash, R2 | Aceito (armazenamento local substituído pelo 0012) |
+| [0012](0012-armazenamento-local-seaweedfs.md) | SeaweedFS como armazenamento S3 local | Aceito |

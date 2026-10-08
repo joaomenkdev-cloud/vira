@@ -134,7 +134,7 @@ Legenda: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosur
 | Segredos | Somente variáveis de ambiente, validadas no boot; nunca no repositório (gitleaks no pre-commit e no CI); chaves separadas por ambiente; rotação documentada. |
 | Dependências | Dependabot semanal, `pnpm audit` no CI, CodeQL, lockfile congelado no CI, actions fixadas por versão. |
 | Logs | Sem dados pessoais nem segredos (redação no pino); `requestId` em tudo; Sentry com `sendDefaultPii: false` e `beforeSend` sanitizando. |
-| Banco | Usuário da aplicação sem privilégio de DDL em produção (migrations com outro papel); `audit_logs` só `INSERT`/`SELECT`; TLS obrigatório. |
+| Banco | Usuário da aplicação sem privilégio de DDL em produção (migrations com outro papel); `audit_logs` só `INSERT`/`SELECT`; TLS obrigatório (a API recusa subir em produção sem `sslmode=require` no `DATABASE_URL` e sem `rediss://` no `REDIS_URL`); `statement_timeout` de 5 s e timeout de conexão de 5 s. |
 | Inventário (API9) | OpenAPI gerado do código, versão única `/api/v1`, `/docs` protegido em produção; rotas não documentadas falham no teste de contrato. |
 | Consumo de APIs (API10) | Respostas do Stripe e dos provedores OAuth validadas com Zod; timeouts e retentativas com limite. |
 | Demo | Configuração recusa chaves live do Stripe; aviso permanente de modo de teste na interface. |
@@ -171,7 +171,7 @@ Status: ⬜ planejado · 🟨 em andamento · ✅ implementado e testado. O marc
 | V9 Self-contained Tokens | JWT com `alg` fixo, `iss`/`aud`/`exp` validados, vida curta; token do QR com HMAC e `kid`. | Núcleo / MVP | ⬜ |
 | V10 OAuth and OIDC | Authorization Code + PKCE, `state`, validação do `id_token` (Google), vínculo só com e-mail verificado, sem guardar tokens do provedor. | Núcleo | ⬜ |
 | V11 Cryptography | Bibliotecas padrão (`node:crypto`, argon2), aleatoriedade com CSPRNG, comparação em tempo constante, chaves ≥ 256 bits, rotação por `kid`. | Núcleo / MVP | ⬜ |
-| V12 Secure Communication | TLS em todos os saltos (web, API, banco, Redis), HSTS. | MVP (deploy) | ⬜ |
+| V12 Secure Communication | TLS em todos os saltos (web, API, banco, Redis), HSTS. | MVP (deploy) | 🟨 |
 | V13 Configuration | Config validada no boot, segredos fora do código, gitleaks, dependências monitoradas, modo debug desligado em produção. | Fundação | 🟨 |
 | V14 Data Protection | Minimização (LGPD), inventário de dados, exportação e anonimização, sem PII em logs/Sentry/outbox, `Cache-Control: no-store` em respostas com dados pessoais. | MVP | ⬜ |
 | V15 Secure Coding and Architecture | Camadas com dependências para dentro verificadas no CI, integrações atrás de portas, revisão de dependências, documentação de ameaças (este arquivo). | Fundação | 🟨 |
