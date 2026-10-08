@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "vira-local",
+      "credentials": [{ "accessKey": "vira-local", "secretKey": "vira-local-secret" }],
+      "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+    }
+  ]
+}

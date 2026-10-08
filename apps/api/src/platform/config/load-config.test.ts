@@ -2,7 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import { ConfigValidationError, loadConfig } from "./load-config.js";
 
-const validEnv = { WEB_ORIGIN: "http://localhost:3001" };
+const validEnv = {
+  WEB_ORIGIN: "http://localhost:3001",
+  DATABASE_URL: "postgresql://vira:vira_local@127.0.0.1:5432/vira",
+  REDIS_URL: "redis://127.0.0.1:6379",
+};
+
+const productionEnv = {
+  NODE_ENV: "production",
+  WEB_ORIGIN: "https://vira.example",
+  DATABASE_URL: "postgresql://vira:pw@db.example/vira?sslmode=require",
+  REDIS_URL: "rediss://default:pw@cache.example:6379",
+};
 
 function captureError(env: NodeJS.ProcessEnv): ConfigValidationError {
   try {
@@ -21,6 +32,8 @@ describe("loadConfig", () => {
       http: { host: "0.0.0.0", port: 3000, webOrigin: "http://localhost:3001", trustProxyHops: 0 },
       log: { level: "info", pretty: true },
       docs: { enabled: true },
+      database: { url: validEnv.DATABASE_URL },
+      redis: { url: validEnv.REDIS_URL },
     });
   });
 
@@ -40,32 +53,78 @@ describe("loadConfig", () => {
   });
 
   it("normalizes the web origin", () => {
-    expect(loadConfig({ WEB_ORIGIN: "https://vira.example/some/path" }).http.webOrigin).toBe(
-      "https://vira.example",
-    );
+    const config = loadConfig({ ...validEnv, WEB_ORIGIN: "https://vira.example/some/path" });
+    expect(config.http.webOrigin).toBe("https://vira.example");
   });
 
-  it("disables the API docs in production by default", () => {
-    const config = loadConfig({ NODE_ENV: "production", WEB_ORIGIN: "https://vira.example" });
-    expect(config.docs.enabled).toBe(false);
+  it("rejects connection strings for the wrong service", () => {
+    const error = captureError({
+      ...validEnv,
+      DATABASE_URL: "mysql://vira@db/vira",
+      REDIS_URL: "http://cache.example",
+    });
+    expect(error.issues.map((i) => i.variable).sort()).toEqual(["DATABASE_URL", "REDIS_URL"]);
   });
 
-  it("requires https for the web origin in production", () => {
-    const error = captureError({ NODE_ENV: "production", WEB_ORIGIN: "http://vira.example" });
-    expect(error.issues).toEqual([
-      { variable: "WEB_ORIGIN", message: "must use https in production" },
-    ]);
+  describe("in production", () => {
+    it("accepts encrypted connections and disables the API docs by default", () => {
+      expect(loadConfig(productionEnv).docs.enabled).toBe(false);
+    });
+
+    it("requires https for the web origin", () => {
+      const error = captureError({ ...productionEnv, WEB_ORIGIN: "http://vira.example" });
+      expect(error.issues).toEqual([
+        { variable: "WEB_ORIGIN", message: "must use https in production" },
+      ]);
+    });
+
+    it("requires TLS to the database", () => {
+      for (const url of [
+        "postgresql://vira:pw@db.example/vira",
+        "postgresql://vira:pw@db.example/vira?sslmode=prefer",
+      ]) {
+        const error = captureError({ ...productionEnv, DATABASE_URL: url });
+        expect(error.issues.map((i) => i.variable)).toEqual(["DATABASE_URL"]);
+      }
+    });
+
+    it("requires TLS to Redis", () => {
+      const error = captureError({ ...productionEnv, REDIS_URL: "redis://cache.example:6379" });
+      expect(error.issues).toEqual([
+        { variable: "REDIS_URL", message: "must use rediss:// in production" },
+      ]);
+    });
   });
 
   it("reports every invalid variable at once", () => {
     const error = captureError({ PORT: "0", LOG_LEVEL: "verbose" });
-    expect(error.issues.map((i) => i.variable).sort()).toEqual(["LOG_LEVEL", "PORT", "WEB_ORIGIN"]);
+    expect(error.issues.map((i) => i.variable).sort()).toEqual([
+      "DATABASE_URL",
+      "LOG_LEVEL",
+      "PORT",
+      "REDIS_URL",
+      "WEB_ORIGIN",
+    ]);
   });
 
   it("never echoes the offending values, which may be secrets", () => {
     const secret = "s3cr3t-value-that-must-not-leak";
-    const error = captureError({ WEB_ORIGIN: secret, PORT: secret, LOG_LEVEL: secret });
+    const error = captureError({
+      WEB_ORIGIN: secret,
+      PORT: secret,
+      LOG_LEVEL: secret,
+      DATABASE_URL: `mysql://vira:${secret}@db/vira`,
+      REDIS_URL: secret,
+    });
     expect(error.message).not.toContain(secret);
     expect(JSON.stringify(error.issues)).not.toContain(secret);
+  });
+
+  it("never echoes database passwords from production rule failures", () => {
+    const error = captureError({
+      ...productionEnv,
+      DATABASE_URL: "postgresql://vira:hunter2@db.example/vira",
+    });
+    expect(error.message).not.toContain("hunter2");
   });
 });

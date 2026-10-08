@@ -33,9 +33,12 @@ describe("health", () => {
     expect(response.body).toEqual({ status: "ok" });
   });
 
-  it("reports readiness", async () => {
-    const response = await request(server()).get("/api/v1/health/ready").expect(200);
-    expect(response.body).toEqual({ status: "ok", checks: {} });
+  it("reports unavailable while the database and Redis are unreachable", async () => {
+    const response = await request(server()).get("/api/v1/health/ready").expect(503);
+    expect(response.body).toEqual({
+      status: "unavailable",
+      checks: { database: "down", redis: "down" },
+    });
   });
 });
 

@@ -12,7 +12,7 @@ Obrigado pelo interesse no Vira. Este guia resume como o projeto é desenvolvido
 
 - Node.js 22 LTS (`.nvmrc`)
 - pnpm 9 (`corepack enable`)
-- Docker (PostgreSQL, Redis, MinIO e Mailpit locais — a partir do marco Fundação)
+- Docker (PostgreSQL, Redis, SeaweedFS e Mailpit locais, via `docker-compose.yml`)
 - [gitleaks](https://github.com/gitleaks/gitleaks#installing) no `PATH` para o hook de pre-commit
 
 ```bash
@@ -35,6 +35,35 @@ pnpm install
 | `pnpm lint:md` | markdownlint na documentação |
 
 Rode `pnpm check` antes de abrir um PR.
+
+### Infraestrutura local
+
+```bash
+pnpm infra:up     # Postgres 16, Redis, SeaweedFS (S3) e Mailpit, esperando os healthchecks
+pnpm infra:down   # para tudo (os dados ficam nos volumes do Docker)
+```
+
+| Serviço | Endereço | Uso |
+| --- | --- | --- |
+| PostgreSQL 16 | `127.0.0.1:5432` (`vira` / `vira_local`) | Banco |
+| Redis | `127.0.0.1:6379` | Filas e rate limit |
+| SeaweedFS (S3) | `http://127.0.0.1:8333` | Imagens dos eventos ([ADR-0012](docs/adr/0012-armazenamento-local-seaweedfs.md)) |
+| Mailpit | SMTP `127.0.0.1:1025`, UI `http://localhost:8025` | E-mails locais |
+
+As credenciais acima só existem no ambiente local e estão no `.env.example`.
+
+### Banco de dados
+
+```bash
+pnpm --filter @vira/api db:deploy    # aplica as migrations
+pnpm --filter @vira/api db:migrate   # cria uma migration nova a partir do schema.prisma
+```
+
+O client do Prisma é gerado em `apps/api/src/generated` (ignorado pelo Git) pela tarefa `db:generate`, que o Turborepo roda antes de `lint`, `typecheck`, `test` e `build`. Invariantes que o Prisma não expressa (`CHECK`, índices parciais, triggers) são escritos em SQL nas migrations.
+
+### Testes de integração
+
+Os testes em `apps/api/test/integration` sobem Postgres e Redis reais com Testcontainers. Sem Docker, eles são pulados com aviso; no CI (`CI=true`) a falta de Docker é erro.
 
 ### Rodando a API
 

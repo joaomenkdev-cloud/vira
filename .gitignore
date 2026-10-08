@@ -3,6 +3,7 @@ node_modules/
 .pnpm-store/
 
 # Build output
+**/src/generated/
 dist/
 build/
 .next/

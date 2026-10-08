@@ -1,17 +1,11 @@
 import { Module } from "@nestjs/common";
 
-import {
-  CheckReadiness,
-  DEPENDENCY_CHECKS,
-  type DependencyCheck,
-} from "./application/check-readiness.js";
+import { CheckReadiness, DEPENDENCY_CHECKS } from "./application/check-readiness.js";
 import { HealthController } from "./http/health.controller.js";
-
-// Database and Redis checks are registered here once those adapters exist (F4).
-const dependencyChecks: DependencyCheck[] = [];
+import { DEPENDENCY_CHECK_FACTORY } from "./infra/dependency-checks.js";
 
 @Module({
   controllers: [HealthController],
-  providers: [CheckReadiness, { provide: DEPENDENCY_CHECKS, useValue: dependencyChecks }],
+  providers: [CheckReadiness, { provide: DEPENDENCY_CHECKS, ...DEPENDENCY_CHECK_FACTORY }],
 })
 export class HealthModule {}

@@ -4,6 +4,7 @@ pnpm-lock.yaml
 **/.next/
 **/coverage/
 **/.turbo/
+**/src/generated/
 
 # Markdown is checked by markdownlint (and some documents are kept verbatim).
 *.md

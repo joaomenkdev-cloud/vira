@@ -3,5 +3,8 @@
 useDefault = true
 
 [allowlist]
-description = "Documentation placeholders"
+description = "Documentation placeholders and local-only development credentials"
 paths = ['''\.env\.example$''']
+# Exact local-only values from docker-compose.yml and infra/seaweedfs/s3.json.
+# Never add real credentials here.
+regexes = ['''vira-local-secret''', '''vira_local''']

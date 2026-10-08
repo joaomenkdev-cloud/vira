@@ -17,7 +17,9 @@
     "format:check": "prettier --check .",
     "lint:md": "markdownlint-cli2",
     "check": "pnpm format:check && pnpm lint:md && turbo run lint typecheck test build",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install",
+    "infra:up": "docker compose up --detach --wait",
+    "infra:down": "docker compose down"
   },
   "devDependencies": {
     "@vira/config": "workspace:^",

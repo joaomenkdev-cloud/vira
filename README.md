@@ -78,13 +78,18 @@ Detalhes e critérios de pronto em [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Como rodar
 
-Ainda não há código executável. As instruções de setup local (Docker com Postgres, Redis, MinIO e Mailpit) entram na entrega F4 do roadmap.
+A API está em construção (esqueleto, banco e infraestrutura local). Com Docker:
 
 ```bash
 corepack enable
 pnpm install
-pnpm lint:md
+pnpm infra:up
+cp apps/api/.env.example apps/api/.env
+pnpm --filter @vira/api db:deploy
+pnpm --filter @vira/api dev
 ```
+
+Detalhes em [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Contribuindo
 

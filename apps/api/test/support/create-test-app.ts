@@ -9,6 +9,16 @@ import { loadConfig } from "../../src/platform/config/load-config.js";
 
 export const TEST_WEB_ORIGIN = "http://localhost:3001";
 
+/**
+ * Endpoints nothing listens on: suites that do not need infrastructure still boot
+ * (connections are lazy) and see the dependencies as down. Integration suites pass
+ * the URLs of real containers instead (test/support/infrastructure.ts).
+ */
+export const UNREACHABLE_INFRASTRUCTURE = {
+  DATABASE_URL: "postgresql://vira:unused@127.0.0.1:1/vira",
+  REDIS_URL: "redis://127.0.0.1:1",
+};
+
 export interface TestApp {
   readonly app: NestExpressApplication;
   readonly config: AppConfig;
@@ -29,6 +39,7 @@ export async function createTestApp({
     NODE_ENV: "test",
     WEB_ORIGIN: TEST_WEB_ORIGIN,
     LOG_LEVEL: "info",
+    ...UNREACHABLE_INFRASTRUCTURE,
     ...env,
   });
   const logs: string[] = [];
