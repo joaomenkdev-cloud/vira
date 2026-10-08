@@ -1,0 +1,13 @@
+// Vira database schema. Reference design: docs/DATA_MODEL.md.
+// Invariants Prisma cannot express (CHECK constraints, partial indexes, triggers,
+// extensions) live as SQL in the migrations (ADR-0004).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}

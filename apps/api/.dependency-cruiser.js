@@ -79,7 +79,7 @@ export const forbidden = [
 /** @type {import("dependency-cruiser").ICruiseOptions} */
 export const options = {
   doNotFollow: { path: "node_modules" },
-  exclude: { path: "^test/fixtures/" },
+  exclude: { path: "^(test/fixtures|src/generated)/" },
   tsPreCompilationDeps: true,
   tsConfig: { fileName: "tsconfig.json" },
   enhancedResolveOptions: {
