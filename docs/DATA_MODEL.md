@@ -362,13 +362,13 @@ Append-only ([ARCHITECTURE.md](ARCHITECTURE.md#7-preocupações-transversais-pla
 | --- | --- | --- |
 | `occurred_at` | timestamptz | |
 | `actor_id` | uuid | Nullable (sistema/webhook). Pseudônimo: continua válido após a anonimização do usuário |
-| `actor_role` | text | |
-| `action` | text | Ex.: `auth.login_succeeded`, `auth.refresh_reuse_detected`, `event.published`, `order.paid`, `order.refunded`, `ticket.checked_in`, `user.data_exported`, `user.anonymized`, `admin.role_changed` |
-| `entity_type`, `entity_id` | text, uuid | |
+| `actor_role` | text | `SYSTEM`, `BUYER`, `ORGANIZER` ou `ADMIN`; `CHECK`: `SYSTEM` se e somente se `actor_id` é `NULL` |
+| `action` | text | `CHECK` no formato `area.acao`. O catálogo completo, com o tipo de entidade e o schema de `metadata` de cada ação, está em `apps/api/src/modules/audit/domain/audit-catalog.ts`. Ex.: `auth.login_succeeded`, `auth.refresh_reuse_detected`, `event.published`, `order.paid`, `order.refunded`, `ticket.checked_in`, `user.data_exported`, `user.anonymized`, `admin.role_changed` |
+| `entity_type`, `entity_id` | text, uuid | Tipo fixado por ação no catálogo (`user`, `session`, `event`, `order`, `payment`, `ticket`); `entity_id` nulo quando a entidade não existe (ex.: login com e-mail desconhecido) |
 | `request_id` | text | Correlaciona com os logs |
-| `metadata` | jsonb | Sem dados pessoais (validado por schema por ação) |
+| `metadata` | jsonb | Sem dados pessoais: schema estrito por ação (chaves desconhecidas são rejeitadas); `CHECK` garante objeto JSON |
 
-Garantias: o papel de banco da aplicação tem só `INSERT` e `SELECT` nessa tabela (`REVOKE UPDATE, DELETE, TRUNCATE`), e um trigger `BEFORE UPDATE OR DELETE` levanta exceção. Índices: `(entity_type, entity_id, occurred_at)`, `(actor_id, occurred_at)`, `(action, occurred_at)`. Retenção: 5 anos.
+Garantias: triggers `BEFORE UPDATE OR DELETE` (por linha) e `BEFORE TRUNCATE` levantam exceção para qualquer papel, inclusive o dono da tabela; `REVOKE UPDATE, DELETE, TRUNCATE ... FROM PUBLIC`; em produção o papel da aplicação recebe só `INSERT` e `SELECT` (entrega V11). Testado contra Postgres real. Índices: `(entity_type, entity_id, occurred_at)`, `(actor_id, occurred_at)`, `(action, occurred_at)`. Retenção: 5 anos.
 
 ### `media_uploads`
 

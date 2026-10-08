@@ -9,7 +9,8 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - **Entregas abertas (pilha):**
   - F3 — Esqueleto da API (`feat/api-skeleton`, PR #8, base `main`) — aguardando revisão.
   - F4 — Banco e infraestrutura local (`feat/api-database`, PR #10, empilhado sobre o #8) — aguardando revisão.
-- **Próximo passo:** F5 — Módulo de auditoria (`feat/audit-log`, empilhado sobre o F4).
+  - F5 — Módulo de auditoria (`feat/audit-log`, PR #11, empilhado sobre o #10) — aguardando revisão.
+- **Próximo passo:** F6 — Worker, filas e outbox (`feat/worker-outbox`). Quando um PR da pilha for mergeado, mudar a base do seguinte para `main` antes de apagar a branch.
 - **Dependabot:** #4–#7 mergeados em 2026-10-08 (checkout v7, setup-node v6, gitleaks v3, pnpm/action-setup v6). O #3 (CodeQL v4) foi fechado por engano pelo Dependabot e substituído pelo #9, aguardando revisão.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
@@ -25,6 +26,23 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-08 — F5: módulo de auditoria
+
+Feito:
+
+- Tabela `audit_logs` (migration SQL): `CHECK` de formato da ação, de papel (`SYSTEM`/`BUYER`/`ORGANIZER`/`ADMIN`) e de par ator/papel, `metadata` sempre objeto; triggers que rejeitam `UPDATE`, `DELETE` e `TRUNCATE` para qualquer papel; `REVOKE` de `PUBLIC`.
+- Módulo `audit` em camadas: catálogo de ações (`domain/audit-catalog.ts`) com tipo de entidade e schema estrito de `metadata` por ação; `buildAuditEntry` imutável; caso de uso `AuditLog.record()` atrás da porta `AuditLogRepository`; adaptador Prisma; `public-api.ts`.
+- `platform/runtime`: portas `Clock` e `IdGenerator` (UUID v7).
+- Testes: domínio (catálogo, rejeição de chaves e formatos sem ecoar valores, nenhuma chave de dado pessoal no catálogo), caso de uso com repositório em memória e integração contra Postgres real provando o append-only e os `CHECK`s.
+
+Decisões tomadas por conta própria:
+
+- O catálogo já declara as ações previstas no DATA_MODEL para os próximos marcos (auth, pedidos, pagamentos, check-in, LGPD), cada uma com o menor `metadata` útil e sem dado pessoal; os módulos que as usarem podem ajustar o schema no próprio PR.
+- O trigger é a proteção principal (vale até para o dono da tabela); o `GRANT` só de `INSERT`/`SELECT` ao papel da aplicação fica para o deploy (V11), quando houver papéis separados.
+- `entity_id` como `uuid` (todos os ids do modelo são UUID v7); ids gerados com o pacote `uuid` porque o Node 22 não tem `crypto.randomUUIDv7`.
+- O endpoint `GET /admin/audit-logs` (API.md) fica para quando existir autenticação de ADMIN.
+- O `prisma migrate diff` precisa de um `DATABASE_URL` (mesmo fictício) para gerar SQL; sem ele o CLI não mostra erro nenhum.
 
 ### 2026-10-08 — F4: banco e infraestrutura local
 

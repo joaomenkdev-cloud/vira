@@ -1,6 +1,7 @@
 import { type DynamicModule, Module } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD, APP_PIPE } from "@nestjs/core";
 
+import { AuditModule } from "../modules/audit/audit.module.js";
 import { HealthModule } from "../modules/health/health.module.js";
 import type { AppConfig } from "../platform/config/config.schema.js";
 import { ConfigModule } from "../platform/config/config.module.js";
@@ -9,6 +10,7 @@ import { ProblemDetailsFilter } from "../platform/errors/problem-details.filter.
 import { createValidationPipe } from "../platform/errors/validation.js";
 import { LoggingModule, type LoggingOptions } from "../platform/logging/logging.module.js";
 import { RedisModule } from "../platform/redis/redis.module.js";
+import { RuntimeModule } from "../platform/runtime/runtime.module.js";
 import { AccessGuard } from "../platform/security/access.guard.js";
 
 export interface AppModuleOptions {
@@ -26,6 +28,8 @@ export class AppModule {
         LoggingModule.forRoot(config, logging),
         DatabaseModule,
         RedisModule,
+        RuntimeModule,
+        AuditModule,
         HealthModule,
       ],
       providers: [

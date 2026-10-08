@@ -11,3 +11,24 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+/// Append-only record of sensitive actions (docs/DATA_MODEL.md#audit_logs).
+/// UPDATE, DELETE and TRUNCATE are rejected by a trigger; see the migration.
+model AuditLog {
+  id         String   @id @db.Uuid
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+  /// Pseudonymous: stays valid after the user is anonymized. NULL for the system.
+  actorId    String?  @map("actor_id") @db.Uuid
+  actorRole  String   @map("actor_role")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id") @db.Uuid
+  requestId  String?  @map("request_id")
+  /// Validated per action; never holds personal data.
+  metadata   Json     @default("{}") @db.JsonB
+
+  @@index([entityType, entityId, occurredAt])
+  @@index([actorId, occurredAt])
+  @@index([action, occurredAt])
+  @@map("audit_logs")
+}
