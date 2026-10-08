@@ -133,3 +133,7 @@ Observações:
 
 - O binário do gitleaks não está instalado na máquina local; o hook avisa e segue, e o CI aplica a verificação. Instalar: <https://github.com/gitleaks/gitleaks#installing>.
 - Node local é 24; o projeto fixa 22 LTS no `.nvmrc` e no CI.
+
+## Retomada: F6 (worker, filas e outbox) em andamento
+
+Branch `feat/worker-outbox` (sem PR ainda). Código e testes escritos; 86 testes unitários passam, `lint` e `typecheck` limpos, worker compilado testado manualmente. **Falta:** rodar a integração no CI, atualizar docs (ARCHITECTURE seção 6: poller em processo no lugar de job repetível do BullMQ; DATA_MODEL `outbox_messages`: colunas `available_at`, índice composto, `CHECK`s; CONTRIBUTING: `start:worker`), marcar F6 como 🟨 no ROADMAP e abrir o PR draft.
