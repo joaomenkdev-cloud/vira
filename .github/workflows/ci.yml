@@ -35,6 +35,31 @@ jobs:
       - run: pnpm lint:md
       - run: pnpm turbo run lint typecheck test build
 
+  infrastructure:
+    name: Local infrastructure (docker compose)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start services and wait for health checks
+        run: docker compose up --detach --wait
+      - name: Apply migrations to the compose database
+        run: pnpm --filter @vira/api db:deploy
+        env:
+          DATABASE_URL: postgresql://vira:vira_local@127.0.0.1:5432/vira
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Stop services
+        if: always()
+        run: docker compose down --volumes
+
   secrets:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
