@@ -5,11 +5,12 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 0 — Fundação
+- **Concluído:** F1 — Planejamento (PR #1, mergeado em 2026-10-08 com merge commit).
 - **Entregas abertas:**
-  - F1 — Planejamento (`docs/planejamento-inicial`, PR #1 draft) — aguardando revisão e merge.
-  - F2 — Ferramentas do workspace (`chore/workspace-tooling`, PR #2 draft, empilhado sobre o #1) — aguardando revisão.
-- **Próximo passo:** depois do merge do #1, mudar a base do #2 para `main`; depois do merge do #2, iniciar **F3 — Esqueleto da API** (`feat/api-skeleton`).
-- **Bloqueios:** nenhum técnico. As entregas estão empilhadas porque a `main` ainda não tem o F1.
+  - F2 — Ferramentas do workspace (`chore/workspace-tooling`, PR #2, base `main`) — aguardando revisão.
+  - F3 — Esqueleto da API (`feat/api-skeleton`, empilhado sobre o #2) — em andamento.
+- **Próximo passo:** concluir o F3; quando o #2 for mergeado, mudar a base do PR do F3 para `main`.
+- **Bloqueios:** nenhum.
 
 ## Regras que valem sempre
 
@@ -32,6 +33,7 @@ Feito:
 - Regras de fronteira testadas (16 testes): apps não importam apps, pacotes não importam apps, `domain` sem framework nem SDK de infraestrutura, `application` e `http` sem SDK de infraestrutura.
 - CI: job único com format, Markdown, lint, typecheck, test e build, com cache do Turborepo; CodeQL analisando `javascript-typescript`.
 - Pre-commit: Prettier nos arquivos em stage.
+- `AGENTS.md` (bloco gerenciado pelo Turborepo, orienta agentes de IA a ler a documentação da versão instalada) entrou junto no commit do Prettier; mantido de propósito.
 - PR #1: falsos positivos do gitleaks nos exemplos da API.md corrigidos (placeholders + `.gitleaksignore` por fingerprint para o commit antigo).
 
 Decisões tomadas por conta própria:
