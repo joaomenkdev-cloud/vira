@@ -1,0 +1,48 @@
+import type { DynamicModule, Type } from "@nestjs/common";
+import type { NestExpressApplication } from "@nestjs/platform-express";
+import { Test } from "@nestjs/testing";
+
+import { AppModule } from "../../src/bootstrap/app.module.js";
+import { configureApp } from "../../src/bootstrap/configure-app.js";
+import type { AppConfig } from "../../src/platform/config/config.schema.js";
+import { loadConfig } from "../../src/platform/config/load-config.js";
+
+export const TEST_WEB_ORIGIN = "http://localhost:3001";
+
+export interface TestApp {
+  readonly app: NestExpressApplication;
+  readonly config: AppConfig;
+  /** Every log line written by the app, as raw JSON strings. */
+  readonly logs: string[];
+}
+
+export interface TestAppOptions {
+  readonly env?: NodeJS.ProcessEnv;
+  readonly imports?: (Type | DynamicModule)[];
+}
+
+export async function createTestApp({
+  env = {},
+  imports = [],
+}: TestAppOptions = {}): Promise<TestApp> {
+  const config = loadConfig({
+    NODE_ENV: "test",
+    WEB_ORIGIN: TEST_WEB_ORIGIN,
+    LOG_LEVEL: "info",
+    ...env,
+  });
+  const logs: string[] = [];
+  const destination = { write: (line: string) => void logs.push(line) };
+
+  const moduleRef = await Test.createTestingModule({
+    imports: [AppModule.register({ config, logging: { destination } }), ...imports],
+  }).compile();
+
+  const app = moduleRef.createNestApplication<NestExpressApplication>({
+    bufferLogs: true,
+    bodyParser: false,
+  });
+  configureApp(app, config);
+  await app.init();
+  return { app, config, logs };
+}
