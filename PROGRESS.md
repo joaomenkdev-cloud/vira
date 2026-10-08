@@ -8,9 +8,10 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - **Concluído:** F1 — Planejamento (PR #1, mergeado em 2026-10-08 com merge commit).
 - **Entregas abertas:**
   - F2 — Ferramentas do workspace (`chore/workspace-tooling`, PR #2, base `main`) — aguardando revisão.
-  - F3 — Esqueleto da API (`feat/api-skeleton`, PR #3, empilhado sobre o #2) — aguardando revisão.
-- **Próximo passo:** quando o #2 for mergeado, mudar a base do #3 para `main`. Depois, **F4 — Banco e infraestrutura local** (`feat/api-database`).
+  - F3 — Esqueleto da API (`feat/api-skeleton`, PR #8, empilhado sobre o #2) — aguardando revisão.
+- **Próximo passo:** quando o #2 for mergeado, mudar a base do #8 para `main`. Depois, **F4 — Banco e infraestrutura local** (`feat/api-database`).
 - **Bloqueios:** nenhum.
+- **Dependabot:** PRs #3–#7 (bumps major de GitHub Actions) aguardando revisão do mantenedor.
 
 ## Regras que valem sempre
 
