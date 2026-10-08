@@ -1,0 +1,8 @@
+# Git hooks managed by lefthook (installed by `pnpm install`).
+pre-commit:
+  commands:
+    gitleaks:
+      run: sh scripts/gitleaks-staged.sh
+    markdownlint:
+      glob: "*.md"
+      run: pnpm exec markdownlint-cli2 {staged_files}

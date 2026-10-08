@@ -1,0 +1,7 @@
+# Extends the default gitleaks ruleset.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documentation placeholders"
+paths = ['''\.env\.example$''']

@@ -1,0 +1,57 @@
+name: Bug
+description: Algo não funciona como deveria.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por relatar. **Vulnerabilidades de segurança não devem ser abertas aqui** — veja o SECURITY.md.
+        Não inclua dados pessoais reais (e-mails, nomes, tokens) nos prints ou logs.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: O que aconteceu
+      description: Descreva o comportamento observado.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: O que era esperado
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Passos para reproduzir
+      placeholder: |
+        1. Acesse ...
+        2. Clique em ...
+        3. Veja o erro ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área
+      options:
+        - Vitrine / página do evento
+        - Checkout / pagamento
+        - Ingresso / check-in
+        - Conta / login
+        - Painel do organizador
+        - API
+        - Outra
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Ambiente
+      placeholder: "ex.: demo pública, Chrome 130, Android"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs ou prints
+      description: Inclua o `requestId` do erro, se aparecer.
+      render: text
