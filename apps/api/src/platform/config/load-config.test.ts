@@ -34,6 +34,7 @@ describe("loadConfig", () => {
       docs: { enabled: true },
       database: { url: validEnv.DATABASE_URL },
       redis: { url: validEnv.REDIS_URL },
+      worker: { mode: "separate", outboxPollIntervalMs: 5_000 },
     });
   });
 
@@ -55,6 +56,27 @@ describe("loadConfig", () => {
   it("normalizes the web origin", () => {
     const config = loadConfig({ ...validEnv, WEB_ORIGIN: "https://vira.example/some/path" });
     expect(config.http.webOrigin).toBe("https://vira.example");
+  });
+
+  it("reads the worker mode and the outbox polling interval", () => {
+    const config = loadConfig({
+      ...validEnv,
+      WORKER_MODE: "embedded",
+      OUTBOX_POLL_INTERVAL_MS: "250",
+    });
+    expect(config.worker).toEqual({ mode: "embedded", outboxPollIntervalMs: 250 });
+  });
+
+  it("rejects an unknown worker mode and a polling interval that would hammer Redis", () => {
+    const error = captureError({
+      ...validEnv,
+      WORKER_MODE: "inline",
+      OUTBOX_POLL_INTERVAL_MS: "5",
+    });
+    expect(error.issues.map((i) => i.variable).sort()).toEqual([
+      "OUTBOX_POLL_INTERVAL_MS",
+      "WORKER_MODE",
+    ]);
   });
 
   it("rejects connection strings for the wrong service", () => {

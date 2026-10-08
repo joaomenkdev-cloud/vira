@@ -25,6 +25,8 @@ export const envSchema = z
     API_DOCS_ENABLED: z.stringbool().optional(),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
+    WORKER_MODE: z.enum(["separate", "embedded"]).default("separate"),
+    OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).max(60_000).default(5_000),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV !== "production") return;
@@ -68,6 +70,7 @@ export const envSchema = z
     },
     database: { url: env.DATABASE_URL },
     redis: { url: env.REDIS_URL },
+    worker: { mode: env.WORKER_MODE, outboxPollIntervalMs: env.OUTBOX_POLL_INTERVAL_MS },
   }));
 
 export type AppConfig = z.output<typeof envSchema>;
