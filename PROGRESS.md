@@ -5,8 +5,11 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 0 — Fundação
-- **Entrega em andamento:** F1 — Planejamento técnico e de design (`docs/planejamento-inicial`, PR draft)
-- **Próximo passo:** depois da revisão e do merge do F1 pelo mantenedor, iniciar **F2 — Ferramentas do workspace** (`chore/workspace-tooling`).
+- **Concluído:** F1 — Planejamento (PR #1, mergeado em 2026-10-08 com merge commit).
+- **Entregas abertas:**
+  - F2 — Ferramentas do workspace (`chore/workspace-tooling`, PR #2, base `main`) — aguardando revisão.
+  - F3 — Esqueleto da API (`feat/api-skeleton`, empilhado sobre o #2) — em andamento.
+- **Próximo passo:** concluir o F3; quando o #2 for mergeado, mudar a base do PR do F3 para `main`.
 - **Bloqueios:** nenhum.
 
 ## Regras que valem sempre
@@ -20,6 +23,25 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-07 — F2: ferramentas do workspace
+
+Feito:
+
+- Turborepo (`turbo.json`) com as tarefas `build`, `typecheck`, `lint` e `test`; scripts na raiz e `pnpm check` reproduzindo o CI.
+- `packages/config` (`@vira/config`): tsconfig estrito (`base`, `library`), ESLint flat config (typescript-eslint strict type-checked + regras de fronteira), Prettier e preset do Vitest.
+- Regras de fronteira testadas (16 testes): apps não importam apps, pacotes não importam apps, `domain` sem framework nem SDK de infraestrutura, `application` e `http` sem SDK de infraestrutura.
+- CI: job único com format, Markdown, lint, typecheck, test e build, com cache do Turborepo; CodeQL analisando `javascript-typescript`.
+- Pre-commit: Prettier nos arquivos em stage.
+- `AGENTS.md` (bloco gerenciado pelo Turborepo, orienta agentes de IA a ler a documentação da versão instalada) entrou junto no commit do Prettier; mantido de propósito.
+- PR #1: falsos positivos do gitleaks nos exemplos da API.md corrigidos (placeholders + `.gitleaksignore` por fingerprint para o commit antigo).
+
+Decisões tomadas por conta própria:
+
+- TypeScript fixado em `~6.0` (a 7.0 já saiu, mas o typescript-eslint suporta só `< 6.1`). Revisar quando houver suporte.
+- `viraConfig` recebe `kind: "app" | "package"`: os globs do ESLint são relativos ao `eslint.config.js` de cada workspace, então o tipo de workspace não pode ser inferido pelo caminho.
+- Regras de import por **pacote** ficam no ESLint; regras por **caminho** (camadas e módulos, ex. `application` → `../infra`) ficam para o `dependency-cruiser`, que entra no F3 junto com o primeiro código da API (critério adicionado ao ROADMAP).
+- `application` pode importar `@nestjs/*` (injeção de dependência); só o `domain` é livre de framework.
 
 ### 2026-10-07 — F1: planejamento inicial
 

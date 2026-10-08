@@ -7,7 +7,7 @@
     "MD033": { "allowed_elements": ["a", "h1", "p", "img", "br", "sub", "details", "summary"] },
     // Allow repeated headings in sibling sections (e.g. "Desktop" / "Mobile").
     "MD024": { "siblings_only": true },
-    "MD041": false
+    "MD041": false,
   },
   "globs": ["**/*.md"],
   "ignores": [
@@ -15,6 +15,6 @@
     "**/node_modules/**",
     // Kept verbatim as provided by the product owner.
     "docs/DESIGN_BRIEF.md",
-    "CODE_OF_CONDUCT.md"
-  ]
+    "CODE_OF_CONDUCT.md",
+  ],
 }

@@ -1,0 +1,9 @@
+# Generated
+pnpm-lock.yaml
+**/dist/
+**/.next/
+**/coverage/
+**/.turbo/
+
+# Markdown is checked by markdownlint (and some documents are kept verbatim).
+*.md

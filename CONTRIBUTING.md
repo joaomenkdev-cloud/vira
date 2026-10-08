@@ -20,7 +20,31 @@ corepack enable
 pnpm install
 ```
 
-`pnpm install` instala os hooks de Git (lefthook): gitleaks nos arquivos em stage e lint de Markdown.
+`pnpm install` instala os hooks de Git (lefthook): gitleaks, Prettier e lint de Markdown nos arquivos em stage.
+
+### Comandos
+
+| Comando | O que faz |
+| --- | --- |
+| `pnpm check` | Tudo o que o CI roda: formatação, Markdown, lint, tipos, testes e build |
+| `pnpm lint` | ESLint em todos os workspaces (via Turborepo) |
+| `pnpm typecheck` | `tsc --noEmit` em todos os workspaces |
+| `pnpm test` | Vitest em todos os workspaces |
+| `pnpm build` | Build de todos os workspaces, na ordem de dependência |
+| `pnpm format` / `pnpm format:check` | Prettier (código, JSON, YAML) |
+| `pnpm lint:md` | markdownlint na documentação |
+
+Rode `pnpm check` antes de abrir um PR.
+
+### Configuração compartilhada
+
+Todo workspace estende `@vira/config` (`packages/config`):
+
+- `@vira/config/tsconfig/base.json` (e `library.json` para `packages/*`) — TypeScript estrito;
+- `@vira/config/eslint` — `viraConfig({ kind: "app" | "package", tsconfigRootDir })`, com as regras de fronteira entre workspaces e camadas;
+- `@vira/config/prettier` e `@vira/config/vitest`.
+
+O TypeScript fica fixado em `~6.0` enquanto o typescript-eslint não suportar a 7.
 
 ## Fluxo de trabalho
 
