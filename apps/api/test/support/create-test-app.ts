@@ -1,6 +1,6 @@
 import type { DynamicModule, Type } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { Test } from "@nestjs/testing";
+import { Test, type TestingModuleBuilder } from "@nestjs/testing";
 
 import { AppModule } from "../../src/bootstrap/app.module.js";
 import { configureApp } from "../../src/bootstrap/configure-app.js";
@@ -29,11 +29,14 @@ export interface TestApp {
 export interface TestAppOptions {
   readonly env?: NodeJS.ProcessEnv;
   readonly imports?: (Type | DynamicModule)[];
+  /** Replaces providers (e.g. the clock or a publisher) before the app is built. */
+  readonly override?: (builder: TestingModuleBuilder) => TestingModuleBuilder;
 }
 
 export async function createTestApp({
   env = {},
   imports = [],
+  override = (builder) => builder,
 }: TestAppOptions = {}): Promise<TestApp> {
   const config = loadConfig({
     NODE_ENV: "test",
@@ -45,9 +48,10 @@ export async function createTestApp({
   const logs: string[] = [];
   const destination = { write: (line: string) => void logs.push(line) };
 
-  const moduleRef = await Test.createTestingModule({
+  const builder = Test.createTestingModule({
     imports: [AppModule.register({ config, logging: { destination } }), ...imports],
-  }).compile();
+  });
+  const moduleRef = await override(builder).compile();
 
   const app = moduleRef.createNestApplication<NestExpressApplication>({
     bufferLogs: true,

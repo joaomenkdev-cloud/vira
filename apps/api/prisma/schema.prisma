@@ -32,3 +32,23 @@ model AuditLog {
   @@index([action, occurredAt])
   @@map("audit_logs")
 }
+
+/// Transactional outbox: side effects (queue jobs) are recorded in the same
+/// transaction as the state change that causes them, then dispatched afterwards
+/// (docs/ARCHITECTURE.md#6-mensageria-e-jobs).
+model OutboxMessage {
+  id           String    @id @db.Uuid
+  /// "<area>.<event>", e.g. "orders.paid"; each type routes to one queue.
+  type         String
+  /// Identifiers only, never personal data.
+  payload      Json      @db.JsonB
+  createdAt    DateTime  @map("created_at") @db.Timestamptz(3)
+  /// Earliest time of the next dispatch attempt (exponential backoff on failure).
+  availableAt  DateTime  @map("available_at") @db.Timestamptz(3)
+  dispatchedAt DateTime? @map("dispatched_at") @db.Timestamptz(3)
+  attempts     Int       @default(0)
+  lastError    String?   @map("last_error")
+
+  @@index([dispatchedAt, availableAt, createdAt])
+  @@map("outbox_messages")
+}
