@@ -8,7 +8,7 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - **Concluído:** F1 — Planejamento (PR #1) e F2 — Ferramentas do workspace (PR #2), mergeados com merge commit.
 - **Entregas abertas (pilha):**
   - F3 — Esqueleto da API (`feat/api-skeleton`, PR #8, base `main`) — aguardando revisão.
-  - F4 — Banco e infraestrutura local (`feat/api-database`, empilhado sobre o #8) — aguardando revisão.
+  - F4 — Banco e infraestrutura local (`feat/api-database`, PR #10, empilhado sobre o #8) — aguardando revisão.
 - **Próximo passo:** F5 — Módulo de auditoria (`feat/audit-log`, empilhado sobre o F4).
 - **Dependabot:** #4–#7 mergeados em 2026-10-08 (checkout v7, setup-node v6, gitleaks v3, pnpm/action-setup v6). O #3 (CodeQL v4) foi fechado por engano pelo Dependabot e substituído pelo #9, aguardando revisão.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
