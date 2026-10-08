@@ -5,25 +5,46 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 0 — Fundação
-- **Concluído:** F1 — Planejamento (PR #1, mergeado em 2026-10-08 com merge commit).
-- **Entregas abertas:**
-  - F2 — Ferramentas do workspace (`chore/workspace-tooling`, PR #2, base `main`) — aguardando revisão.
-  - F3 — Esqueleto da API (`feat/api-skeleton`, PR #8, empilhado sobre o #2) — aguardando revisão.
-- **Próximo passo:** quando o #2 for mergeado, mudar a base do #8 para `main`. Depois, **F4 — Banco e infraestrutura local** (`feat/api-database`).
-- **Bloqueios:** nenhum.
-- **Dependabot:** PRs #3–#7 (bumps major de GitHub Actions) aguardando revisão do mantenedor.
+- **Concluído:** F1 — Planejamento (PR #1) e F2 — Ferramentas do workspace (PR #2), mergeados com merge commit.
+- **Entregas abertas (pilha):**
+  - F3 — Esqueleto da API (`feat/api-skeleton`, PR #8, base `main`) — aguardando revisão.
+  - F4 — Banco e infraestrutura local (`feat/api-database`, empilhado sobre o #8) — aguardando revisão.
+- **Próximo passo:** F5 — Módulo de auditoria (`feat/audit-log`, empilhado sobre o F4).
+- **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
 
 - Nunca commitar na `main`; um PR por entrega do roadmap, aberto como draft.
 - Commits por responsabilidade, Conventional Commits, em inglês; sem squash ou amend automático.
 - Push da branch e PR draft são permitidos; **merge e deploy só com autorização explícita** do mantenedor.
+- PRs empilhados: depois de mergear um PR, **mude a base do PR seguinte para `main` antes de apagar a branch mergeada** (apagar a base fecha o PR dependente).
 - Todo PR de código: testes, CI verde, docs e `PROGRESS.md` atualizados. PRs de interface: prints de desktop e mobile, sem mudança de lógica.
 - Decisão mudou → novo ADR substituindo o anterior.
 - Nada de segredos, `.env` ou dados reais no repositório.
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-08 — F4: banco e infraestrutura local
+
+Feito:
+
+- `docker-compose.yml` com Postgres 16.15, Redis 8.8, SeaweedFS 4.48 (S3) e Mailpit 1.31, portas só em `127.0.0.1`, healthchecks, `pnpm infra:up`/`infra:down`.
+- Prisma 7.10 com o generator `prisma-client` (ESM) e driver adapter `pg`; `prisma.config.ts`; primeira migration habilita `citext` e `pg_trgm`; client gerado fora do Git pela tarefa `db:generate` do Turborepo.
+- `PrismaService` (conexão preguiçosa, `statement_timeout` e timeout de conexão de 5 s) e `RedisService` (ioredis 6, sem fila offline).
+- Readiness agora verifica banco e Redis de verdade.
+- Config: `DATABASE_URL` e `REDIS_URL` obrigatórios; em produção, TLS obrigatório (`sslmode=require` e `rediss://`).
+- Testcontainers: harness em `test/support/infrastructure.ts` (aplica as migrations) e suíte de integração (extensões, timeout, readiness up/down).
+- CI: job novo sobe o `docker compose` e aplica as migrations nele.
+
+Decisões tomadas por conta própria:
+
+- **SeaweedFS no lugar do MinIO** no ambiente local: a imagem `minio/minio` saiu do Docker Hub. Registrado no [ADR-0012](docs/adr/0012-armazenamento-local-seaweedfs.md), que substitui essa parte do ADR-0011.
+- **Prisma 7.10.0**, não a tag `latest` do CLI (que aponta para uma `8.0.0-rc`).
+- TLS obrigatório em produção para banco e Redis (ASVS V12) validado na configuração.
+- Testes de integração são pulados localmente sem Docker e falham no CI sem Docker.
+- Allowlist do gitleaks só para os dois valores exatos de credenciais locais.
+- Lição registrada nas regras: ao mergear o #2 apaguei a branch base do #8 antes de mudar a base, e o GitHub fechou o #8; recriei a branch, reabri e mudei a base.
 
 ### 2026-10-08 — F3: esqueleto da API
 
