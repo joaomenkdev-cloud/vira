@@ -8,8 +8,8 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - **Concluído:** F1 — Planejamento (PR #1, mergeado em 2026-10-08 com merge commit).
 - **Entregas abertas:**
   - F2 — Ferramentas do workspace (`chore/workspace-tooling`, PR #2, base `main`) — aguardando revisão.
-  - F3 — Esqueleto da API (`feat/api-skeleton`, empilhado sobre o #2) — em andamento.
-- **Próximo passo:** concluir o F3; quando o #2 for mergeado, mudar a base do PR do F3 para `main`.
+  - F3 — Esqueleto da API (`feat/api-skeleton`, PR #3, empilhado sobre o #2) — aguardando revisão.
+- **Próximo passo:** quando o #2 for mergeado, mudar a base do #3 para `main`. Depois, **F4 — Banco e infraestrutura local** (`feat/api-database`).
 - **Bloqueios:** nenhum.
 
 ## Regras que valem sempre
@@ -23,6 +23,31 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-08 — F3: esqueleto da API
+
+Feito:
+
+- `apps/api`: NestJS 12 (ESM) com `AppModule.register({ config })`, prefixo `/api/v1`, `run()` que recusa subir com env inválida.
+- `platform/config`: env validada com Zod no boot; erros citam variável e regra, nunca o valor.
+- `platform/logging`: pino com `requestId` no topo de toda linha, redação de dados pessoais e credenciais em qualquer profundidade, sem headers, corpo, query string ou IP.
+- `platform/errors`: RFC 9457 para tudo (inclusive body-parser e rotas inexistentes); 500 genérico sem detalhes internos; validação Zod lista os campos inválidos.
+- `platform/security`: `@Public()`/`@RequireRole()` e guard "negar por padrão" (papéis cumulativos).
+- `platform/http`: Helmet (CSP `default-src 'none'` na API, CSP própria para `/docs`), `Cache-Control: no-store`, CORS só para `WEB_ORIGIN`, limite de 100 kB.
+- `platform/openapi`: `/docs` e `/docs/json` gerados dos schemas Zod (Standard Schema).
+- `modules/health`: `/health/live` e `/health/ready` (checks plugáveis com timeout; banco e Redis no F4).
+- `packages/shared`: schemas de problem details e saúde, hierarquia de papéis.
+- `dependency-cruiser`: camadas, acesso entre módulos só por `public-api.ts`/`*.module.ts`, `platform` sem módulos, sem ciclos; provado com fixtures.
+- 65 testes no monorepo (44 na API), smoke test do build real (`node dist/main.js`).
+
+Decisões tomadas por conta própria:
+
+- **NestJS 12** (ESM). Usei o suporte nativo a Standard Schema (`@Body({ schema })`, `StandardSchemaValidationPipe`, `@ApiResponse({ standardSchema })`) em vez do `nestjs-zod`, que ainda não suporta o Nest 12.
+- **Sem SWC:** os testes usam o transformador Oxc do Vite 8 com `emitDecoratorMetadata`. O binário nativo do SWC não funciona nesta máquina (verificação de permissão do cache) e o Oxc evita a dependência nativa.
+- Config própria (`ConfigModule.forRoot(config)`) em vez de `@nestjs/config`: o env é lido uma vez, antes do Nest, e o container nunca lê `process.env`.
+- `requestId` de entrada aceito só com 8–64 caracteres `[A-Za-z0-9_-]`; caso contrário um UUID novo.
+- Novos tipos de problema documentados: `payload-too-large` (413) e `unsupported-media-type` (415); 4xx sem tipo próprio usam `about:blank`.
+- `application` pode importar `@nestjs/common` (injeção de dependência); confirmado na regra do ESLint.
 
 ### 2026-10-07 — F2: ferramentas do workspace
 
