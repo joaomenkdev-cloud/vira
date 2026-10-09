@@ -7,7 +7,7 @@ import { WorkerModule } from "../../src/bootstrap/worker.module.js";
 import { Outbox } from "../../src/modules/outbox/application/public-api.js";
 import { loadConfig } from "../../src/platform/config/load-config.js";
 import { PrismaService } from "../../src/platform/database/prisma.service.js";
-import { createTestApp, TEST_WEB_ORIGIN, type TestApp } from "../support/create-test-app.js";
+import { createTestApp, TEST_WEB_ORIGIN } from "../support/create-test-app.js";
 import {
   dockerAvailableOrSkip,
   type Infrastructure,
@@ -35,7 +35,7 @@ async function eventually<T>(
 describe.skipIf(!dockerAvailable)("worker modes (PostgreSQL + Redis)", () => {
   let infrastructure: Infrastructure;
   let env: NodeJS.ProcessEnv;
-  const apps: TestApp[] = [];
+  // Apps still running keep polling the shared database, so every test closes its own.
 
   const dispatched = (prisma: PrismaService, orderId: string) =>
     prisma.outboxMessage.findFirst({
@@ -52,35 +52,38 @@ describe.skipIf(!dockerAvailable)("worker modes (PostgreSQL + Redis)", () => {
   });
 
   afterAll(async () => {
-    await Promise.all(apps.map((testApp) => testApp.app.close()));
     await infrastructure.stop();
   });
 
   it("dispatches inside the API process when WORKER_MODE=embedded", async () => {
     const testApp = await createTestApp({ env: { ...env, WORKER_MODE: "embedded" } });
-    apps.push(testApp);
-    const orderId = uuidv7();
+    try {
+      const orderId = uuidv7();
+      await testApp.app.get(Outbox).publish({ type: "orders.paid", payload: { orderId } });
 
-    await testApp.app.get(Outbox).publish({ type: "orders.paid", payload: { orderId } });
-
-    const row = await eventually(() => dispatched(testApp.app.get(PrismaService), orderId));
-    expect(row.attempts).toBe(1);
+      const row = await eventually(() => dispatched(testApp.app.get(PrismaService), orderId));
+      expect(row.attempts).toBe(1);
+    } finally {
+      await testApp.app.close();
+    }
   });
 
   it("leaves dispatching to the worker when WORKER_MODE=separate", async () => {
     const testApp = await createTestApp({ env });
-    apps.push(testApp);
-    const orderId = uuidv7();
+    try {
+      const orderId = uuidv7();
+      await testApp.app.get(Outbox).publish({ type: "orders.paid", payload: { orderId } });
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
 
-    await testApp.app.get(Outbox).publish({ type: "orders.paid", payload: { orderId } });
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
-
-    expect(await dispatched(testApp.app.get(PrismaService), orderId)).toBeNull();
+      expect(await dispatched(testApp.app.get(PrismaService), orderId)).toBeNull();
+    } finally {
+      await testApp.app.close();
+    }
   });
 
   it("dispatches from the standalone worker process", async () => {
-    const api = apps.at(-1);
-    if (!api) throw new Error("the previous test must have created an API app");
+    // An API in separate mode only records the message; the worker has to deliver it.
+    const api = await createTestApp({ env });
     const orderId = uuidv7();
     await api.app.get(Outbox).publish({ type: "orders.paid", payload: { orderId } });
 
@@ -99,6 +102,7 @@ describe.skipIf(!dockerAvailable)("worker modes (PostgreSQL + Redis)", () => {
       expect(row.attempts).toBe(1);
     } finally {
       await worker.close();
+      await api.app.close();
     }
   });
 });

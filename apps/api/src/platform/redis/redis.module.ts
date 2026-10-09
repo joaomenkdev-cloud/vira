@@ -20,6 +20,9 @@ export class RedisService extends Redis implements OnModuleDestroy {
       enableOfflineQueue: false,
       connectionName: "vira-api",
     });
+    // Without a listener ioredis prints every connection error. Failures are
+    // reported by the readiness check, so they are not repeated here.
+    this.on("error", () => undefined);
   }
 
   async onModuleDestroy(): Promise<void> {
