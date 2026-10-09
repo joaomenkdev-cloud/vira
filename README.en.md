@@ -46,11 +46,11 @@ Vira is a portfolio project built as if it were going to production: layered arc
 
 ## Screenshots
 
-<!-- Desktop and mobile screenshots arrive with the first screens (Core milestone). -->
+| Home (desktop) | Home (mobile) |
+| --- | --- |
+| ![Home on desktop](docs/assets/screenshots/web-home-desktop.png) | <img src="docs/assets/screenshots/web-home-mobile.png" alt="Home on mobile" width="280"> |
 
-| Home | Event page | Ticket |
-| --- | --- | --- |
-| _coming soon_ | _coming soon_ | _coming soon_ |
+The event page and the ticket arrive with the next screens (Core milestone).
 
 ## Roadmap at a glance
 
