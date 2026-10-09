@@ -5,13 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 0 — Fundação
-- **Concluído:** F1 — Planejamento (PR #1) e F2 — Ferramentas do workspace (PR #2), mergeados com merge commit.
-- **Entregas abertas (pilha):**
-  - F3 — Esqueleto da API (`feat/api-skeleton`, PR #8, base `main`) — aguardando revisão.
-  - F4 — Banco e infraestrutura local (`feat/api-database`, PR #10, empilhado sobre o #8) — aguardando revisão.
-  - F5 — Módulo de auditoria (`feat/audit-log`, PR #11, empilhado sobre o #10) — aguardando revisão.
-- **Próximo passo:** F6 — Worker, filas e outbox (`feat/worker-outbox`). Quando um PR da pilha for mergeado, mudar a base do seguinte para `main` antes de apagar a branch.
-- **Dependabot:** #4–#7 mergeados em 2026-10-08 (checkout v7, setup-node v6, gitleaks v3, pnpm/action-setup v6). O #3 (CodeQL v4) foi fechado por engano pelo Dependabot e substituído pelo #9, aguardando revisão.
+- **Concluído (mergeado):** F1 a F5 (PRs #1, #2, #8, #10, #11) e Dependabot (#4–#7, #9 CodeQL v4).
+- **Entrega aberta:** F6 — Worker, filas e outbox (`feat/worker-outbox`) — aguardando CI e revisão.
+- **Próximo passo:** F7 — Esqueleto do web (`feat/web-skeleton`), empilhado sobre o F6.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -26,6 +22,22 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-09 — F6: worker, filas e outbox
+
+Feito:
+
+- `outbox_messages` (migration SQL com `CHECK`s) e módulo `outbox` em camadas: catálogo de tipos (payload só com ids, fila de destino), mensagem imutável, política de retry/backoff como funções puras e `recordAttempt`.
+- `Outbox.publish(evento, tx)` grava na mesma transação da mudança de estado (`TransactionRunner` na plataforma); `DispatchOutbox` com `FOR UPDATE SKIP LOCKED`, `PurgeOutbox`, publicador BullMQ (id da mensagem = id do job) e `OutboxPoller` sem sobreposição.
+- Worker: `main.worker.ts`, `WorkerModule`, scripts `dev:worker` e `start:worker`; `WORKER_MODE=embedded|separate` e `OUTBOX_POLL_INTERVAL_MS`.
+- Testes unitários (domínio, casos de uso, poller com timers falsos) e de integração (Postgres e Redis reais: exatamente uma vez, rollback, despachantes concorrentes, backoff, mensagens paradas, purga, CHECKs, consumidor BullMQ, modos embedded/separate e o worker real).
+
+Decisões tomadas por conta própria:
+
+- Poller em processo no lugar do job repetível do BullMQ (a outbox não depende do Redis para ser lida); dispensei o gatilho pós-commit.
+- Máximo de 10 tentativas, backoff de 5 s a 15 min; mensagens esgotadas ficam paradas para inspeção.
+- Índice composto em vez de parcial (o Prisma não expressa índices parciais).
+- Catálogo de tipos já traz `orders.paid`, `tickets.issued` e `orders.refund_requested`, com roteamento inicial para as filas `tickets`, `email` e `payments`.
 
 ### 2026-10-08 — F5: módulo de auditoria
 
@@ -133,7 +145,3 @@ Observações:
 
 - O binário do gitleaks não está instalado na máquina local; o hook avisa e segue, e o CI aplica a verificação. Instalar: <https://github.com/gitleaks/gitleaks#installing>.
 - Node local é 24; o projeto fixa 22 LTS no `.nvmrc` e no CI.
-
-## Retomada: F6 (worker, filas e outbox) em andamento
-
-Branch `feat/worker-outbox` (sem PR ainda). Código e testes escritos; 86 testes unitários passam, `lint` e `typecheck` limpos, worker compilado testado manualmente. **Falta:** rodar a integração no CI, atualizar docs (ARCHITECTURE seção 6: poller em processo no lugar de job repetível do BullMQ; DATA_MODEL `outbox_messages`: colunas `available_at`, índice composto, `CHECK`s; CONTRIBUTING: `start:worker`), marcar F6 como 🟨 no ROADMAP e abrir o PR draft.
