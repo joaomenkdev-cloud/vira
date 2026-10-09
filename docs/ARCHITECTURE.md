@@ -311,7 +311,13 @@ Rate limiting usa Redis (`@nestjs/throttler` com storage Redis) e é independent
 - **Next.js App Router** com Server Components para páginas públicas (vitrine e página do evento renderizadas no servidor, boas para SEO e desempenho) e Client Components só onde há interação (seletor de ingressos, checkout, câmera do check-in).
 - Busca de dados no servidor pelo mesmo cliente HTTP tipado (`packages/shared`), repassando os cookies da requisição.
 - Rotas por área: `(public)` vitrine e evento; `(account)` meus ingressos, conta e privacidade; `(checkout)` layout sem navegação; `(organizer)` painel e check-in.
-- Estilos só via tokens de `packages/ui` ([DESIGN.md](DESIGN.md)).
+- Estilos só via tokens ([DESIGN.md](DESIGN.md)). Enquanto o `packages/ui` não existe (entrega N1), os tokens ficam em `apps/web/src/app/tokens.css` e são expostos ao Tailwind em `globals.css`; um teste recalcula o contraste de cada par de cores a partir desse arquivo.
+
+### Proxy da API e cabeçalhos de segurança
+
+- **Mesma origem:** `next.config.ts` reescreve `/api/v1/*` para `API_ORIGIN` (`beforeFiles`, antes de qualquer página). O navegador só fala com o domínio do web, então os cookies de sessão são first-party e não há CORS ([ADR-0005](adr/0005-autenticacao-e-tokens.md)). `API_ORIGIN` é lido **no build** (o destino do rewrite é fixado nele); fora de deploys o padrão é a API local, na Vercel é obrigatório, e só aceita `http` para loopback.
+- **CSP com nonce por requisição:** `src/proxy.ts` (o antigo `middleware`, renomeado no Next.js 16) gera o nonce, coloca a CSP na requisição (para o Next marcar os próprios scripts) e na resposta. Por isso as páginas são renderizadas a cada requisição (o layout lê `headers()`), o que descarta cache estático e Partial Prerendering; é o custo de uma CSP estrita sem `unsafe-inline`.
+- **Demais cabeçalhos** (HSTS, `nosniff`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, COOP) vêm de `next.config.ts`; `X-Powered-By` é desligado.
 
 ## 9. Ambientes
 
