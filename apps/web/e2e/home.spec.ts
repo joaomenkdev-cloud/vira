@@ -111,7 +111,7 @@ test.describe("security", () => {
     expect(headers["x-powered-by"]).toBeUndefined();
   });
 
-  test("the nonce changes on every request and stamps every script", async ({ request }) => {
+  test("the nonce changes on every request and stamps every script", async ({ page, request }) => {
     const nonceOf = (csp: string | undefined) => /'nonce-([^']+)'/.exec(csp ?? "")?.[1];
 
     const first = await request.get("/");
@@ -120,10 +120,18 @@ test.describe("security", () => {
       nonceOf(second.headers()["content-security-policy"]),
     );
 
+    // Parse the HTML with the browser's own parser instead of matching it with a regex.
+    const html = await first.text();
+    const scriptNonces = await page.evaluate(
+      (source) =>
+        [...new DOMParser().parseFromString(source, "text/html").querySelectorAll("script")].map(
+          (script) => script.getAttribute("nonce"),
+        ),
+      html,
+    );
     const nonce = nonceOf(first.headers()["content-security-policy"]);
-    const scripts = (await first.text()).match(/<script\b[^>]*>/g) ?? [];
-    expect(scripts.length).toBeGreaterThan(0);
-    for (const script of scripts) expect(script).toContain(`nonce="${nonce}"`);
+    expect(scriptNonces.length).toBeGreaterThan(0);
+    for (const scriptNonce of scriptNonces) expect(scriptNonce).toBe(nonce);
   });
 
   test("the browser reports no CSP violation or script error", async ({ page }) => {
