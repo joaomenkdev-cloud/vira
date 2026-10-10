@@ -347,12 +347,14 @@ Não guardamos o payload (pode conter dados de cobrança). O `INSERT` acontece n
 
 | Campo | Tipo | Regras |
 | --- | --- | --- |
-| `type` | text | Ex.: `orders.paid`, `tickets.issued` |
-| `payload` | jsonb | Somente IDs — nunca dados pessoais; o consumidor busca o resto |
-| `created_at`, `dispatched_at` | timestamptz | |
-| `attempts`, `last_error` | int, text | |
+| `type` | text | `CHECK` no formato `area.evento`. Catálogo em `apps/api/src/modules/outbox/domain/outbox-catalog.ts`, que também fixa a fila de destino e o schema do payload. Ex.: `orders.paid`, `tickets.issued`, `orders.refund_requested` |
+| `payload` | jsonb | Somente IDs — nunca dados pessoais; o consumidor busca o resto. `CHECK`: sempre um objeto JSON; schema estrito por tipo na aplicação |
+| `created_at` | timestamptz | |
+| `available_at` | timestamptz | Momento da próxima tentativa; começa igual a `created_at` e avança com o backoff a cada falha |
+| `dispatched_at` | timestamptz | `NULL` até a entrega. `CHECK`: só pode ser preenchido com `attempts > 0` |
+| `attempts`, `last_error` | int, text | `attempts >= 0` (`CHECK`). `last_error`: classe e mensagem truncada em 200 caracteres, em uma linha |
 
-Índice: `(created_at) WHERE dispatched_at IS NULL`. Mensagens despachadas são removidas após 7 dias.
+Índice composto `(dispatched_at, available_at, created_at)`, que atende a consulta do despachante (não entregues, já devidas, mais antigas primeiro); o Prisma não expressa índice parcial. Mensagens com 10 tentativas ficam paradas. Mensagens despachadas são removidas após 7 dias.
 
 ### `audit_logs`
 

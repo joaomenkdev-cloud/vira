@@ -65,6 +65,24 @@ O client do Prisma é gerado em `apps/api/src/generated` (ignorado pelo Git) pel
 
 Os testes em `apps/api/test/integration` sobem Postgres e Redis reais com Testcontainers. Sem Docker, eles são pulados com aviso; no CI (`CI=true`) a falta de Docker é erro.
 
+### Worker e filas
+
+O trabalho em segundo plano (hoje: despachar a outbox para as filas BullMQ) roda no **worker**, que usa o mesmo código da API:
+
+```bash
+pnpm --filter @vira/api dev:worker     # desenvolvimento, com recarga
+pnpm --filter @vira/api build && pnpm --filter @vira/api start:worker
+```
+
+`WORKER_MODE` define onde o trabalho roda:
+
+| Valor | Comportamento |
+| --- | --- |
+| `separate` (padrão) | Só o processo do worker despacha. A API apenas grava na outbox |
+| `embedded` | O despacho roda dentro da própria API, para hospedagem sem background worker ([ADR-0011](docs/adr/0011-hospedagem.md)) |
+
+`OUTBOX_POLL_INTERVAL_MS` (padrão 5000, de 50 a 60000) define a frequência da verificação. Para gravar um efeito colateral, um módulo injeta `Outbox` (`modules/outbox/application/public-api.ts`) e chama `publish(evento, tx)` dentro da transação que muda o estado, obtida de `TransactionRunner`.
+
 ### Rodando a API
 
 ```bash

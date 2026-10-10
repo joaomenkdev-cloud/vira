@@ -278,9 +278,15 @@ O resultado do check-in é uma resposta de negócio, por isso volta com `200` e 
 | --- | --- | --- | --- |
 | `orders.expire` | API (ao reservar/estender) | worker | Job com `jobId = orderId:expiresAt` (deduplicado), idempotente pelo `UPDATE` condicional |
 | `orders.sweep` | agendamento repetível (1 min) | worker | Rede de segurança da expiração |
-| `outbox.dispatch` | agendamento repetível (5 s) + gatilho pós-commit | worker | Lê `outbox_messages` com `FOR UPDATE SKIP LOCKED`, publica e marca como despachada |
+| `outbox.dispatch` | poller em processo (a cada `OUTBOX_POLL_INTERVAL_MS`, 5 s por padrão) | worker | Lê `outbox_messages` devidas com `FOR UPDATE SKIP LOCKED`, publica no BullMQ e marca como despachada na mesma transação |
 | `email.send` | outbox | worker | Retentativas exponenciais (5×), chave de idempotência por mensagem |
 | `payments.refund` | webhook (pagamento tardio) | worker | Idempotency key do Stripe = `refund:{orderId}` |
+
+**Poller, não job repetível.** O despacho da outbox roda num poller em processo (`OutboxPoller`), não num job repetível do BullMQ: assim a outbox não depende do Redis para ser lida, e uma queda do Redis só faz as mensagens esperarem. As rodadas **nunca se sobrepõem** (uma rodada lenta faz a seguinte ser ignorada) e várias instâncias podem rodar juntas, porque `SKIP LOCKED` entrega cada mensagem a um só despachante. O poller também apaga mensagens entregues há mais de 7 dias, uma vez por hora. Substitui o "agendamento repetível + gatilho pós-commit" do desenho inicial; o gatilho foi dispensado porque 5 s de latência bastam.
+
+**Publicação e retentativas.** O id da mensagem é o `jobId` do BullMQ, então publicar de novo (por exemplo depois de uma queda entre publicar e registrar a entrega) não cria um segundo job. Falha ao publicar registra o erro (classe e mensagem truncada, sem dados pessoais), incrementa `attempts` e adia a próxima tentativa com backoff exponencial (5 s, 10 s, 20 s... até 15 min). Após 10 tentativas a mensagem fica parada para inspeção, em vez de ser tentada para sempre.
+
+**Processos.** O worker é o mesmo código da API com outro entrypoint (`main.worker.ts`, `WorkerModule`). Com `WORKER_MODE=embedded` o poller sobe dentro da API (para hospedagem sem background worker, ADR-0011); com `separate` (padrão) só o worker despacha.
 
 **Outbox transacional:** efeitos colaterais (e-mails, reembolsos) nunca são disparados de dentro de uma transação de banco. O evento é gravado em `outbox_messages` na mesma transação da mudança de estado e despachado depois. Assim não existe "pedido pago sem e-mail" nem "e-mail de pedido que deu rollback".
 

@@ -14,7 +14,9 @@
     "test": "vitest run",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy",
+    "dev:worker": "nest start --watch --entryFile main.worker --env-file .env",
+    "start:worker": "node dist/main.worker.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.1.2",
@@ -24,6 +26,7 @@
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
     "@vira/shared": "workspace:^",
+    "bullmq": "^6.3.11",
     "helmet": "^8.3.0",
     "ioredis": "^6.0.0",
     "nestjs-pino": "^5.3.1",
