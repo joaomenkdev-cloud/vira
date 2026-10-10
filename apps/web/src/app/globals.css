@@ -1,2 +1,5 @@
 @import "tailwindcss";
 @import "@vira/ui/theme.css";
+
+/* Tailwind does not look inside workspace packages: the design system is scanned explicitly. */
+@source "../../../../packages/ui/src";
