@@ -14,6 +14,8 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+import { viraPlugin } from "./no-arbitrary-tailwind.js";
+
 const TS_FILES = ["**/*.{ts,tsx,mts,cts}"];
 const JS_FILES = ["**/*.{js,jsx,mjs,cjs}"];
 
@@ -180,6 +182,12 @@ export function viraConfig({ kind, tsconfigRootDir, typeChecked = true, ignores 
             }
           : {}),
       },
+    },
+    {
+      name: "vira/design-tokens",
+      files: ["**/*.{tsx,jsx}"],
+      plugins: { vira: viraPlugin },
+      rules: { "vira/no-arbitrary-tailwind": "error" },
     },
     {
       name: "vira/tests",

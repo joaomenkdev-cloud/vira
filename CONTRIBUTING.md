@@ -89,7 +89,7 @@ pnpm --filter @vira/api build && pnpm --filter @vira/api start:worker
 pnpm --filter @vira/web dev        # http://localhost:3001 (proxy de /api/v1 para a API local)
 pnpm --filter @vira/web build && pnpm --filter @vira/web start
 pnpm --filter @vira/web test:e2e   # Playwright + axe, em desktop e mobile
-pnpm --filter @vira/web screenshots  # prints para PRs de interface (com o servidor rodando)
+pnpm --filter @vira/web screenshots  # prints para PRs de interface (servidor com VIRA_DESIGN_SYSTEM=true)
 ```
 
 - `API_ORIGIN` (veja `apps/web/.env.example`) define para onde `/api/v1` é encaminhado. É lido **no build**: rebuilde ao mudá-lo.
