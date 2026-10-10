@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { setNonce } from "get-nonce";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -85,6 +86,16 @@ describe("Select", () => {
     expect(screen.getByRole("combobox")).toBeDisabled();
     await userEvent.click(screen.getByRole("combobox"));
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("gives the style element of its viewport the CSP nonce", async () => {
+    setNonce("nonce-da-pagina");
+    render(<Select label="Tipo" options={OPTIONS} />);
+    await userEvent.click(screen.getByRole("combobox"));
+    await screen.findByRole("listbox");
+    const style = document.querySelector("style[nonce], style");
+    expect(style).not.toBeNull();
+    expect(style).toHaveAttribute("nonce", "nonce-da-pagina");
   });
 
   describe("server HTML", () => {

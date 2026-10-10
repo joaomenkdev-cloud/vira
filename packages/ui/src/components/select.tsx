@@ -1,5 +1,6 @@
 "use client";
 
+import { getNonce } from "get-nonce";
 import { Check, ChevronDown } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
 import type { Ref } from "react";
@@ -95,6 +96,7 @@ export function Select({
           );
         }
 
+        const nonce = getNonce();
         return (
           <SelectPrimitive.Root
             {...(value === undefined ? {} : { value })}
@@ -113,7 +115,8 @@ export function Select({
                 sideOffset={4}
                 className={cn(menuContentStyles(), "max-h-menu-available")}
               >
-                <SelectPrimitive.Viewport>
+                {/* The viewport hides its scrollbar with a <style> element, which needs the CSP nonce. */}
+                <SelectPrimitive.Viewport {...(nonce ? { nonce } : {})}>
                   {options.map((option) => (
                     <SelectPrimitive.Item
                       key={option.value}
