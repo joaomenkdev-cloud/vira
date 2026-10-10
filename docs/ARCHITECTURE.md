@@ -312,6 +312,7 @@ Rate limiting usa Redis (`@nestjs/throttler` com storage Redis) e é independent
 - Busca de dados no servidor pelo mesmo cliente HTTP tipado (`packages/shared`), repassando os cookies da requisição.
 - Rotas por área: `(public)` vitrine e evento; `(account)` meus ingressos, conta e privacidade; `(checkout)` layout sem navegação; `(organizer)` painel e check-in.
 - Estilos só via tokens ([DESIGN.md](DESIGN.md)). Os tokens ficam em `packages/ui/src/tokens.css` e são expostos ao Tailwind por `packages/ui/src/theme.css`, que o `globals.css` do web importa logo depois do Tailwind; um teste recalcula o contraste de cada par de cores a partir desse arquivo, e a regra de lint `vira/no-arbitrary-tailwind` rejeita valores arbitrários (`bg-[#fff]`, `p-[13px]`) nas classes.
+- Os componentes (`Button`, `Input`, `Modal`, `Toast`...) vêm de `@vira/ui`, que exporta o código-fonte: o Next.js 16 transpila pacotes do workspace sozinho (não há `transpilePackages`), e o `globals.css` declara `@source` para o Tailwind varrer `packages/ui/src`. Componentes com estado ou manipuladores trazem `"use client"`; os demais (`EmptyState`, `Footer`, `Badge`, `Alert`) rodam no servidor. Como a CSP é estrita, nenhum componente grava `style` inline no HTML do servidor, e o layout entrega o nonce da requisição ao pacote (`<CspNonce>`) para o `<style>` do travamento de rolagem do modal.
 
 ### Proxy da API e cabeçalhos de segurança
 
