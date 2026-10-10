@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider, useToast, type ToastOptions } from "./toast";
@@ -179,6 +180,16 @@ describe("Toast", () => {
       });
       expect(screen.getByRole("button", { name: "Fechar notificação" })).toBeInTheDocument();
     });
+  });
+
+  it("puts no inline style in the server HTML, which the strict CSP would block", () => {
+    const html = renderToString(
+      <ToastProvider>
+        <p>página</p>
+      </ToastProvider>,
+    );
+    expect(html).toContain("página");
+    expect(html).not.toMatch(/\sstyle=/);
   });
 
   it("refuses to be used outside its provider", () => {

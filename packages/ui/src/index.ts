@@ -69,3 +69,4 @@ export {
   type HeaderNavLinkProps,
   type HeaderProps,
 } from "./components/header";
+export { CspNonce } from "./components/csp-nonce";

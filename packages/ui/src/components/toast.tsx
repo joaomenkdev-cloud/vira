@@ -4,6 +4,7 @@ import { CircleAlert, CircleCheck, X, type LucideIcon } from "lucide-react";
 import { Toast as ToastPrimitive } from "radix-ui";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
+import { useIsClient } from "../lib/use-is-client";
 import { Icon } from "./icon";
 
 export interface ToastOptions {
@@ -47,6 +48,7 @@ export function useToast(): ToastApi {
  * is never the only place for an important message: repeat errors inline.
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const isClient = useIsClient();
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
 
   const toast = useCallback((options: ToastOptions) => {
@@ -108,10 +110,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             </ToastPrimitive.Root>
           );
         })}
-        <ToastPrimitive.Viewport
-          label="Notificações ({hotkey})"
-          className="pointer-events-none fixed inset-x-0 bottom-0 z-toast m-0 flex list-none flex-col items-center gap-2 p-4 outline-none sm:inset-x-auto sm:right-0 sm:items-end"
-        />
+        {/* Radix writes an inline style into the viewport, which the strict CSP blocks in
+            server HTML; no toast exists before the browser takes over anyway. */}
+        {isClient ? (
+          <ToastPrimitive.Viewport
+            label="Notificações ({hotkey})"
+            className="pointer-events-none fixed inset-x-0 bottom-0 z-toast m-0 flex list-none flex-col items-center gap-2 p-4 outline-none sm:inset-x-auto sm:right-0 sm:items-end"
+          />
+        ) : null}
       </ToastPrimitive.Provider>
     </ToastContext>
   );

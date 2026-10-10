@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { Select } from "./select";
@@ -84,5 +85,28 @@ describe("Select", () => {
     expect(screen.getByRole("combobox")).toBeDisabled();
     await userEvent.click(screen.getByRole("combobox"));
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  describe("server HTML", () => {
+    // Radix puts an inline style in a hidden native <select>, which the strict CSP blocks,
+    // so the server renders a plain button that looks the same until the browser takes over.
+    it("holds no inline style", () => {
+      expect(renderToString(<Select label="Tipo" options={OPTIONS} />)).not.toMatch(/\sstyle=/);
+    });
+
+    it("shows the placeholder, or the chosen option, on the button", () => {
+      expect(
+        renderToString(<Select label="Tipo" options={OPTIONS} placeholder="Escolha" />),
+      ).toContain("Escolha");
+      expect(
+        renderToString(<Select label="Tipo" options={OPTIONS} defaultValue="camarote" />),
+      ).toContain("Camarote");
+    });
+
+    it("is already a labelled combobox", () => {
+      const html = renderToString(<Select label="Tipo" options={OPTIONS} error="Erro." />);
+      expect(html).toContain('role="combobox"');
+      expect(html).toContain('aria-invalid="true"');
+    });
   });
 });
