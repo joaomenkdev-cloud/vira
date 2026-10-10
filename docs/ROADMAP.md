@@ -26,7 +26,7 @@ Objetivo: design system, contas, eventos e vitrine funcionando de ponta a ponta 
 
 | # | Entrega | Branch sugerida | Critério de pronto | Status |
 | --- | --- | --- | --- | --- |
-| N1 | Fundação visual | `feat/ui-foundation` | `packages/ui` com `tokens.css` e `@theme` do [DESIGN.md](DESIGN.md); Inter via `next/font`; teste que recalcula o contraste dos pares de cor e falha abaixo de AA; lint proibindo valores arbitrários; rota `/dev/design-system`. Commit `feat(ui): establish visual foundation`. | ⬜ |
+| N1 | Fundação visual | `feat/ui-foundation` | `packages/ui` com `tokens.css` e `@theme` do [DESIGN.md](DESIGN.md); Inter auto-hospedada (`@fontsource-variable/inter`, decidido na F7); teste que recalcula o contraste dos pares de cor e falha abaixo de AA; lint proibindo valores arbitrários; rota `/dev/design-system`. Commit `feat(ui): establish visual foundation`. | 🟨 |
 | N2 | Componentes base | `feat/ui-components` | Button, Input (e variações), Badge, Alert, Toast, Modal/Bottom sheet, Dropdown, Skeleton, Spinner, Empty state, Header e Footer, todos nos estados da seção 3 do DESIGN.md; teste axe por componente; prints na página de design system. | ⬜ |
 | N3 | Cadastro e login por senha | `feat/auth-password` | `register` (202 anti-enumeração), verificação de e-mail (Mailpit), `login`, argon2id; bloqueio progressivo; rate limit em login e cadastro; auditoria; testes de enumeração, rate limit e bloqueio. | ⬜ |
 | N4 | Sessões e CSRF | `feat/auth-sessions` | JWT de acesso em cookie `__Host-`; refresh rotativo com hash e detecção de reuso (teste: token antigo revoga a família); `logout` e `logout-all`; CSRF double-submit (testes de 403); flags de cookie verificadas em teste. | ⬜ |

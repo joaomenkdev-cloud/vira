@@ -311,7 +311,7 @@ Rate limiting usa Redis (`@nestjs/throttler` com storage Redis) e é independent
 - **Next.js App Router** com Server Components para páginas públicas (vitrine e página do evento renderizadas no servidor, boas para SEO e desempenho) e Client Components só onde há interação (seletor de ingressos, checkout, câmera do check-in).
 - Busca de dados no servidor pelo mesmo cliente HTTP tipado (`packages/shared`), repassando os cookies da requisição.
 - Rotas por área: `(public)` vitrine e evento; `(account)` meus ingressos, conta e privacidade; `(checkout)` layout sem navegação; `(organizer)` painel e check-in.
-- Estilos só via tokens ([DESIGN.md](DESIGN.md)). Enquanto o `packages/ui` não existe (entrega N1), os tokens ficam em `apps/web/src/app/tokens.css` e são expostos ao Tailwind em `globals.css`; um teste recalcula o contraste de cada par de cores a partir desse arquivo.
+- Estilos só via tokens ([DESIGN.md](DESIGN.md)). Os tokens ficam em `packages/ui/src/tokens.css` e são expostos ao Tailwind por `packages/ui/src/theme.css`, que o `globals.css` do web importa logo depois do Tailwind; um teste recalcula o contraste de cada par de cores a partir desse arquivo, e a regra de lint `vira/no-arbitrary-tailwind` rejeita valores arbitrários (`bg-[#fff]`, `p-[13px]`) nas classes.
 
 ### Proxy da API e cabeçalhos de segurança
 

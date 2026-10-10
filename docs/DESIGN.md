@@ -140,11 +140,14 @@ O PR de fundação do design system inclui um teste que recalcula essa tabela a 
 | `body-sm` | 14/20 | 400 | 0 | Metadados, texto de ajuda. |
 | `label` | 14/20 | 500 | 0 | Labels de campo, botões `sm`. |
 | `overline` | 12/16 | 600 | +0,06em, maiúsculas | Data no card, nomes de etapa. Mínimo absoluto de tamanho. |
-| `price` | 20/28 (resumo: 28/34) | 700 | −0,01em, `tabular-nums` | Preços. |
+| `price` | 20/28 (resumo: 28/34, `price-lg`) | 700 | −0,01em, `tabular-nums` | Preços. |
+| `logo` | 24/32 | 800 | −0,025em | Só a marca "vira" no header. |
+
+Os tamanhos de mobile de `h1` e `h2` são os tokens `h1-sm` e `h2-sm` (o de `display` é `display-sm`), usados com o prefixo de breakpoint: `text-h1-sm md:text-h1`.
 
 Regras:
 
-- Comprimento de linha do corpo: 60–75 caracteres (`max-width: 68ch`).
+- Comprimento de linha do corpo: 60–75 caracteres (`max-width: 68ch`, utilitário `max-w-reading`).
 - Hierarquia por **peso e tamanho**, não por cor. No máximo três níveis de texto por bloco.
 - Títulos com `text-wrap: balance`; parágrafos com `text-wrap: pretty`.
 
@@ -172,7 +175,7 @@ Layout:
 
 | Token | Valor |
 | --- | --- |
-| `container-max` | 1200px (página do evento: 1120px; checkout: 960px) |
+| `container-max` | 1200px (página do evento: 1120px; checkout: 960px); utilitários `max-w-page`, `max-w-event`, `max-w-checkout` |
 | `gutter` | 16px (< 640), 24px (640–1023), 32px (≥ 1024) |
 | Grid | 4 colunas (mobile), 8 (tablet), 12 (desktop) |
 | Breakpoints | `sm` 640, `md` 768, `lg` 1024, `xl` 1280 |
@@ -731,8 +734,9 @@ Meta: **WCAG 2.2 nível AA**. Verificado automaticamente com axe (Playwright) em
 ## 7. Implementação
 
 - `packages/ui/src/tokens.css` — tokens como custom properties (fonte única).
-- `packages/ui/src/theme.css` — `@theme` do Tailwind mapeando os tokens; utilitários arbitrários (`bg-[#...]`, `p-[13px]`) proibidos por regra de lint.
+- `packages/ui/src/theme.css` — `@theme` do Tailwind mapeando os tokens, mais os utilitários de movimento (`duration-*`, `ease-exit`) e de camada (`z-sticky` ... `z-toast`). Um teste garante que todo token é exposto e que o tema não referencia token inexistente.
+- Regra de lint `vira/no-arbitrary-tailwind` (em `@vira/config`): rejeita valores arbitrários (`bg-[#...]`, `p-[13px]`, `h-(--x)`, `[mask-type:alpha]`) em `className` e em `cn`/`clsx`/`cva`. Variantes arbitrárias (`data-[state=open]:`) continuam permitidas, porque selecionam um estado e não um valor.
 - `packages/ui/src/components/*` — componentes da seção 3, cada um com stories/fixtures e teste de acessibilidade.
-- Rota `/dev/design-system` (disponível só em desenvolvimento) mostrando tokens e componentes em todos os estados — base dos prints dos PRs de interface.
+- Rota `/dev/design-system` (disponível só em desenvolvimento) mostrando tokens e componentes em todos os estados — base dos prints dos PRs de interface. Um build de produção só a serve com `VIRA_DESIGN_SYSTEM=true` (usado pelo E2E e pelo script de prints) e nunca na Vercel; a página tem `noindex`.
 - PRs de interface **não alteram** regra de negócio, API, banco, autenticação, pagamento ou lógica de ingresso. Se uma tela precisar de um dado que não existe, o PR sinaliza a necessidade em vez de inventar.
 - Modo escuro fica fora do MVP (marco Evolução); os tokens semânticos já permitem adicioná-lo sem tocar nos componentes.

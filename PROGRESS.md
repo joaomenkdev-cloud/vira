@@ -5,11 +5,11 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 0 — Fundação
-- **Concluído (mergeado):** F1 a F5 (PRs #1, #2, #8, #10, #11) e Dependabot (#4–#7; #9, CodeQL v4, no lugar do #3).
+- **Concluído (mergeado):** F1 a F6 (PRs #1, #2, #8, #10, #11, #12) e Dependabot (#4–#7; #9, CodeQL v4, no lugar do #3).
 - **Entregas abertas (pilha):**
-  - F6 — Worker, filas e outbox (`feat/worker-outbox`, PR #12, base `main`) — CI verde, aguardando autorização para mergear.
-  - F7 — Esqueleto do web (`feat/web-skeleton`, empilhado sobre o #12) — draft, aguardando CI e revisão.
-- **Próximo passo:** quando o #12 for mergeado, mudar a base do PR do F7 para `main` (antes de apagar a branch do F6). Depois, **N1 — Fundação visual** (`feat/ui-foundation`): mover os tokens de `apps/web/src/app/tokens.css` para `packages/ui`.
+  - F7 — Esqueleto do web (`feat/web-skeleton`, PR #13, base `main`) — CI verde, aguardando autorização para mergear.
+  - N1 — Fundação visual (`feat/ui-foundation`, empilhado sobre o #13) — draft.
+- **Próximo passo:** quando o #13 for mergeado, mudar a base do PR da N1 para `main` (antes de apagar a branch do F7). Depois, **N2 — Componentes base** (`feat/ui-components`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -24,6 +24,25 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-10 — N1: fundação visual
+
+Feito:
+
+- `packages/ui` (`@vira/ui`): `tokens.css` (fonte única dos valores) e `theme.css` (o `@theme` do Tailwind, os utilitários de movimento e de camada e os estilos de base), importados pelo `globals.css` do web logo depois do Tailwind.
+- Tokens que faltavam no DESIGN.md: `scrim`, `info`/`info-bg`, larguras de layout (`max-w-page`, `max-w-event`, `max-w-checkout`, `max-w-reading`, `max-w-empty-state`), camadas (`z-sticky` ... `z-toast`), `duration-slow`, `ease-exit`, `price`/`price-lg` e os tamanhos de mobile `h1-sm`/`h2-sm`.
+- Testes no `@vira/ui`: contraste AA recalculado de `tokens.css` (agora com `info`) e coerência do tema (nenhuma referência a token inexistente, todo token exposto, nenhuma cor literal no tema).
+- Regra de lint `vira/no-arbitrary-tailwind` em `@vira/config`, ligada para todo `.tsx`/`.jsx`: rejeita `bg-[#fff]`, `p-[13px]`, `h-(--x)` e propriedades arbitrárias em `className` e em `cn`/`clsx`/`cva`; variantes arbitrárias (`data-[state=open]:`) continuam valendo. Os valores arbitrários do web (`max-w-[1200px]`, `max-w-[68ch]`, `max-w-[420px]`, `scale-[0.98]`) viraram tokens.
+- Rota `/dev/design-system` com cores, estados, escala tipográfica, espaçamento, raios, sombra, movimento e camadas; `noindex`; em produção só com `VIRA_DESIGN_SYSTEM=true` e nunca na Vercel. Teste unitário garante que toda cor de `tokens.css` aparece na página; E2E confere que nenhuma amostra fica transparente e roda o axe.
+
+Corrigido de passagem: o logo usava `text-2xl`, que não existe no tema (a escala do Tailwind é zerada), então saía com 16 px. Agora usa o token `logo` (24/32, peso 800), e os prints foram refeitos.
+
+Decisões tomadas por conta própria:
+
+- Inter continua via `@fontsource-variable/inter` (decisão da F7); o critério da N1 no ROADMAP foi atualizado.
+- `@vira/ui` exporta os arquivos CSS direto de `src/` (sem build): CSS não precisa de compilação, e os componentes da N2 entram no mesmo pacote.
+- A página do design system lista os tokens com classes do Tailwind escritas por extenso, sem `style` inline (a CSP de produção bloqueia estilos inline).
+- Token novo `logo` para a marca no header, documentado no DESIGN.md.
 
 ### 2026-10-09 — F7: esqueleto do web
 
