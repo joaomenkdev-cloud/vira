@@ -1,5 +1,7 @@
 export { cn } from "./lib/cn";
 
+export { Alert, type AlertProps, type AlertVariant } from "./components/alert";
+export { Badge, type BadgeProps, type BadgeVariant } from "./components/badge";
 export {
   Button,
   IconButton,
