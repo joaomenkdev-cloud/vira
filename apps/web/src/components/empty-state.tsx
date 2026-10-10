@@ -13,7 +13,7 @@ interface EmptyStateProps {
  */
 export function EmptyState({ title, children, action }: EmptyStateProps) {
   return (
-    <section aria-labelledby="empty-state-title" className="mx-auto max-w-[420px] text-center">
+    <section aria-labelledby="empty-state-title" className="mx-auto max-w-empty-state text-center">
       <div aria-hidden="true" className="mx-auto mb-6 w-24 border-t-2 border-dashed border-line" />
       <h2 id="empty-state-title" className="text-h3 text-ink">
         {title}
