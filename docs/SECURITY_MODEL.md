@@ -126,13 +126,13 @@ Legenda: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosur
 | Autorização | Guard global "negar por padrão": toda rota declara `@Public()` ou um papel; teste automatizado falha se alguma rota não declarar. Posse verificada em `application` com políticas por recurso. |
 | Validação | Zod estrito (`.strict()`) em corpo, query e params; limites de tamanho em todos os textos e arrays. |
 | Markdown | `markdown-it` com HTML desligado → `sanitize-html` com allowlist (`p`, `strong`, `em`, `ul`, `ol`, `li`, `a[href]`, `h3`, `h4`, `blockquote`, `br`); links com `rel="noopener noreferrer nofollow ugc"`; só `https:` e `mailto:`. Renderizado no servidor e salvo; o web não usa `dangerouslySetInnerHTML` com conteúdo não sanitizado. |
-| Cabeçalhos | Helmet na API; no web: CSP com nonce (`default-src 'self'; script-src 'self' 'nonce-…' https://js.stripe.com; frame-src https://js.stripe.com https://hooks.stripe.com; img-src 'self' data: <cdn do R2>; connect-src 'self' https://api.stripe.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`), HSTS, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (câmera só na rota de check-in). |
+| Cabeçalhos | Helmet na API; no web: CSP com nonce gerado a cada requisição em `src/proxy.ts` (implementado no F7 com `default-src 'self'`, `script-src 'self' 'nonce-…' 'strict-dynamic'`, `object-src 'none'`, `base-uri 'none'`, `frame-ancestors 'none'`; os domínios do Stripe entram no checkout, V6). Desenho completo: (`default-src 'self'; script-src 'self' 'nonce-…' https://js.stripe.com; frame-src https://js.stripe.com https://hooks.stripe.com; img-src 'self' data: <cdn do R2>; connect-src 'self' https://api.stripe.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`), HSTS, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (câmera só na rota de check-in). |
 | CORS | Somente a origem do web; credenciais permitidas; webhook sem CORS. |
 | Limites | Body JSON 100 kB; paginação máx. 50; timeouts de requisição 10 s; consultas com `statement_timeout` de 5 s. |
 | Upload | URL pré-assinada de `PUT` com `Content-Type` e `Content-Length` fixados na assinatura, expiração de 5 min, chave gerada pelo servidor; bucket privado; confirmação valida magic bytes e dimensões; imagens re-encodadas (remove EXIF/GPS) antes de servir. |
 | SSRF (API7) | O servidor nunca busca URLs informadas por usuário; imagens só chegam por upload direto. |
 | Segredos | Somente variáveis de ambiente, validadas no boot; nunca no repositório (gitleaks no pre-commit e no CI); chaves separadas por ambiente; rotação documentada. |
-| Dependências | Dependabot semanal, `pnpm audit` no CI, CodeQL, lockfile congelado no CI, actions fixadas por versão. |
+| Dependências | Dependabot semanal, `pnpm audit` no CI, CodeQL, lockfile congelado no CI, actions de terceiros fixadas no SHA do commit (o Dependabot mantém os pins atualizados) e as do GitHub por versão. |
 | Auditoria | `AuditLog.record()` (módulo `audit`) grava ações sensíveis em `audit_logs`, append-only por trigger; cada ação tem schema de `metadata` estrito, sem dados pessoais. |
 | Logs | Sem dados pessoais nem segredos (redação no pino); `requestId` em tudo; Sentry com `sendDefaultPii: false` e `beforeSend` sanitizando. |
 | Banco | Usuário da aplicação sem privilégio de DDL em produção (migrations com outro papel); `audit_logs` só `INSERT`/`SELECT`; TLS obrigatório (a API recusa subir em produção sem `sslmode=require` no `DATABASE_URL` e sem `rediss://` no `REDIS_URL`); `statement_timeout` de 5 s e timeout de conexão de 5 s. |
@@ -163,7 +163,7 @@ Status: ⬜ planejado · 🟨 em andamento · ✅ implementado e testado. O marc
 | --- | --- | --- | --- |
 | V1 Encoding and Sanitization | Escapamento por contexto (React), markdown sanitizado com allowlist, Prisma parametrizado (sem SQL cru concatenado), saída JSON sempre serializada. | Núcleo | ⬜ |
 | V2 Validation and Business Logic | Zod estrito em toda entrada; regras de negócio no `domain`; limites anti-abuso no fluxo de compra; operações sensíveis em ordem garantida (transições condicionais). | Núcleo / MVP | ⬜ |
-| V3 Web Frontend Security | CSP com nonce, cookies `__Host-`, `SameSite`, HSTS, proteção contra clickjacking, `Sec-Fetch-*`. | Fundação / MVP | ⬜ |
+| V3 Web Frontend Security | CSP com nonce, cookies `__Host-`, `SameSite`, HSTS, proteção contra clickjacking, `Sec-Fetch-*`. | Fundação / MVP | 🟨 |
 | V4 API and Web Service | Métodos HTTP corretos, `Content-Type` verificado, limites de tamanho, OpenAPI coerente com o código. | Fundação | 🟨 |
 | V5 File Handling | Upload pré-assinado com tipo e tamanho fixados, verificação de magic bytes, re-encode, bucket privado, nomes gerados pelo servidor. | Núcleo | ⬜ |
 | V6 Authentication | argon2id, política de senha (8–128, checagem contra senhas vazadas via k-anonymity HIBP), anti-enumeração, rate limit e bloqueio, redefinição com token de uso único. | Núcleo | ⬜ |

@@ -5,9 +5,11 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 0 — Fundação
-- **Concluído (mergeado):** F1 a F5 (PRs #1, #2, #8, #10, #11) e Dependabot (#4–#7, #9 CodeQL v4).
-- **Entrega aberta:** F6 — Worker, filas e outbox (`feat/worker-outbox`) — aguardando CI e revisão.
-- **Próximo passo:** F7 — Esqueleto do web (`feat/web-skeleton`), empilhado sobre o F6.
+- **Concluído (mergeado):** F1 a F5 (PRs #1, #2, #8, #10, #11) e Dependabot (#4–#7; #9, CodeQL v4, no lugar do #3).
+- **Entregas abertas (pilha):**
+  - F6 — Worker, filas e outbox (`feat/worker-outbox`, PR #12, base `main`) — CI verde, aguardando autorização para mergear.
+  - F7 — Esqueleto do web (`feat/web-skeleton`, empilhado sobre o #12) — draft, aguardando CI e revisão.
+- **Próximo passo:** quando o #12 for mergeado, mudar a base do PR do F7 para `main` (antes de apagar a branch do F6). Depois, **N1 — Fundação visual** (`feat/ui-foundation`): mover os tokens de `apps/web/src/app/tokens.css` para `packages/ui`.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +24,31 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-09 — F7: esqueleto do web
+
+Auditoria (antes de codar): `apps/web` vazio; `packages/ui` ainda não existe (é a entrega N1); o briefing proíbe eventos, preços, depoimentos e funcionalidades inventados; o Next.js 16 mudou convenções (`middleware` virou `proxy`) e traz a documentação do próprio pacote, que foi a fonte usada.
+
+Plano (commits pequenos): tokens e estilos base → cabeçalhos e CSP com nonce → proxy de `/api/v1` → layout e home com estado vazio → testes unitários e E2E com axe → CI e docs.
+
+Feito:
+
+- `apps/web`: Next.js 16 (App Router) + Tailwind 4, Inter variável auto-hospedada, tokens do DESIGN.md em `tokens.css` mapeados no tema do Tailwind; foco visível, `prefers-reduced-motion`, link "Pular para o conteúdo", `lang="pt-BR"`.
+- Home: título "Encontre seu próximo evento.", uma frase e o estado vazio "Nenhum evento por aqui ainda". Sem busca, sem navegação e sem eventos inventados (nada disso existe ainda). 404 e página de erro com o mesmo cuidado.
+- `proxy.ts`: CSP estrita com nonce por requisição (`strict-dynamic`, sem `unsafe-inline`/`unsafe-eval` em produção); demais cabeçalhos via `next.config.ts`; `/api/v1/*` encaminhado para a API na mesma origem.
+- Testes: 48 unitários (CSP, origem da API, config, contraste AA recalculado dos tokens) e 24 E2E (12 × desktop e mobile): axe sem violações A/AA, nonce diferente a cada requisição e em todos os scripts, nenhuma violação de CSP no navegador, proxy, teclado, alvos de 44 px, reflow a 320 px.
+- CI: job de E2E (Playwright + axe); Turborepo passa a considerar `API_ORIGIN` e `VERCEL` no cache de build.
+
+Decisões tomadas por conta própria:
+
+- Tokens dentro do web até a N1 (o `packages/ui` é dela), com teste de contraste desde já.
+- `@fontsource-variable/inter` em vez de `next/font/google`: sem requisição ao Google no build nem em execução (LGPD) e build offline.
+- Todas as páginas dinâmicas (nonce por requisição), abrindo mão de cache estático e PPR; é o custo de uma CSP estrita.
+- `API_ORIGIN` lido no build; obrigatório e https quando `VERCEL` está definido; `http` só para loopback.
+- Sem navegação e sem busca no header/home: só existem quando as páginas e a API que as sustentam existirem.
+- `eslint-plugin-jsx-a11y` não entrou (ainda não suporta ESLint 10); a acessibilidade é verificada pelo axe no E2E.
+- CodeQL do #13 achou dois problemas reais, corrigidos: regex para ler HTML no teste E2E (trocada por `DOMParser`) e actions de terceiros presas a tag mutável (`pnpm/action-setup` e `gitleaks-action` agora fixadas no SHA do commit).
+- `AGENTS.md` do Next.js (`node_modules/next/AGENTS.md`) manda ler a documentação do pacote antes de codar: lida (CSP, proxy, rewrites).
 
 ### 2026-10-09 — F6: worker, filas e outbox
 
