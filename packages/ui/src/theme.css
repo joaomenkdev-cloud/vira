@@ -225,6 +225,19 @@
   z-index: var(--vira-z-toast);
 }
 
+/*
+ * Floating layers take their size from the element they hang on. Radix publishes it as
+ * custom properties on the positioned wrapper; these utilities are the only place that
+ * reads them, so components never need an arbitrary value.
+ */
+@utility min-w-menu-trigger {
+  min-width: var(--radix-popper-anchor-width);
+}
+
+@utility max-h-menu-available {
+  max-height: var(--radix-popper-available-height);
+}
+
 @layer base {
   html {
     background-color: var(--vira-bg);
