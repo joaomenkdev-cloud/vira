@@ -64,7 +64,7 @@
 
   /* Layers */
   --vira-z-sticky: 10;
-  --vira-z-dropdown: 20;
+  --vira-z-dropdown: 45;
   --vira-z-overlay: 30;
   --vira-z-modal: 40;
   --vira-z-toast: 50;
