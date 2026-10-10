@@ -113,6 +113,68 @@
   --container-checkout: var(--vira-width-checkout);
   --container-reading: var(--vira-width-reading);
   --container-empty-state: var(--vira-width-empty-state);
+  --container-dialog: var(--vira-width-dialog);
+  --container-dialog-wide: var(--vira-width-dialog-wide);
+
+  /*
+   * Animations (docs/DESIGN.md, 2.6 and 3.8). Entrances use the standard easing and
+   * exits the faster one. Radix waits for an exit animation to end before it unmounts a
+   * layer, so every layer that leaves has one.
+   */
+  --animate-fade-in: vira-fade-in var(--vira-duration-base) var(--vira-ease-standard) both;
+  --animate-fade-out: vira-fade-out var(--vira-duration-fast) var(--vira-ease-exit) both;
+  --animate-overlay-in: vira-fade-in var(--vira-duration-slow) var(--vira-ease-standard) both;
+  --animate-overlay-out: vira-fade-out var(--vira-duration-base) var(--vira-ease-exit) both;
+  --animate-sheet-in: vira-sheet-in var(--vira-duration-slow) var(--vira-ease-standard) both;
+  --animate-sheet-out: vira-sheet-out var(--vira-duration-base) var(--vira-ease-exit) both;
+  --animate-rise-in: vira-rise-in var(--vira-duration-base) var(--vira-ease-standard) both;
+  /* Skeletons stay invisible for the first 150 ms so fast responses never flash one. */
+  --animate-skeleton:
+    vira-skeleton-pulse var(--vira-duration-pulse) ease-in-out infinite,
+    vira-skeleton-appear 0s linear var(--vira-delay-skeleton) backwards;
+
+  @keyframes vira-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes vira-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes vira-sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes vira-sheet-out {
+    to {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes vira-rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem);
+    }
+  }
+
+  @keyframes vira-skeleton-pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  @keyframes vira-skeleton-appear {
+    from {
+      opacity: 0;
+    }
+  }
 
   --breakpoint-*: initial;
   --breakpoint-sm: 40rem;
@@ -161,6 +223,19 @@
 
 @utility z-toast {
   z-index: var(--vira-z-toast);
+}
+
+/*
+ * Floating layers take their size from the element they hang on. Radix publishes it as
+ * custom properties on the positioned wrapper; these utilities are the only place that
+ * reads them, so components never need an arbitrary value.
+ */
+@utility min-w-menu-trigger {
+  min-width: var(--radix-popper-anchor-width);
+}
+
+@utility max-h-menu-available {
+  max-height: var(--radix-popper-available-height);
 }
 
 @layer base {

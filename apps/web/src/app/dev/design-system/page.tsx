@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 
 import { isDesignSystemEnabled } from "@/config/design-system";
 
+import { ComponentsShowcase } from "./components-showcase";
+
 export const metadata: Metadata = {
   title: "Design system",
   robots: { index: false, follow: false },
@@ -114,9 +116,9 @@ const MOTION: readonly {
 
 const LAYERS: readonly { readonly token: string; readonly use: string }[] = [
   { token: "z-sticky", use: "Header, barra de compra mobile" },
-  { token: "z-dropdown", use: "Dropdown e popover" },
   { token: "z-overlay", use: "Scrim" },
   { token: "z-modal", use: "Modal e bottom sheet" },
+  { token: "z-dropdown", use: "Menu, select, popover e tooltip (acima do modal)" },
   { token: "z-toast", use: "Toast e link de pular conteúdo" },
 ];
 
@@ -144,8 +146,8 @@ export default function DesignSystemPage() {
         <p className="text-overline text-ink-muted uppercase">Desenvolvimento</p>
         <h1 className="mt-2 text-h1-sm md:text-h1">Design system</h1>
         <p className="mt-4 max-w-reading text-body-lg text-ink-muted">
-          Tokens do pacote <code>@vira/ui</code>. Toda cor, tamanho, raio, sombra e movimento da
-          interface vem daqui; o uso de cada um está no DESIGN.md.
+          Tokens e componentes do pacote <code>@vira/ui</code>. Toda cor, tamanho, raio, sombra e
+          movimento da interface vem daqui; o uso de cada um está no DESIGN.md.
         </p>
       </header>
 
@@ -243,6 +245,8 @@ export default function DesignSystemPage() {
           ))}
         </ul>
       </Section>
+
+      <ComponentsShowcase />
     </div>
   );
 }

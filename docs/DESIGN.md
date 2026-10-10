@@ -176,6 +176,7 @@ Layout:
 | Token | Valor |
 | --- | --- |
 | `container-max` | 1200px (página do evento: 1120px; checkout: 960px); utilitários `max-w-page`, `max-w-event`, `max-w-checkout` |
+| Largura do modal | 480px (confirmação) e 640px (conteúdo); utilitários `max-w-dialog`, `max-w-dialog-wide` |
 | `gutter` | 16px (< 640), 24px (640–1023), 32px (≥ 1024) |
 | Grid | 4 colunas (mobile), 8 (tablet), 12 (desktop) |
 | Breakpoints | `sm` 640, `md` 768, `lg` 1024, `xl` 1280 |
@@ -209,8 +210,12 @@ Usada só em: dropdown, popover, modal, bottom sheet, toast e barra fixa de comp
 | `duration-fast` | 120ms | Cor de hover, botão pressionado, checkbox. |
 | `duration-base` | 200ms | Dropdown, toast, troca de estado de seleção. |
 | `duration-slow` | 320ms | Modal, bottom sheet, zoom da imagem do card. |
+| `duration-pulse` | 1200ms | Pulso do skeleton (3.8). |
+| `delay-skeleton` | 150ms | Atraso antes de o skeleton aparecer (3.8). |
 | `ease-standard` | `cubic-bezier(0.2, 0, 0, 1)` | Entradas e mudanças de estado. |
 | `ease-exit` | `cubic-bezier(0.4, 0, 1, 1)` | Saídas (sempre ~30% mais rápidas que a entrada). |
+
+Entradas e saídas de camadas (modal, menu, toast, tooltip) usam as animações do tema `animate-fade-in`/`fade-out`, `overlay-in`/`out`, `sheet-in`/`out`, `rise-in` e `skeleton`, todas montadas só com as durações e as curvas acima. O Radix espera o fim da animação de saída antes de desmontar a camada, então toda camada que sai tem uma.
 
 Microinterações permitidas (e só estas no MVP):
 
@@ -227,10 +232,12 @@ Com `prefers-reduced-motion: reduce`: escalas e deslocamentos são removidos; fi
 | Token | Valor |
 | --- | --- |
 | `z-sticky` | 10 (header, barra de compra mobile) |
-| `z-dropdown` | 20 |
 | `z-overlay` | 30 (scrim) |
 | `z-modal` | 40 |
+| `z-dropdown` | 45 (menu, select, popover e tooltip) |
 | `z-toast` | 50 |
+
+`z-dropdown` fica **acima** do modal porque um select, um menu ou um tooltip aberto de dentro de um modal precisa aparecer por cima dele; com o valor 20 a lista abria escondida atrás do scrim. Segue abaixo do toast.
 
 ### 2.8 Iconografia e fotografia
 
@@ -247,6 +254,19 @@ Todos em `packages/ui`, construídos sobre primitivas Radix (via shadcn/ui como 
 Estados obrigatórios para todo componente interativo: `default`, `hover`, `focus-visible`, `active`, `disabled`, e quando aplicável `loading`, `invalid`, `selected`.
 
 **Foco visível (global):** `outline: 2px solid var(--vira-accent); outline-offset: 2px;` aplicado em `:focus-visible`. Nunca `outline: none` sem substituto.
+
+**Como ficou implementado (N2).** Os componentes estão em `packages/ui/src/components/*` e saem pelo `@vira/ui`. Radix onde ele traz comportamento difícil de acertar (Dialog, DropdownMenu, Select, Toast, Tooltip, Slot); HTML nativo onde o navegador já faz tudo (checkbox, radio). Decisões que o texto abaixo não diz:
+
+- **Sem `tailwind-merge`.** Ele não distingue `text-label` (tamanho) de `text-ink` (cor), porque ambos são tokens do Vira. Cada componente separa *aparência* e *caixa* em `cva`s com classes que nunca se sobrepõem.
+- **Checkbox e radio são `<input>` nativos** desenhados com CSS (`appearance-none` e os estados `checked:`/`indeterminate:`), e o grupo de radio é um `<fieldset role="radiogroup">` com `<legend>`. O Radix escreve atributos `style` no HTML do servidor (inputs "bolha"), que a CSP estrita bloqueia, deixando os controles nativos à mostra até a hidratação. Teclado, formulário e leitor de tela vêm do navegador.
+- **Select:** o servidor renderiza um botão idêntico, e o Radix assume depois que o componente monta (pelo mesmo motivo: o `<select>` escondido do Radix leva `style` inline).
+- **Toast:** a região de notificações só é criada no navegador; antes disso não existe toast.
+- **Tooltip** (não listado em 3, mas exigido por 3.1): todo botão só com ícone (`IconButton`) tem um, e o nome vem do `label` obrigatório. Com o foco no botão, o primeiro `Esc` fecha o tooltip e o segundo fecha o modal (WCAG 1.4.13).
+- **Stepper de quantidade:** nos limites os botões ficam `aria-disabled` em vez de `disabled`. Parecem e agem como desabilitados, mas o foco do teclado não cai para a página quando o usuário chega ao máximo.
+- **Modal:** o botão × é o último filho no DOM, então o primeiro foco cai no conteúdo, não na saída. A ordem das ações no DOM é secundária → primária; no celular ela se inverte visualmente (primária no topo).
+- **Botão em carregamento** mantém a largura: o rótulo normal e o de carregamento ocupam a mesma célula de uma grade e o que não está em uso fica `invisible`.
+- **Header:** `sticky`, borda inferior só depois de rolar (`data-scrolled`); logo, navegação e ações são encaixes separados. O header do web continua só com o logo e o footer só com o texto de hoje: as páginas de navegação e o login ainda não existem.
+- **Ainda não feito:** menus com mais de 6 itens virarem bottom sheet no celular (3.6). Nenhum menu do MVP chega a isso (o do avatar tem uns 4 itens); entra junto com o primeiro que precisar.
 
 ### 3.1 Botões
 
@@ -736,7 +756,8 @@ Meta: **WCAG 2.2 nível AA**. Verificado automaticamente com axe (Playwright) em
 - `packages/ui/src/tokens.css` — tokens como custom properties (fonte única).
 - `packages/ui/src/theme.css` — `@theme` do Tailwind mapeando os tokens, mais os utilitários de movimento (`duration-*`, `ease-exit`) e de camada (`z-sticky` ... `z-toast`). Um teste garante que todo token é exposto e que o tema não referencia token inexistente.
 - Regra de lint `vira/no-arbitrary-tailwind` (em `@vira/config`): rejeita valores arbitrários (`bg-[#...]`, `p-[13px]`, `h-(--x)`, `[mask-type:alpha]`) em `className` e em `cn`/`clsx`/`cva`. Variantes arbitrárias (`data-[state=open]:`) continuam permitidas, porque selecionam um estado e não um valor.
-- `packages/ui/src/components/*` — componentes da seção 3, cada um com stories/fixtures e teste de acessibilidade.
-- Rota `/dev/design-system` (disponível só em desenvolvimento) mostrando tokens e componentes em todos os estados — base dos prints dos PRs de interface. Um build de produção só a serve com `VIRA_DESIGN_SYSTEM=true` (usado pelo E2E e pelo script de prints) e nunca na Vercel; a página tem `noindex`.
+- `packages/ui/src/components/*` — componentes da seção 3, cada um com teste unitário (Vitest + Testing Library: variantes, estados, teclado, ARIA) e, na página de design system, teste E2E com axe. O pacote exporta o código-fonte (`src/index.ts`): o Next.js 16 transpila pacotes do workspace sozinho, então não há `transpilePackages` nem etapa de build. O `globals.css` do web declara `@source` apontando para `packages/ui/src`, porque o Tailwind não varre pacotes do workspace.
+- **CSP e componentes.** Componente de interface não pode escrever `style` inline no HTML do servidor nem criar `<style>` sem nonce. Cada componente tem um teste que renderiza para string e falha se aparecer `style=`, e o E2E confere que a página inteira não gera violação de CSP. Os estilos que o Radix calcula no navegador (posição de menus, por exemplo) são aplicados pelo CSSOM, que a CSP permite. O travamento de rolagem do modal injeta um `<style>`; o layout do web entrega o nonce da requisição ao pacote por `<CspNonce>`, que o repassa ao `react-remove-scroll` e ao viewport do Select.
+- Rota `/dev/design-system` (disponível só em desenvolvimento) mostrando tokens e componentes em todos os estados (hover, foco e pressionado, que o navegador não mantém parados, são desenhados com os mesmos tokens pelo modificador `!` do Tailwind, e os componentes continuam interativos) — base dos prints dos PRs de interface. Um build de produção só a serve com `VIRA_DESIGN_SYSTEM=true` (usado pelo E2E e pelo script de prints) e nunca na Vercel; a página tem `noindex`.
 - PRs de interface **não alteram** regra de negócio, API, banco, autenticação, pagamento ou lógica de ingresso. Se uma tela precisar de um dado que não existe, o PR sinaliza a necessidade em vez de inventar.
 - Modo escuro fica fora do MVP (marco Evolução); os tokens semânticos já permitem adicioná-lo sem tocar nos componentes.

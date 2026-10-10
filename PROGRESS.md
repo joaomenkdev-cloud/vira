@@ -8,8 +8,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - **Concluído (mergeado):** F1 a F6 (PRs #1, #2, #8, #10, #11, #12) e Dependabot (#4–#7; #9, CodeQL v4, no lugar do #3).
 - **Entregas abertas (pilha):**
   - F7 — Esqueleto do web (`feat/web-skeleton`, PR #13, base `main`) — CI verde, aguardando autorização para mergear.
-  - N1 — Fundação visual (`feat/ui-foundation`, empilhado sobre o #13) — draft.
-- **Próximo passo:** quando o #13 for mergeado, mudar a base do PR da N1 para `main` (antes de apagar a branch do F7). Depois, **N2 — Componentes base** (`feat/ui-components`).
+  - N1 — Fundação visual (`feat/ui-foundation`, PR #14, empilhado sobre o #13) — CI verde, draft.
+  - N2 — Componentes base (`feat/ui-components`, empilhado sobre o #14) — draft.
+- **Próximo passo:** quando o #13 for mergeado, mudar a base do #14 para `main` (antes de apagar a branch do F7); depois do #14, mudar a base do PR da N2 para `main` (antes de apagar `feat/ui-foundation`). Em seguida, **N3 — Cadastro e login por senha** (`feat/auth-password`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -24,6 +25,34 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-10 — N2: componentes base
+
+Auditoria (antes de codar): a documentação do Next.js 16 diz que Turbopack e webpack já transpilam pacotes do workspace (então nada de `transpilePackages`), o Tailwind 4 não varre pacotes do workspace (precisa de `@source`) e a CSP de produção (`style-src` só com nonce) afeta o Radix de duas formas: ele grava atributos `style` no HTML do servidor e injeta um `<style>` para travar a rolagem do modal. As duas coisas aparecem no navegador (violação de CSP e rolagem que não trava), e o teste que as pegou foi uma sonda com Playwright contra o build de produção.
+
+Feito:
+
+- `@vira/ui` agora exporta componentes (`src/index.ts`): Button e IconButton, Tooltip, Spinner, Skeleton, Badge, Alert, Input (texto, e-mail, telefone, data e hora nativos), PasswordInput, SearchInput, Textarea, Select, Checkbox, RadioGroup/Radio, QuantityStepper, Modal (bottom sheet no celular), DropdownMenu, Toast (`ToastProvider` e `useToast`), EmptyState, Header e Footer, mais `CspNonce`.
+- Radix para Dialog, DropdownMenu, Select, Toast, Tooltip e Slot; ícones Lucide com traço 1,75 num único `Icon`; sem `tailwind-merge` (ver decisões); nenhum valor arbitrário nem `style` inline (a regra de lint passa).
+- O web consome o pacote (`@source` no `globals.css`); o `EmptyState` saiu do web para o pacote; header e footer do web usam `Header`/`Footer` do pacote, mas continuam com o conteúdo de hoje (só o logo; o texto de modo de teste). As páginas 404 e de erro usam o `Button`.
+- `/dev/design-system` mostra cada componente em todos os estados (hover, foco e pressionado desenhados com os mesmos tokens; os componentes seguem interativos).
+- Testes: 250+ unitários no `@vira/ui` (variantes, estados, teclado, ARIA: `aria-busy` no botão, `aria-invalid`/`aria-describedby` nos campos, foco preso e `Esc` no modal, `aria-live` no stepper e no toast) e um E2E por bloco da página com axe, mais um com cada camada aberta (modal, menu, select, tooltip, toast), em desktop e mobile. Outros testes de navegador: nenhuma violação de CSP ao abrir todas as camadas, HTML do servidor sem `style`, rolagem travada e foco preso no modal, bottom sheet no celular, select abrindo acima do modal.
+- Prints novos de modal e menu em `docs/assets/screenshots/` (desktop e mobile); o script `pnpm --filter @vira/web screenshots` agora tira os dois.
+
+Decisões tomadas por conta própria:
+
+- **Checkbox e radio nativos em vez de Radix.** O Radix escreve inputs "bolha" com `style` inline no HTML do servidor; a CSP bloqueia e os controles nativos ficam visíveis até hidratar. Nativo mantém teclado, formulário e leitor de tela do navegador e funciona sem JavaScript. O grupo de radio é `fieldset role="radiogroup"` com `legend`.
+- **Select:** botão estático no servidor, Radix depois de montar. **Toast:** a região de notificações só nasce no navegador.
+- **`CspNonce` + `get-nonce`:** o `react-remove-scroll` (usado pelo Radix) injeta um `<style>`; o layout entrega o nonce da requisição ao pacote, que o repassa ao `react-remove-scroll` e ao viewport do Select. `get-nonce` entrou como dependência direta do `@vira/ui` (já era transitiva).
+- **`z-dropdown` de 20 para 45** (acima do modal, abaixo do toast): senão um select aberto dentro de um modal ficava escondido atrás dele. Documentado no DESIGN 2.7.
+- **Tokens novos pedidos pelo DESIGN.md:** `duration-pulse` (1,2 s do skeleton), `delay-skeleton` (150 ms), larguras do modal (`max-w-dialog`/`dialog-wide`, 480/640 px) e as animações das camadas; mais dois utilitários que leem as variáveis do Radix (`min-w-menu-trigger`, `max-h-menu-available`) para não precisar de valor arbitrário.
+- **Sem `tailwind-merge`:** ele confunde `text-label` (tamanho) com `text-ink` (cor), pois ambos são tokens. Aparência e caixa são `cva`s separados com classes que não se sobrepõem.
+- **Stepper de quantidade:** nos limites o botão fica `aria-disabled`, não `disabled`, para o foco do teclado não se perder.
+- **Tooltip** entrou (não estava na lista da N2) porque o DESIGN 3.1 manda todo botão só com ícone ter um.
+- **O header do web ficou `sticky`, com a borda inferior só depois de rolar**, como diz o DESIGN 3.11 (antes tinha borda fixa). O estado vazio ganhou o respiro de 64 px do DESIGN 3.9 e passou a ser `h3` por padrão (`h2` nas páginas 404 e de erro, que têm `h1` oculto).
+- **Pendente de propósito:** menus com mais de 6 itens virarem bottom sheet no celular (DESIGN 3.6). Nenhum menu do MVP chega a isso; entra com o primeiro que precisar. Registrado no ROADMAP.
+
+Sobre o processo: o commit `fix(ui): give the select viewport style the CSP nonce` levou junto, por um `git add -A`, os arquivos da página `/dev/design-system` (`feat(web)`). Não reescrevi o histórico (regra: sem amend automático); a mensagem do commit descreve só o conserto do Select.
 
 ### 2026-10-10 — N1: fundação visual
 
