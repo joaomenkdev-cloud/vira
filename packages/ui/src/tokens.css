@@ -42,6 +42,8 @@
   --vira-width-checkout: 960px;
   --vira-width-reading: 68ch;
   --vira-width-empty-state: 420px;
+  --vira-width-dialog: 480px;
+  --vira-width-dialog-wide: 640px;
 
   /* Radii */
   --vira-radius-sm: 6px;
@@ -55,6 +57,8 @@
   --vira-duration-fast: 120ms;
   --vira-duration-base: 200ms;
   --vira-duration-slow: 320ms;
+  --vira-duration-pulse: 1200ms;
+  --vira-delay-skeleton: 150ms;
   --vira-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --vira-ease-exit: cubic-bezier(0.4, 0, 1, 1);
 
