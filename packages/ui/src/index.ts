@@ -51,3 +51,21 @@ export {
   type ModalContentProps,
 } from "./components/modal";
 export { ToastProvider, useToast, type ToastOptions } from "./components/toast";
+export { EmptyState, type EmptyStateProps } from "./components/empty-state";
+export {
+  Footer,
+  FooterLink,
+  FooterLinks,
+  FooterNotice,
+  type FooterLinkProps,
+} from "./components/footer";
+export {
+  Header,
+  HeaderActions,
+  HeaderLogo,
+  HeaderNav,
+  HeaderNavLink,
+  type HeaderLogoProps,
+  type HeaderNavLinkProps,
+  type HeaderProps,
+} from "./components/header";
