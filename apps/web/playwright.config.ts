@@ -31,6 +31,8 @@ export default defineConfig({
     {
       // Requires `next build` to have run (CI does; locally: pnpm --filter @vira/web build).
       command: `pnpm exec next start --port ${WEB_PORT}`,
+      // Serves /dev/design-system from the production build (src/config/design-system.ts).
+      env: { VIRA_DESIGN_SYSTEM: "true" },
       url: `http://127.0.0.1:${WEB_PORT}`,
       reuseExistingServer: !process.env["CI"],
       timeout: 120_000,
