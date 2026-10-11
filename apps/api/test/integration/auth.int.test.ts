@@ -606,7 +606,8 @@ describe.skipIf(!dockerAvailable)(
 
       it("rejects an address that is not normalized, too long, or malformed", async () => {
         await expect(insertUser("Ana@Exemplo.com")).rejects.toThrow(/users_email_normalized/);
-        await expect(insertUser(" ana@exemplo.com")).rejects.toThrow(/users_email_normalized/);
+        // Spaces are refused by the format check, which Postgres evaluates first.
+        await expect(insertUser(" ana@exemplo.com")).rejects.toThrow(/users_email_format/);
         await expect(insertUser(`${"a".repeat(250)}@exemplo.com`)).rejects.toThrow(
           /users_email_length/,
         );
