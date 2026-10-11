@@ -47,7 +47,7 @@ class FakeRedis {
     return Promise.resolve(1);
   }
 
-  connect(): Promise<void> {
+  ensureReady(): Promise<void> {
     this.status = "ready";
     return Promise.resolve();
   }

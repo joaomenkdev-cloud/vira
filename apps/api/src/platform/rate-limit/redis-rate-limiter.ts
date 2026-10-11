@@ -28,7 +28,7 @@ export class RedisRateLimiter implements RateLimiter {
     const windowMs = rule.windowSeconds * 1000;
 
     try {
-      if (this.redis.status === "wait") await this.redis.connect();
+      await this.redis.ensureReady();
       const replies = await this.redis
         .multi()
         .incr(key)
