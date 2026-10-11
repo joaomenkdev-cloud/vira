@@ -39,3 +39,6 @@ Thumbs.db
 
 # Local infra data
 .docker-data/
+
+# Next.js
+**/next-env.d.ts

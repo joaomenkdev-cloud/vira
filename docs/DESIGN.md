@@ -125,7 +125,7 @@ O PR de fundação do design system inclui um teste que recalcula essa tabela a 
 
 ### 2.2 Tipografia
 
-- **Família:** Inter (variável, via `next/font`, `display: swap`, subset `latin` + `latin-ext`). Fallback: `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`.
+- **Família:** Inter variável, auto-hospedada pelo pacote `@fontsource-variable/inter` (sem requisição a terceiros em tempo de execução nem de build, o que também preserva a privacidade dos visitantes; subsets `latin` e `latin-ext` por `unicode-range`, `font-display: swap`). Fallback: `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`.
 - **Recursos OpenType:** `font-feature-settings: "cv11", "ss01"` (a de um andar e dígitos mais abertos); preços e horários usam `tabular-nums`.
 - **Sem fontes decorativas.** Geist e Manrope ficam como alternativas registradas no ADR, não são carregadas.
 

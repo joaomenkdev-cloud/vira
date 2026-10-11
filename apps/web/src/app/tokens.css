@@ -1,0 +1,50 @@
+/*
+ * Vira design tokens (docs/DESIGN.md, section 2). Components never use literal
+ * values: they go through these custom properties, exposed to Tailwind in
+ * globals.css. The contrast of every text/background pair is checked by
+ * src/styles/contrast.test.ts.
+ *
+ * These move to packages/ui in delivery N1 (visual foundation).
+ */
+:root {
+  /* Surfaces and text */
+  --vira-bg: #fafaf8;
+  --vira-surface: #ffffff;
+  --vira-surface-sunken: #f2f2ef;
+  --vira-ink: #0b0b0c;
+  --vira-ink-muted: #5c5f66;
+  --vira-ink-subtle: #8a8d94;
+  --vira-line: #e7e7ea;
+  --vira-line-strong: #8a8d94;
+
+  /* The single signature colour */
+  --vira-accent: #d92d3a;
+  --vira-accent-hover: #b8222e;
+  --vira-accent-pressed: #9a1b26;
+  --vira-accent-soft: #fdecec;
+  --vira-accent-ink: #b8222e;
+  --vira-on-accent: #ffffff;
+
+  /* Status (no blue: neutral information uses ink on surface-sunken) */
+  --vira-success: #146c43;
+  --vira-success-bg: #e8f5ee;
+  --vira-warning: #8a5a00;
+  --vira-warning-bg: #fff4e0;
+  --vira-danger: #b3261e;
+  --vira-danger-bg: #fdecec;
+
+  /* Radii */
+  --vira-radius-sm: 6px;
+  --vira-radius-md: 10px;
+  --vira-radius-lg: 16px;
+
+  /* The only shadow: floating layers (dropdown, modal, toast, mobile buy bar) */
+  --vira-shadow-float: 0 12px 32px -8px rgb(11 11 12 / 0.16), 0 2px 6px rgb(11 11 12 / 0.06);
+
+  /* Motion */
+  --vira-duration-fast: 120ms;
+  --vira-duration-base: 200ms;
+  --vira-duration-slow: 320ms;
+  --vira-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --vira-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}

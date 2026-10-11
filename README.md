@@ -46,11 +46,11 @@ O Vira é um projeto de portfólio construído como se fosse para produção: ar
 
 ## Prints
 
-<!-- Prints de desktop e mobile entram com as primeiras telas (marco Núcleo). -->
+| Home (desktop) | Home (mobile) |
+| --- | --- |
+| ![Home no desktop](docs/assets/screenshots/web-home-desktop.png) | <img src="docs/assets/screenshots/web-home-mobile.png" alt="Home no mobile" width="280"> |
 
-| Home | Página do evento | Ingresso |
-| --- | --- | --- |
-| _em breve_ | _em breve_ | _em breve_ |
+Página do evento e ingresso entram com as próximas telas (marco Núcleo).
 
 ## Roadmap resumido
 
