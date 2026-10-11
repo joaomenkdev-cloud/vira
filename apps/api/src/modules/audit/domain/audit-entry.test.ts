@@ -88,6 +88,55 @@ describe("buildAuditEntry", () => {
   });
 });
 
+describe("authentication actions", () => {
+  it("records a lockout with how many failures led to it and for how long, nothing personal", () => {
+    const entry = buildAuditEntry(
+      {
+        action: "auth.account_locked",
+        entityId: organizer.id,
+        metadata: { failedAttempts: 5, lockSeconds: 60 },
+      },
+      { actor: "system" },
+      stamp,
+    );
+    expect(entry).toMatchObject({
+      entityType: "user",
+      metadata: { failedAttempts: 5, lockSeconds: 60 },
+    });
+    expect(() =>
+      buildAuditEntry(
+        {
+          action: "auth.account_locked",
+          entityId: organizer.id,
+          metadata: { failedAttempts: 5, lockSeconds: 60, email: "ana@exemplo.com" } as never,
+        },
+        { actor: "system" },
+        stamp,
+      ),
+    ).toThrow(InvalidAuditEventError);
+  });
+
+  it("records registration and e-mail verification without metadata", () => {
+    for (const action of ["auth.registered", "auth.email_verified"] as const) {
+      const entry = buildAuditEntry(
+        { action, entityId: organizer.id, metadata: {} },
+        { actor: organizer },
+        stamp,
+      );
+      expect(entry).toMatchObject({ action, entityType: "user", metadata: {} });
+    }
+  });
+
+  it("records a failed login of an unknown account without an entity", () => {
+    const entry = buildAuditEntry(
+      { action: "auth.login_failed", metadata: { reason: "invalid_credentials" } },
+      { actor: "system" },
+      stamp,
+    );
+    expect(entry.entityId).toBeNull();
+  });
+});
+
 describe("audit catalog", () => {
   it("uses the action format enforced by the database", () => {
     for (const action of AUDIT_ACTIONS) expect(action).toMatch(/^[a-z]+\.[a-z_]+$/);

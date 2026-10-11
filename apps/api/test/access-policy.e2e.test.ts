@@ -61,6 +61,19 @@ describe("every application route declares an access policy", () => {
     expect(collectRoutes(testApp).map((r) => r.name)).toContain("GET HealthController.live");
   });
 
+  it("declares the sign-up, verification and login routes as public", () => {
+    const authRoutes = collectRoutes(testApp).filter((route) =>
+      route.name.includes("AuthController"),
+    );
+
+    expect(authRoutes.map((route) => route.name).sort()).toEqual([
+      "POST AuthController.login",
+      "POST AuthController.register",
+      "POST AuthController.verify",
+    ]);
+    for (const route of authRoutes) expect(route.policy, route.name).toEqual({ kind: "public" });
+  });
+
   it("has no route without @Public() or @RequireRole()", () => {
     const undeclared = collectRoutes(testApp).filter((route) => route.policy === undefined);
     expect(undeclared.map((route) => route.name)).toEqual([]);
