@@ -17,6 +17,7 @@ export const TEST_WEB_ORIGIN = "http://localhost:3001";
 export const UNREACHABLE_INFRASTRUCTURE = {
   DATABASE_URL: "postgresql://vira:unused@127.0.0.1:1/vira",
   REDIS_URL: "redis://127.0.0.1:1",
+  SMTP_URL: "smtp://127.0.0.1:1",
 };
 
 export interface TestApp {
