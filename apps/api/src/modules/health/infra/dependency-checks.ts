@@ -15,7 +15,7 @@ export function redisCheck(redis: RedisService): DependencyCheck {
   return {
     name: "redis",
     ping: async () => {
-      if (redis.status === "wait" || redis.status === "end") await redis.connect();
+      await redis.ensureReady();
       await redis.ping();
     },
   };

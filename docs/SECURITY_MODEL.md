@@ -68,16 +68,16 @@ Legenda: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosur
 
 | | Ameaça | Controle | Prova |
 | --- | --- | --- | --- |
-| S | Credential stuffing / força bruta | Rate limit por IP e por conta; bloqueio progressivo (`locked_until`) após 5 falhas; argon2id (m=19 MiB, t=2, p=1, parâmetros OWASP) torna o ataque offline caro; mensagem genérica de erro. | Teste de integração do rate limit e do bloqueio |
+| S | Credential stuffing / força bruta | Rate limit por IP e por conta; bloqueio progressivo (`locked_until`) após 5 falhas; argon2id (m=19 MiB, t=2, p=1, parâmetros OWASP) torna o ataque offline caro; mensagem genérica de erro. | `auth.int.test.ts` (rate limit por IP e por conta, bloqueio e desbloqueio, tudo contra Redis e Postgres reais); `login-user.test.ts` |
 | S | Roubo de sessão por XSS | Cookies `HttpOnly`, `Secure`, prefixo `__Host-`; CSP estrita com nonce; React escapa por padrão; markdown sanitizado. | Teste de flags dos cookies; teste de CSP no E2E |
 | S | Reuso de refresh token roubado | Refresh opaco, guardado só como hash SHA-256, **rotação a cada uso** e **detecção de reuso**: token já rotacionado revoga a família inteira. | Teste: usar o token antigo após rotação revoga as duas sessões |
 | S | Login CSRF / CSRF em ações | `SameSite=Lax`, token CSRF double-submit assinado com o id da sessão em todo método inseguro, verificação de `Origin`/`Sec-Fetch-Site`. OAuth com `state` e PKCE. | Teste: POST sem token → 403; com origem estranha → 403 |
 | S | Tomada de conta via OAuth com e-mail não verificado | Vínculo automático com conta existente só quando o provedor afirma e-mail verificado (`email_verified` no Google; e-mail primário verificado no GitHub). | Teste com perfil de provedor não verificado |
 | T | Adulteração do JWT | Assinatura HS256 com segredo ≥ 256 bits, `alg` fixado na verificação, `iss`/`aud`/`exp` validados, expiração de 10 min. | Teste com `alg: none` e assinatura trocada |
-| R | Usuário nega ter feito login ou alterado senha | Auditoria de `auth.login_succeeded/failed`, `password_changed`, `refresh_reuse_detected`, `logout_all`. | Teste de que as ações geram registros |
-| I | Enumeração de contas | Cadastro e "esqueci a senha" respondem `202` idêntico; login responde `invalid-credentials` genérico; tempo de resposta equalizado (hash fictício quando o usuário não existe). | Teste comparando respostas para e-mail existente e inexistente |
-| D | Esgotar CPU com argon2 | Rate limit antes do hash; limite de tamanho da senha (8–128 caracteres). | Teste de corpo com senha gigante → 400 |
-| E | Usuário se promove a ADMIN | Papel nunca vem do corpo (schemas estritos); mudança de papel só por `ADMIN` e auditada; papel lido do banco ao emitir o JWT. | Teste de mass assignment em `PATCH /me` |
+| R | Usuário nega ter feito login ou alterado senha | Auditoria de `auth.login_succeeded/failed`, `password_changed`, `refresh_reuse_detected`, `logout_all`. | `auth.int.test.ts`: cadastro, verificação, login com sucesso e falha, bloqueio, e a ausência de e-mail, nome e senha no log |
+| I | Enumeração de contas | Cadastro e "esqueci a senha" respondem `202` idêntico; login responde `invalid-credentials` genérico; tempo de resposta equalizado (hash fictício quando o usuário não existe). | `auth.int.test.ts`: cadastro de e-mail novo e conhecido com respostas idênticas; senha errada e e-mail inexistente indistinguíveis e com o mesmo custo (uma verificação argon2id cada); `argon2-password-hasher.test.ts` |
+| D | Esgotar CPU com argon2 | Rate limit antes do hash; limite de tamanho da senha (8–128 caracteres). | `auth.e2e.test.ts`: senha gigante → 400 sem nenhum hash; `auth.int.test.ts`: 429 sem nenhum hash |
+| E | Usuário se promove a ADMIN | Papel nunca vem do corpo (schemas estritos); mudança de papel só por `ADMIN` e auditada; papel lido do banco ao emitir o JWT. | `auth.e2e.test.ts` e `auth.int.test.ts`: `role` no corpo do cadastro → 400 e nenhuma conta criada (`PATCH /me` entra com a N6) |
 
 ### 3.2 Compra (reserva e pagamento)
 
@@ -118,6 +118,18 @@ Legenda: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosur
 | I | Vazamento de dados pelo scanner | Resposta mostra só nome do titular, tipo e código; nada de e-mail do comprador. | Teste de contrato da resposta |
 | D | Força bruta de códigos manuais | 20/min por operador no `/checkin/code`; tentativas registradas. | Teste de rate limit |
 | E | Ingresso de um evento aceito em outro | `event_id` do ingresso precisa ser o evento informado; caso contrário `WRONG_EVENT`. | Teste |
+
+#### Limites conhecidos do login por senha (N3)
+
+Decisões tomadas e riscos aceitos, para o revisor não precisar redescobri-los:
+
+- **Senhas vazadas (HIBP):** ainda não verificadas. A política de hoje é só 8–128 caracteres; a checagem com k-anonymity fica como pendência (V6).
+- **Bloqueio por terceiros:** quem sabe o e-mail de alguém pode bloquear a conta por até 1 h, falhando de propósito. Aceito: o limite por IP (10 a cada 15 min) e o crescimento gradual (1 min na primeira vez) limitam o dano, e a alternativa (não bloquear) deixa a conta aberta a adivinhação. A contagem de falhas não decai com o tempo; só zera no login com sucesso.
+- **Aviso "você já tem conta" como canal de spam:** cada cadastro de um e-mail conhecido gera um e-mail ao dono do endereço. Limitado a 5/h por IP; não há limite por destinatário.
+- **Redis fora do ar:** o limitador deixa passar (e registra). O bloqueio por conta, no banco, segue valendo.
+- **Tempo de resposta:** o cadastro (hash antes da consulta) e o login (uma verificação em todos os caminhos) igualam o custo dominante. Sobra a diferença de uma ou duas escritas no banco, de ordem muito menor.
+- **Auditoria depois do commit:** o registro é gravado logo após a operação, não na mesma transação; uma falha entre os dois responde `500` embora a operação tenha ocorrido.
+- **Reenvio da verificação:** `POST /auth/email/resend` exige sessão (API.md), mas sem e-mail verificado não há sessão. Quem perdeu o e-mail de verificação ainda não tem como pedir outro; a decisão está listada no PROGRESS.md.
 
 ## 4. Controles transversais
 
@@ -166,12 +178,12 @@ Status: ⬜ planejado · 🟨 em andamento · ✅ implementado e testado. O marc
 | V3 Web Frontend Security | CSP com nonce, cookies `__Host-`, `SameSite`, HSTS, proteção contra clickjacking, `Sec-Fetch-*`. | Fundação / MVP | 🟨 |
 | V4 API and Web Service | Métodos HTTP corretos, `Content-Type` verificado, limites de tamanho, OpenAPI coerente com o código. | Fundação | 🟨 |
 | V5 File Handling | Upload pré-assinado com tipo e tamanho fixados, verificação de magic bytes, re-encode, bucket privado, nomes gerados pelo servidor. | Núcleo | ⬜ |
-| V6 Authentication | argon2id, política de senha (8–128, checagem contra senhas vazadas via k-anonymity HIBP), anti-enumeração, rate limit e bloqueio, redefinição com token de uso único. | Núcleo | ⬜ |
+| V6 Authentication | argon2id, política de senha (8–128, checagem contra senhas vazadas via k-anonymity HIBP), anti-enumeração, rate limit e bloqueio, redefinição com token de uso único. N3 entregou argon2id, política 8–128, anti-enumeração, rate limit, bloqueio e verificação de e-mail; faltam HIBP e a redefinição (N6). | Núcleo | 🟨 |
 | V7 Session Management | Refresh opaco com hash, rotação, detecção de reuso, expiração ociosa e absoluta, logout e logout global, revogação ao trocar senha. | Núcleo | ⬜ |
 | V8 Authorization | Negar por padrão, papel por função, posse por recurso, testes de autorização em toda rota. | Núcleo / MVP | ⬜ |
 | V9 Self-contained Tokens | JWT com `alg` fixo, `iss`/`aud`/`exp` validados, vida curta; token do QR com HMAC e `kid`. | Núcleo / MVP | ⬜ |
 | V10 OAuth and OIDC | Authorization Code + PKCE, `state`, validação do `id_token` (Google), vínculo só com e-mail verificado, sem guardar tokens do provedor. | Núcleo | ⬜ |
-| V11 Cryptography | Bibliotecas padrão (`node:crypto`, argon2), aleatoriedade com CSPRNG, comparação em tempo constante, chaves ≥ 256 bits, rotação por `kid`. | Núcleo / MVP | ⬜ |
+| V11 Cryptography | Bibliotecas padrão (`node:crypto`, argon2), aleatoriedade com CSPRNG, comparação em tempo constante, chaves ≥ 256 bits, rotação por `kid`. N3: argon2id (`@node-rs/argon2`) e tokens de 256 bits do CSPRNG guardados só como SHA-256. | Núcleo / MVP | 🟨 |
 | V12 Secure Communication | TLS em todos os saltos (web, API, banco, Redis), HSTS. | MVP (deploy) | 🟨 |
 | V13 Configuration | Config validada no boot, segredos fora do código, gitleaks, dependências monitoradas, modo debug desligado em produção. | Fundação | 🟨 |
 | V14 Data Protection | Minimização (LGPD), inventário de dados, exportação e anonimização, sem PII em logs/Sentry/outbox, `Cache-Control: no-store` em respostas com dados pessoais. | MVP | ⬜ |

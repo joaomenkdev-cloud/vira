@@ -63,11 +63,11 @@ O client do Prisma é gerado em `apps/api/src/generated` (ignorado pelo Git) pel
 
 ### Testes de integração
 
-Os testes em `apps/api/test/integration` sobem Postgres e Redis reais com Testcontainers. Sem Docker, eles são pulados com aviso; no CI (`CI=true`) a falta de Docker é erro.
+Os testes em `apps/api/test/integration` sobem Postgres, Redis e, nos testes de e-mail, o Mailpit reais com Testcontainers. Sem Docker, eles são pulados com aviso; no CI (`CI=true`) a falta de Docker é erro.
 
 ### Worker e filas
 
-O trabalho em segundo plano (hoje: despachar a outbox para as filas BullMQ) roda no **worker**, que usa o mesmo código da API:
+O trabalho em segundo plano (despachar a outbox para as filas BullMQ e consumir a fila `email`) roda no **worker**, que usa o mesmo código da API:
 
 ```bash
 pnpm --filter @vira/api dev:worker     # desenvolvimento, com recarga
@@ -79,7 +79,9 @@ pnpm --filter @vira/api build && pnpm --filter @vira/api start:worker
 | Valor | Comportamento |
 | --- | --- |
 | `separate` (padrão) | Só o processo do worker despacha. A API apenas grava na outbox |
-| `embedded` | O despacho roda dentro da própria API, para hospedagem sem background worker ([ADR-0011](docs/adr/0011-hospedagem.md)) |
+| `embedded` | O despacho **e o consumo das filas** (e-mails) rodam dentro da própria API, para hospedagem sem background worker ([ADR-0011](docs/adr/0011-hospedagem.md)) |
+
+Quem consome uma fila registra um handler por tipo de mensagem (`JobHandlerRegistry`, em `platform/queue`); o worker de cada fila encaminha o job ao handler do tipo. Exemplo: `modules/auth/infra/auth-job-handlers.ts`.
 
 `OUTBOX_POLL_INTERVAL_MS` (padrão 5000, de 50 a 60000) define a frequência da verificação. Para gravar um efeito colateral, um módulo injeta `Outbox` (`modules/outbox/application/public-api.ts`) e chama `publish(evento, tx)` dentro da transação que muda o estado, obtida de `TransactionRunner`.
 
@@ -95,6 +97,16 @@ pnpm --filter @vira/web screenshots  # prints para PRs de interface (servidor co
 - `API_ORIGIN` (veja `apps/web/.env.example`) define para onde `/api/v1` é encaminhado. É lido **no build**: rebuilde ao mudá-lo.
 - O E2E sobe uma API falsa na porta 3000 e o web na 3101. Rode `pnpm --filter @vira/web build` antes; no primeiro uso, `pnpm --filter @vira/web exec playwright install chromium`.
 - Toda página é renderizada a cada requisição (a CSP usa nonce, veja [ARCHITECTURE.md](docs/ARCHITECTURE.md#8-aplicação-web)). Não use estilos inline nem scripts inline sem nonce: a CSP os bloqueia.
+
+### E-mails locais (Mailpit)
+
+Nenhum e-mail sai da sua máquina em desenvolvimento: a API envia por SMTP para o Mailpit (`SMTP_URL=smtp://127.0.0.1:1025` no `.env.example`), que guarda tudo e mostra em **<http://localhost:8025>**. Para ver o fluxo de cadastro de ponta a ponta:
+
+1. `pnpm infra:up`, aplique as migrations e suba a API com `WORKER_MODE=embedded` (ou rode também o worker: `pnpm --filter @vira/api dev:worker`). Sem um dos dois ninguém consome a fila `email`.
+2. `POST /api/v1/auth/register` (pelo `/docs` ou com `curl`).
+3. Abra o Mailpit: o e-mail "Confirme seu e-mail na Vira" traz o link `.../verificar-email#token=...`. Copie o token (depois de `#token=`) e envie em `POST /api/v1/auth/email/verify`.
+
+Os testes de integração fazem exatamente isso, lendo as mensagens pela API HTTP do Mailpit (`apps/api/test/support/mailpit-inbox.ts`). `MAIL_FROM` (opcional fora de produção) define o remetente; em produção `SMTP_URL` precisa de `smtps://` ou `requireTLS=true`.
 
 ### Rodando a API
 

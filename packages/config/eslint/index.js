@@ -30,6 +30,8 @@ export const INFRA_PACKAGES = [
   "bullmq",
   "ioredis",
   "resend",
+  "nodemailer",
+  "@node-rs/*",
   "@aws-sdk/*",
 ];
 
