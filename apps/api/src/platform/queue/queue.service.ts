@@ -9,6 +9,25 @@ import type { AppConfig } from "../config/config.schema.js";
 /** Upper bound for talking to Redis: BullMQ otherwise waits for the connection forever. */
 export const QUEUE_OPERATION_TIMEOUT_MS = 5_000;
 
+/** How long shutdown waits for a worker to finish its jobs before giving up on it. */
+const WORKER_CLOSE_TIMEOUT_MS = 10_000;
+
+/**
+ * Closes a worker, but not at any price: with Redis unreachable BullMQ never finishes
+ * closing (nor does `disconnect()`), and a process that is shutting down must not wait for it.
+ */
+async function closeWithin(worker: Worker, timeoutMs: number): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, timeoutMs);
+  });
+  try {
+    await Promise.race([worker.close().catch(() => undefined), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * The BullMQ queues of the process, over one dedicated Redis connection. It connects
  * on first use, so processes that never enqueue do not hold a connection.
@@ -67,7 +86,7 @@ export class QueueService implements OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     // Let running jobs finish before the connection they use goes away.
-    await Promise.all(this.workers.map((worker) => worker.close()));
+    await Promise.all(this.workers.map((worker) => closeWithin(worker, WORKER_CLOSE_TIMEOUT_MS)));
     this.workers.length = 0;
     await Promise.all([...this.queues.values()].map((queue) => queue.close()));
     this.queues.clear();
