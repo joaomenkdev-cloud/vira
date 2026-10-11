@@ -2,6 +2,7 @@ import { type DynamicModule, Module } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD, APP_PIPE } from "@nestjs/core";
 
 import { AuditModule } from "../modules/audit/audit.module.js";
+import { AuthJobsModule, AuthModule } from "../modules/auth/auth.module.js";
 import { HealthModule } from "../modules/health/health.module.js";
 import { OutboxModule, OutboxPollerModule } from "../modules/outbox/outbox.module.js";
 import type { AppConfig } from "../platform/config/config.schema.js";
@@ -37,9 +38,12 @@ export class AppModule {
         RuntimeModule,
         AuditModule,
         OutboxModule,
+        AuthModule,
         HealthModule,
         // Embedded mode runs the background work inside the API process (ADR-0011).
-        ...(config.worker.mode === "embedded" ? [QueueModule, OutboxPollerModule] : []),
+        ...(config.worker.mode === "embedded"
+          ? [QueueModule, OutboxPollerModule, AuthJobsModule]
+          : []),
       ],
       providers: [
         { provide: APP_GUARD, useClass: AccessGuard },

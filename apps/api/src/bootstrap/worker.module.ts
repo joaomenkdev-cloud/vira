@@ -1,5 +1,6 @@
 import { type DynamicModule, Module } from "@nestjs/common";
 
+import { AuthJobsModule } from "../modules/auth/auth.module.js";
 import { OutboxPollerModule } from "../modules/outbox/outbox.module.js";
 import { ConfigModule } from "../platform/config/config.module.js";
 import type { AppConfig } from "../platform/config/config.schema.js";
@@ -31,6 +32,7 @@ export class WorkerModule {
         MailModule,
         QueueModule,
         OutboxPollerModule,
+        AuthJobsModule,
       ],
     };
   }
