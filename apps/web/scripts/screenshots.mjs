@@ -34,6 +34,28 @@ try {
       await page.screenshot({ path: file, fullPage: true });
       process.stdout.write(`${file}\n`);
     }
+
+    // Open layers cannot show in a full-page capture of the closed page: photograph them
+    // on their own (the modal is a card on a desktop and a bottom sheet on a phone).
+    await page.goto(`${baseUrl}/dev/design-system`);
+    await page.waitForLoadState("networkidle");
+    const overlays = [
+      { name: "modal", open: "Confirmação (480 px)", ready: () => page.getByRole("dialog") },
+      { name: "menu", open: "Ações", ready: () => page.getByRole("menu") },
+    ];
+    for (const { name, open, ready } of overlays) {
+      await page.getByRole("button", { name: open }).scrollIntoViewIfNeeded();
+      await page.getByRole("button", { name: open }).click();
+      await ready().waitFor();
+      // Wait for the enter animation (320 ms at most) before the shot.
+      await page.waitForTimeout(500);
+      const file = join(outDir, `web-${name}-${viewport.name}.png`);
+      await page.screenshot({ path: file });
+      process.stdout.write(`${file}
+`);
+      await page.keyboard.press("Escape");
+      await ready().waitFor({ state: "hidden" });
+    }
     await context.close();
   }
 } finally {

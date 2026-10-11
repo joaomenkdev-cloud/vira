@@ -1,4 +1,4 @@
-import { EmptyState } from "@/components/empty-state";
+import { EmptyState } from "@vira/ui";
 
 /**
  * Home. There is no event listing yet, so the page shows the promise of the product
@@ -16,7 +16,7 @@ export default function HomePage() {
       </section>
 
       <section aria-labelledby="destaques" className="pb-24 md:pb-32">
-        <h2 id="destaques" className="mb-12 text-h2">
+        <h2 id="destaques" className="text-h2">
           Em destaque
         </h2>
         <EmptyState title="Nenhum evento por aqui ainda">
