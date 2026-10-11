@@ -12,6 +12,15 @@ const id = z.uuid();
 const cents = z.number().int().nonnegative();
 
 export const AUDIT_CATALOG = {
+  "auth.registered": { entityType: "user", metadata: z.strictObject({}) },
+  "auth.email_verified": { entityType: "user", metadata: z.strictObject({}) },
+  "auth.account_locked": {
+    entityType: "user",
+    metadata: z.strictObject({
+      failedAttempts: z.number().int().positive(),
+      lockSeconds: z.number().int().positive(),
+    }),
+  },
   "auth.login_succeeded": {
     entityType: "user",
     metadata: z.strictObject({ method: z.enum(["password", "google", "github"]) }),
