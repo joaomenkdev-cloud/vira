@@ -5,11 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 0 — Fundação
-- **Concluído (mergeado):** F1 a F6 (PRs #1, #2, #8, #10, #11, #12) e Dependabot (#4–#7; #9, CodeQL v4, no lugar do #3).
-- **Entregas abertas (pilha):**
-  - F7 — Esqueleto do web (`feat/web-skeleton`, PR #13, base `main`) — CI verde, aguardando autorização para mergear.
-  - N1 — Fundação visual (`feat/ui-foundation`, empilhado sobre o #13) — draft.
-- **Próximo passo:** quando o #13 for mergeado, mudar a base do PR da N1 para `main` (antes de apagar a branch do F7). Depois, **N2 — Componentes base** (`feat/ui-components`).
+- **Concluído (mergeado):** F1 a F6 e N3 (PRs #1, #2, #8, #10, #11, #12, #16) e Dependabot (#4–#7, #9 CodeQL v4).
+- **Entregas abertas (pilha do web):** F7 (#13, base `main`), N1 (#14) e N2 (#15), sendo mergeadas nessa ordem; depois de cada merge, mudar a base do PR seguinte para `main` antes de apagar a branch mergeada.
+- **Próximo passo:** **N4 — Sessões e CSRF** (`feat/auth-sessions`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -24,6 +22,46 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-11 — N3: cadastro e login por senha
+
+Auditoria (antes de codar): não existia nenhum consumidor de fila (só o despachante da outbox), então o e-mail precisava de um; o `@nestjs/throttler` do desenho original não faz limite por conta (que depende do corpo); o `SMTP_URL` estava só comentado no `.env.example`; o `audit-catalog` já previa `auth.login_succeeded` e `auth.login_failed` (inclusive sem entidade, para e-mail desconhecido). Sem Docker local, o SQL da migration foi validado num Postgres em processo (PGlite) e a integração foi conferida só no CI.
+
+Feito (API; a N3 não mexe no web):
+
+- Migration `users` (`citext`, `CHECK`s de e-mail normalizado, tamanho e formato, nome de 1–120 sem espaços nas pontas, hash só argon2id, contador não negativo) e `verification_tokens` (hash SHA-256 de 32 bytes `UNIQUE`, validade depois da criação).
+- `@vira/shared`: schemas Zod estritos de cadastro, verificação e login; senha de 8–128 caracteres.
+- `platform/rate-limit`: limitador de janela fixa em Redis, guard por IP (`@RateLimit`) que roda antes da validação do corpo, `RateLimit-*` e `Retry-After`. `platform/mail`: porta `Mailer` com adaptador SMTP (nodemailer). `platform/queue`: `JobHandlerRegistry` e `QueueConsumers` (um worker BullMQ por fila com handlers).
+- Módulo `auth` em camadas: `RegisterUser`, `VerifyEmail`, `LoginUser`, `SendVerificationEmail`, `SendAccountExistsNotice`; repositórios Prisma; hasher argon2id (19 MiB, t=2, p=1) com hash fictício; `AuthController` com as três rotas `@Public()`; módulos separados para a API e para o worker.
+- Auditoria: `auth.registered`, `auth.email_verified`, `auth.account_locked` (novas), `auth.login_succeeded` e `auth.login_failed`.
+- Testes: unitários (domínio; casos de uso com repositórios em memória; limitador; SMTP contra um servidor SMTP real; hasher), e2e sem infraestrutura (senha gigante → 400 sem hash, `role` no corpo → 400, limites por IP antes da validação, rotas públicas, quem consome a fila) e integração com Postgres, Redis e Mailpit reais (cadastro novo e conhecido idênticos, e-mail lido pela API do Mailpit, token de uso único com 6 pedidos simultâneos, expirado, só o hash no banco e nada na outbox, login indistinguível e com o mesmo custo, bloqueio e desbloqueio, todos os rate limits, auditoria sem dado pessoal, `CHECK`s).
+
+Decisões tomadas por conta própria:
+
+- **Login só valida (200 `{ user }`), sem cookies nem sessão:** isso é da N4. A verificação de e-mail também responde só `200 { user }` (a API.md previa cookies, que entram com a N4).
+- **Um módulo `auth`** é dono de `users` e `verification_tokens` por ora; o `users` se separa na N6 (`/me`).
+- **Conta bloqueada responde `401 invalid-credentials`**, igual a e-mail inexistente (um `account-locked` mostraria que a conta existe). Mesmo com a senha certa durante o bloqueio, e sem comparar a senha com o hash real.
+- **Bloqueio:** a 5ª falha seguida bloqueia 1 min, cada falha seguinte dobra, máximo 1 h; tentativas durante o bloqueio não contam (senão dá para prolongá-lo de fora) e o contador só zera no login com sucesso (sem decaimento no tempo).
+- **Cadastro faz o hash antes de consultar o e-mail**, para o tempo não revelar se ele existe. O login faz uma verificação argon2id em todos os caminhos; o hasher recebe `null` e verifica contra um hash fictício.
+- **O token de verificação é criado pelo consumidor da fila `email`** (a outbox leva só o `userId`). A entrega é pelo menos uma vez; um reenvio apaga os tokens antigos não usados, então só o último link vale. O link usa o **fragmento** (`/verificar-email#token=...`), que não chega a logs nem a `Referer`; a página (N7) o lê no navegador. As rotas `/verificar-email` e `/entrar` ainda não existem no web.
+- **Limitador próprio em vez do `@nestjs/throttler`**, porque o limite por conta precisa do corpo. Com **Redis fora, o limitador deixa passar** e registra um aviso (o bloqueio por conta no banco é a barreira que sobra). As chaves do Redis guardam só o hash do IP ou do e-mail.
+- **`RedisService.ensureReady()`:** a conexão é preguiçosa e, com `enableOfflineQueue: false`, comandos não esperam a conexão; requisições simultâneas logo depois do boot falhavam e o limitador as deixava passar. Agora os chamadores compartilham uma tentativa de conexão e esperam o `ready` (o limitador e a checagem de prontidão usam isso). O CI não pegaria isso: apareceu na revisão do código.
+- **`JobHandlerRegistry` + `QueueConsumers`:** a fila `email` vai ser compartilhada (e-mails de ingresso, V5), então cada módulo registra handlers por tipo e o worker da fila encaminha. Job sem handler falha de forma visível. No encerramento cada worker tem 10 s: sem Redis, o BullMQ nunca termina de fechar.
+- **`INSERT ... ON CONFLICT DO NOTHING`** (`createMany` com `skipDuplicates`) no lugar de capturar o erro do Prisma: e-mail já usado, inclusive por um pedido simultâneo, vira contagem 0 e não uma transação abortada. O token é reivindicado por um `UPDATE` condicional.
+- **`@node-rs/argon2`** (binários prontos, sem compilar nada): o `crypto.argon2` do Node só existe a partir da 24.7 e o projeto fixa a 22. Ele declara um `const enum`, então o algoritmo fica no padrão da biblioteca (argon2id) e um teste confere o prefixo `$argon2id$v=19$m=19456,t=2,p=1$`.
+- **`login` aceita senha de 1 a 128 caracteres** (a política de 8–128 vale para senhas novas): uma falha de login não deve revelar a política. Corpo com senha acima de 128 → 400 antes de qualquer hash.
+- **E-mails em texto puro, em português**, sem HTML (nada a escapar). `SMTP_URL` passa a ser obrigatório; em produção exige `smtps://` ou `requireTLS=true` e `MAIL_FROM` explícito.
+- **Auditoria:** em `auth.login_failed` o ator é o sistema (a pessoa ainda não provou quem é) e a entidade é a conta, quando existe. O registro é gravado logo depois da operação, não na mesma transação.
+- **Novo tipo de problema `token-expired` (410)**; o mapa de status para tipo passou a manter o primeiro tipo de cada status, para um 401 ou 403 genérico continuar `unauthenticated`/`forbidden`.
+- Fakes dos testes unitários ficam em `*.fakes.ts` (fora do build); o Mailpit entrou no harness de Testcontainers (`startInfrastructure({ mail: true })`).
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **HIBP (senhas vazadas)** ficou fora desta entrega, como combinado. Sugestão: entra com a N6, que também define senhas, e vale no cadastro.
+- **Quem perdeu o e-mail de verificação não tem como pedir outro:** `POST /auth/email/resend` exige sessão (API.md) e sem e-mail verificado não há sessão; cadastrar de novo só manda o aviso "você já tem conta". Opções: mandar um link novo no lugar do aviso quando a conta existe e não foi verificada (sem risco de enumeração, o conteúdo só aparece na caixa do dono) ou abrir o reenvio por e-mail com rate limit.
+- **O aviso "você já tem conta" pode ser usado para encher a caixa de alguém** (5/h por IP, sem limite por destinatário). Um limite silencioso por e-mail resolveria.
+- A contagem de falhas não decai; o bloqueio pode ser provocado por terceiros por até 1 h (ver SECURITY_MODEL, "Limites conhecidos do login por senha").
+- As páginas `/verificar-email` e `/entrar` (N7) precisam existir para os links dos e-mails funcionarem.
 
 ### 2026-10-10 — N1: fundação visual
 

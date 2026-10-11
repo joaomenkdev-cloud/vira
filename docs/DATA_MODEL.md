@@ -167,12 +167,12 @@ erDiagram
 | Campo | Tipo | Regras | Dado pessoal |
 | --- | --- | --- | --- |
 | `id` | uuid | PK | Pseudônimo |
-| `email` | citext | `UNIQUE`; normalizado (trim, minúsculas) | **Sim** |
-| `name` | text | 1–120 caracteres | **Sim** |
-| `password_hash` | text | argon2id (PHC string); `NULL` para contas só OAuth | Sim (credencial) |
+| `email` | citext | `UNIQUE`; normalizado (trim, minúsculas) e até 254 caracteres, garantidos por `CHECK` (`users_email_normalized`, `users_email_length`, `users_email_format`: um `@`, sem espaços; o formato é frouxo de propósito, para aceitar `deleted+<id>@invalid`, e o Zod valida com rigor na borda) | **Sim** |
+| `name` | text | 1–120 caracteres sem espaços nas pontas (`CHECK`) | **Sim** |
+| `password_hash` | text | argon2id (PHC string, `CHECK ... LIKE '$argon2id$%'`); `NULL` para contas só OAuth | Sim (credencial) |
 | `role` | enum `Role` | `BUYER` (padrão), `ORGANIZER`, `ADMIN`. Papéis são cumulativos: ORGANIZER também compra; ADMIN também organiza. | Não |
 | `email_verified_at` | timestamptz | `NULL` até verificar | Não |
-| `failed_login_count`, `locked_until` | int, timestamptz | Bloqueio progressivo após falhas | Não |
+| `failed_login_count`, `locked_until` | int, timestamptz | Bloqueio progressivo: a 5ª falha seguida bloqueia por 1 min e cada falha seguinte dobra (máximo 1 h); `failed_login_count >= 0` por `CHECK`; zerados no login com sucesso | Não |
 | `created_at`, `updated_at` | timestamptz | | Não |
 | `anonymized_at` | timestamptz | Preenchido na exclusão de conta | Não |
 
@@ -209,7 +209,10 @@ Tokens de uso único para verificação de e-mail e redefinição de senha.
 | --- | --- | --- |
 | `purpose` | enum | `EMAIL_VERIFICATION` (24 h), `PASSWORD_RESET` (30 min) |
 | `token_hash` | bytea | SHA-256; `UNIQUE` |
-| `expires_at`, `used_at` | timestamptz | Uso único (`UPDATE ... WHERE used_at IS NULL`) |
+| `expires_at`, `used_at` | timestamptz | Uso único: o token é reivindicado por um `UPDATE ... WHERE token_hash = ? AND purpose = ? AND used_at IS NULL AND expires_at > agora`, então de dois pedidos simultâneos só um altera a linha |
+| `created_at` | timestamptz | `expires_at > created_at` e `used_at >= created_at` (`CHECK`) |
+
+`token_hash` tem exatamente 32 bytes (`CHECK`). Ao enviar um novo e-mail de verificação, os tokens não usados do mesmo usuário e finalidade são apagados: só o link do e-mail mais recente funciona. O token em si nunca é gravado (nem na outbox, cujo payload leva só o `userId`).
 
 ### `organizer_profiles`
 

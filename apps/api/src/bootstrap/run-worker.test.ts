@@ -14,6 +14,8 @@ describe("runWorker", () => {
         WEB_ORIGIN: "https://vira.example",
         DATABASE_URL: "postgresql://vira:pw@db.example/vira",
         REDIS_URL: "redis://insecure.example",
+        SMTP_URL: "smtps://mail.example",
+        MAIL_FROM: "Vira <no-reply@vira.example>",
       },
       { writeError: (message) => errors.push(message) },
     );
