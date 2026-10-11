@@ -2,6 +2,7 @@ import { Body, Controller, Get, Module, Post } from "@nestjs/common";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import { z } from "zod";
 
+import { RateLimit } from "../../src/platform/rate-limit/rate-limit.guard.js";
 import { Public, RequireRole } from "../../src/platform/security/access-policy.js";
 
 export const echoSchema = z.strictObject({
@@ -19,6 +20,15 @@ export class FixturesController {
   @Public()
   @Post("echo")
   echo(@Body({ schema: echoSchema }) body: z.infer<typeof echoSchema>): z.infer<typeof echoSchema> {
+    return body;
+  }
+
+  @Public()
+  @RateLimit({ name: "fixture.echo", limit: 2, windowSeconds: 60 })
+  @Post("limited")
+  limited(
+    @Body({ schema: echoSchema }) body: z.infer<typeof echoSchema>,
+  ): z.infer<typeof echoSchema> {
     return body;
   }
 

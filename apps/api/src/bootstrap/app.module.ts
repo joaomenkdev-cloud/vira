@@ -11,6 +11,7 @@ import { ProblemDetailsFilter } from "../platform/errors/problem-details.filter.
 import { createValidationPipe } from "../platform/errors/validation.js";
 import { LoggingModule, type LoggingOptions } from "../platform/logging/logging.module.js";
 import { QueueModule } from "../platform/queue/queue.module.js";
+import { RateLimitModule } from "../platform/rate-limit/rate-limit.module.js";
 import { RedisModule } from "../platform/redis/redis.module.js";
 import { RuntimeModule } from "../platform/runtime/runtime.module.js";
 import { AccessGuard } from "../platform/security/access.guard.js";
@@ -30,6 +31,7 @@ export class AppModule {
         LoggingModule.forRoot(config, logging),
         DatabaseModule,
         RedisModule,
+        RateLimitModule,
         RuntimeModule,
         AuditModule,
         OutboxModule,

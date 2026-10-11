@@ -53,6 +53,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       requestId: typeof request.id === "string" ? request.id : undefined,
     };
 
+    if (exception instanceof ProblemException && exception.options.headers) {
+      response.set({ ...exception.options.headers });
+    }
     response.status(problem.status).type(PROBLEM_CONTENT_TYPE).json(body);
   }
 

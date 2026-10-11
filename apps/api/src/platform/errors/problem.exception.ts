@@ -6,6 +6,8 @@ export interface ProblemOptions {
   /** Human-readable explanation specific to this occurrence. Never include personal data. */
   readonly detail?: string;
   readonly errors?: readonly FieldError[];
+  /** Extra response headers, e.g. `Retry-After` and `RateLimit-*` on a 429. */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 /** An expected failure that maps to one documented problem type. */
