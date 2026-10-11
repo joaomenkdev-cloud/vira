@@ -5,6 +5,7 @@ import { ConfigModule } from "../platform/config/config.module.js";
 import type { AppConfig } from "../platform/config/config.schema.js";
 import { DatabaseModule } from "../platform/database/database.module.js";
 import { LoggingModule, type LoggingOptions } from "../platform/logging/logging.module.js";
+import { MailModule } from "../platform/mail/mail.module.js";
 import { QueueModule } from "../platform/queue/queue.module.js";
 import { RuntimeModule } from "../platform/runtime/runtime.module.js";
 
@@ -27,6 +28,7 @@ export class WorkerModule {
         LoggingModule.forRoot(config, logging),
         DatabaseModule,
         RuntimeModule,
+        MailModule,
         QueueModule,
         OutboxPollerModule,
       ],

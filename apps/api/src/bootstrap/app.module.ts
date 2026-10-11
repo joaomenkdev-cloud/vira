@@ -10,6 +10,7 @@ import { DatabaseModule } from "../platform/database/database.module.js";
 import { ProblemDetailsFilter } from "../platform/errors/problem-details.filter.js";
 import { createValidationPipe } from "../platform/errors/validation.js";
 import { LoggingModule, type LoggingOptions } from "../platform/logging/logging.module.js";
+import { MailModule } from "../platform/mail/mail.module.js";
 import { QueueModule } from "../platform/queue/queue.module.js";
 import { RateLimitModule } from "../platform/rate-limit/rate-limit.module.js";
 import { RedisModule } from "../platform/redis/redis.module.js";
@@ -32,6 +33,7 @@ export class AppModule {
         DatabaseModule,
         RedisModule,
         RateLimitModule,
+        MailModule,
         RuntimeModule,
         AuditModule,
         OutboxModule,

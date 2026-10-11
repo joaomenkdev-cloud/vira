@@ -7,7 +7,11 @@ import { WorkerModule } from "../../src/bootstrap/worker.module.js";
 import { Outbox } from "../../src/modules/outbox/application/public-api.js";
 import { loadConfig } from "../../src/platform/config/load-config.js";
 import { PrismaService } from "../../src/platform/database/prisma.service.js";
-import { createTestApp, TEST_WEB_ORIGIN } from "../support/create-test-app.js";
+import {
+  createTestApp,
+  TEST_WEB_ORIGIN,
+  UNREACHABLE_INFRASTRUCTURE,
+} from "../support/create-test-app.js";
 import {
   dockerAvailableOrSkip,
   type Infrastructure,
@@ -91,6 +95,7 @@ describe.skipIf(!dockerAvailable)("worker modes (PostgreSQL + Redis)", () => {
       NODE_ENV: "test",
       WEB_ORIGIN: TEST_WEB_ORIGIN,
       LOG_LEVEL: "silent",
+      ...UNREACHABLE_INFRASTRUCTURE,
       ...env,
     });
     const worker = await NestFactory.createApplicationContext(WorkerModule.register({ config }), {

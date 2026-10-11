@@ -5,6 +5,18 @@ const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace", "silent"
 /** sslmode values that actually require an encrypted connection. */
 const ENCRYPTED_SSL_MODES = new Set(["require", "verify-ca", "verify-full"]);
 
+/** Used when MAIL_FROM is not set (development and tests only). */
+export const DEFAULT_MAIL_FROM = "Vira <no-reply@vira.localhost>";
+
+/** A bare address or `Display Name <address>`. */
+const MAIL_FROM_PATTERN = /^(?:[^<>@\r\n]*<)?[^<>@\s]+@[^<>@\s]+>?$/;
+
+/** SMTP over TLS from the first byte (smtps://) or STARTTLS made mandatory (requireTLS=true). */
+function smtpUsesTls(smtpUrl: string): boolean {
+  const url = new URL(smtpUrl);
+  return url.protocol === "smtps:" || url.searchParams.get("requireTLS") === "true";
+}
+
 function usesTls(databaseUrl: string): boolean {
   const sslMode = new URL(databaseUrl).searchParams.get("sslmode");
   return sslMode !== null && ENCRYPTED_SSL_MODES.has(sslMode);
@@ -26,6 +38,8 @@ export const envSchema = z
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
     REDIS_URL: z.url({ protocol: /^rediss?$/ }),
     WORKER_MODE: z.enum(["separate", "embedded"]).default("separate"),
+    SMTP_URL: z.url({ protocol: /^smtps?$/ }),
+    MAIL_FROM: z.string().max(200).regex(MAIL_FROM_PATTERN).optional(),
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).max(60_000).default(5_000),
   })
   .superRefine((env, ctx) => {
@@ -43,6 +57,20 @@ export const envSchema = z
         code: "custom",
         path: ["DATABASE_URL"],
         message: "must set sslmode=require (or verify-ca/verify-full) in production",
+      });
+    }
+    if (!smtpUsesTls(env.SMTP_URL)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["SMTP_URL"],
+        message: "must use smtps:// or set requireTLS=true in production",
+      });
+    }
+    if (env.MAIL_FROM === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["MAIL_FROM"],
+        message: "is required in production",
       });
     }
     if (!env.REDIS_URL.startsWith("rediss://")) {
@@ -70,6 +98,7 @@ export const envSchema = z
     },
     database: { url: env.DATABASE_URL },
     redis: { url: env.REDIS_URL },
+    mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM ?? DEFAULT_MAIL_FROM },
     worker: { mode: env.WORKER_MODE, outboxPollIntervalMs: env.OUTBOX_POLL_INTERVAL_MS },
   }));
 

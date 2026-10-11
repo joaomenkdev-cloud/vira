@@ -6,6 +6,7 @@ const validEnv = {
   WEB_ORIGIN: "http://localhost:3001",
   DATABASE_URL: "postgresql://vira:vira_local@127.0.0.1:5432/vira",
   REDIS_URL: "redis://127.0.0.1:6379",
+  SMTP_URL: "smtp://127.0.0.1:1025",
 };
 
 const productionEnv = {
@@ -13,6 +14,8 @@ const productionEnv = {
   WEB_ORIGIN: "https://vira.example",
   DATABASE_URL: "postgresql://vira:pw@db.example/vira?sslmode=require",
   REDIS_URL: "rediss://default:pw@cache.example:6379",
+  SMTP_URL: "smtps://resend:pw@smtp.example:465",
+  MAIL_FROM: "Vira <no-reply@vira.example>",
 };
 
 function captureError(env: NodeJS.ProcessEnv): ConfigValidationError {
@@ -34,6 +37,7 @@ describe("loadConfig", () => {
       docs: { enabled: true },
       database: { url: validEnv.DATABASE_URL },
       redis: { url: validEnv.REDIS_URL },
+      mail: { smtpUrl: validEnv.SMTP_URL, from: "Vira <no-reply@vira.localhost>" },
       worker: { mode: "separate", outboxPollIntervalMs: 5_000 },
     });
   });
@@ -84,8 +88,25 @@ describe("loadConfig", () => {
       ...validEnv,
       DATABASE_URL: "mysql://vira@db/vira",
       REDIS_URL: "http://cache.example",
+      SMTP_URL: "http://mail.example",
     });
-    expect(error.issues.map((i) => i.variable).sort()).toEqual(["DATABASE_URL", "REDIS_URL"]);
+    expect(error.issues.map((i) => i.variable).sort()).toEqual([
+      "DATABASE_URL",
+      "REDIS_URL",
+      "SMTP_URL",
+    ]);
+  });
+
+  it("reads the mail settings", () => {
+    const config = loadConfig({ ...validEnv, MAIL_FROM: "ola@vira.example" });
+    expect(config.mail).toEqual({ smtpUrl: validEnv.SMTP_URL, from: "ola@vira.example" });
+  });
+
+  it("rejects a sender that is not an address", () => {
+    for (const from of ["not an address", "Vira <>", "a@b\r\nBcc: c@d"]) {
+      const error = captureError({ ...validEnv, MAIL_FROM: from });
+      expect(error.issues.map((i) => i.variable)).toEqual(["MAIL_FROM"]);
+    }
   });
 
   describe("in production", () => {
@@ -110,6 +131,21 @@ describe("loadConfig", () => {
       }
     });
 
+    it("requires TLS to the mail server and an explicit sender", () => {
+      const insecure = captureError({ ...productionEnv, SMTP_URL: "smtp://mail.example:587" });
+      expect(insecure.issues).toEqual([
+        { variable: "SMTP_URL", message: "must use smtps:// or set requireTLS=true in production" },
+      ]);
+      expect(
+        loadConfig({ ...productionEnv, SMTP_URL: "smtp://mail.example:587?requireTLS=true" }).mail,
+      ).toMatchObject({ smtpUrl: "smtp://mail.example:587?requireTLS=true" });
+
+      const { MAIL_FROM: _omitted, ...withoutSender } = productionEnv;
+      expect(captureError(withoutSender).issues).toEqual([
+        { variable: "MAIL_FROM", message: "is required in production" },
+      ]);
+    });
+
     it("requires TLS to Redis", () => {
       const error = captureError({ ...productionEnv, REDIS_URL: "redis://cache.example:6379" });
       expect(error.issues).toEqual([
@@ -125,6 +161,7 @@ describe("loadConfig", () => {
       "LOG_LEVEL",
       "PORT",
       "REDIS_URL",
+      "SMTP_URL",
       "WEB_ORIGIN",
     ]);
   });
@@ -137,6 +174,7 @@ describe("loadConfig", () => {
       LOG_LEVEL: secret,
       DATABASE_URL: `mysql://vira:${secret}@db/vira`,
       REDIS_URL: secret,
+      SMTP_URL: `ftp://mail:${secret}@mail.example`,
     });
     expect(error.message).not.toContain(secret);
     expect(JSON.stringify(error.issues)).not.toContain(secret);
