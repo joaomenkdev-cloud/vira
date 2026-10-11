@@ -14,6 +14,10 @@ import { z } from "zod";
 const id = z.uuid();
 
 export const OUTBOX_CATALOG = {
+  /** A new account needs the link that verifies its e-mail; the consumer creates the token. */
+  "auth.verification_email_requested": { queue: "email", payload: z.strictObject({ userId: id }) },
+  /** Someone tried to register an address that already has an account. */
+  "auth.account_exists_notice": { queue: "email", payload: z.strictObject({ userId: id }) },
   /** A paid order needs its tickets issued. */
   "orders.paid": { queue: "tickets", payload: z.strictObject({ orderId: id }) },
   /** Tickets exist; the buyer gets them by e-mail. */
