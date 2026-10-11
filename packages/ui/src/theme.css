@@ -1,0 +1,213 @@
+/*
+ * Tailwind theme of the Vira design system (docs/DESIGN.md, section 2). Apps load it
+ * right after Tailwind itself:
+ *
+ *   @import "tailwindcss";
+ *   @import "@vira/ui/theme.css";
+ *
+ * Every utility resolves to a token from tokens.css. Arbitrary values such as
+ * bg-[#fff] or p-[13px] are rejected by the vira/no-arbitrary-tailwind lint rule.
+ */
+@import "./tokens.css";
+
+/* Spacing keeps Tailwind's 4px scale. */
+@theme {
+  --color-*: initial;
+  --color-bg: var(--vira-bg);
+  --color-surface: var(--vira-surface);
+  --color-surface-sunken: var(--vira-surface-sunken);
+  --color-ink: var(--vira-ink);
+  --color-ink-muted: var(--vira-ink-muted);
+  --color-ink-subtle: var(--vira-ink-subtle);
+  --color-line: var(--vira-line);
+  --color-line-strong: var(--vira-line-strong);
+  --color-accent: var(--vira-accent);
+  --color-accent-hover: var(--vira-accent-hover);
+  --color-accent-pressed: var(--vira-accent-pressed);
+  --color-accent-soft: var(--vira-accent-soft);
+  --color-accent-ink: var(--vira-accent-ink);
+  --color-on-accent: var(--vira-on-accent);
+  --color-success: var(--vira-success);
+  --color-success-bg: var(--vira-success-bg);
+  --color-warning: var(--vira-warning);
+  --color-warning-bg: var(--vira-warning-bg);
+  --color-danger: var(--vira-danger);
+  --color-danger-bg: var(--vira-danger-bg);
+  --color-info: var(--vira-info);
+  --color-info-bg: var(--vira-info-bg);
+  --color-scrim: var(--vira-scrim);
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --radius-*: initial;
+  --radius-sm: var(--vira-radius-sm);
+  --radius-md: var(--vira-radius-md);
+  --radius-lg: var(--vira-radius-lg);
+  --radius-full: 9999px;
+
+  --shadow-*: initial;
+  --shadow-float: var(--vira-shadow-float);
+
+  --font-sans:
+    "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Type scale (docs/DESIGN.md, 2.2): size / line height / tracking / weight */
+  --text-*: initial;
+  --text-display: 3.5rem;
+  --text-display--line-height: 3.75rem;
+  --text-display--letter-spacing: -0.03em;
+  --text-display--font-weight: 800;
+  --text-display-sm: 2.5rem;
+  --text-display-sm--line-height: 2.75rem;
+  --text-display-sm--letter-spacing: -0.03em;
+  --text-display-sm--font-weight: 800;
+  --text-h1: 2.5rem;
+  --text-h1--line-height: 2.75rem;
+  --text-h1--letter-spacing: -0.02em;
+  --text-h1--font-weight: 700;
+  --text-h1-sm: 2rem;
+  --text-h1-sm--line-height: 2.25rem;
+  --text-h1-sm--letter-spacing: -0.02em;
+  --text-h1-sm--font-weight: 700;
+  --text-h2: 1.75rem;
+  --text-h2--line-height: 2.125rem;
+  --text-h2--letter-spacing: -0.015em;
+  --text-h2--font-weight: 700;
+  --text-h2-sm: 1.5rem;
+  --text-h2-sm--line-height: 1.875rem;
+  --text-h2-sm--letter-spacing: -0.015em;
+  --text-h2-sm--font-weight: 700;
+  --text-h3: 1.25rem;
+  --text-h3--line-height: 1.75rem;
+  --text-h3--letter-spacing: -0.01em;
+  --text-h3--font-weight: 600;
+  --text-body-lg: 1.125rem;
+  --text-body-lg--line-height: 1.75rem;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5rem;
+  --text-body-sm: 0.875rem;
+  --text-body-sm--line-height: 1.25rem;
+  --text-label: 0.875rem;
+  --text-label--line-height: 1.25rem;
+  --text-label--font-weight: 500;
+  --text-overline: 0.75rem;
+  --text-overline--line-height: 1rem;
+  --text-overline--letter-spacing: 0.06em;
+  --text-overline--font-weight: 600;
+  --text-logo: 1.5rem;
+  --text-logo--line-height: 2rem;
+  --text-logo--letter-spacing: -0.025em;
+  --text-logo--font-weight: 800;
+  --text-price: 1.25rem;
+  --text-price--line-height: 1.75rem;
+  --text-price--letter-spacing: -0.01em;
+  --text-price--font-weight: 700;
+  --text-price-lg: 1.75rem;
+  --text-price-lg--line-height: 2.125rem;
+  --text-price-lg--letter-spacing: -0.01em;
+  --text-price-lg--font-weight: 700;
+
+  /* Layout widths: max-w-page, max-w-reading... */
+  --container-page: var(--vira-width-page);
+  --container-event: var(--vira-width-event);
+  --container-checkout: var(--vira-width-checkout);
+  --container-reading: var(--vira-width-reading);
+  --container-empty-state: var(--vira-width-empty-state);
+
+  --breakpoint-*: initial;
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+}
+
+/* Motion durations are tokens too (Tailwind has no theme namespace for them). */
+@utility duration-fast {
+  transition-duration: var(--vira-duration-fast);
+  transition-timing-function: var(--vira-ease-standard);
+}
+
+@utility duration-base {
+  transition-duration: var(--vira-duration-base);
+  transition-timing-function: var(--vira-ease-standard);
+}
+
+@utility duration-slow {
+  transition-duration: var(--vira-duration-slow);
+  transition-timing-function: var(--vira-ease-standard);
+}
+
+/* Exits run faster and accelerate out (docs/DESIGN.md, 2.6). */
+@utility ease-exit {
+  transition-timing-function: var(--vira-ease-exit);
+}
+
+/* Layers (docs/DESIGN.md, 2.7): the only z-index values in use. */
+@utility z-sticky {
+  z-index: var(--vira-z-sticky);
+}
+
+@utility z-dropdown {
+  z-index: var(--vira-z-dropdown);
+}
+
+@utility z-overlay {
+  z-index: var(--vira-z-overlay);
+}
+
+@utility z-modal {
+  z-index: var(--vira-z-modal);
+}
+
+@utility z-toast {
+  z-index: var(--vira-z-toast);
+}
+
+@layer base {
+  html {
+    background-color: var(--vira-bg);
+    color: var(--vira-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    min-height: 100dvh;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Keyboard focus is always visible and never hidden by an author style. */
+  :focus-visible {
+    outline: 2px solid var(--vira-accent);
+    outline-offset: 2px;
+  }
+
+  /* Keeps the focus ring clear of anything fixed to the top when jumping to an anchor. */
+  html {
+    scroll-padding-top: 5rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

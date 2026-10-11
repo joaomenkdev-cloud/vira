@@ -1,5 +1,6 @@
 // Captures the screenshots that interface pull requests must include (desktop and mobile).
-// Needs the production server running: `pnpm --filter @vira/web build && pnpm --filter @vira/web start`.
+// Needs the production server running:
+// `pnpm --filter @vira/web build && VIRA_DESIGN_SYSTEM=true pnpm --filter @vira/web start`.
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -12,6 +13,8 @@ const outDir =
 const pages = [
   { name: "home", path: "/" },
   { name: "not-found", path: "/esta-pagina-nao-existe" },
+  // Served by a production build only with VIRA_DESIGN_SYSTEM=true.
+  { name: "design-system", path: "/dev/design-system" },
 ];
 const viewports = [
   { name: "desktop", options: { viewport: { width: 1280, height: 800 } } },

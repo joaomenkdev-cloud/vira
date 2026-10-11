@@ -7,10 +7,10 @@ import { EmptyState } from "@/components/empty-state";
  */
 export default function HomePage() {
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-page px-4 sm:px-6 lg:px-8">
       <section className="pt-12 pb-16 md:pt-24 md:pb-24 lg:pt-32">
         <h1 className="max-w-3xl text-display-sm md:text-display">Encontre seu próximo evento.</h1>
-        <p className="mt-6 max-w-[68ch] text-body-lg text-ink-muted">
+        <p className="mt-6 max-w-reading text-body-lg text-ink-muted">
           Descubra eventos, compre seu ingresso e entre com o QR Code.
         </p>
       </section>

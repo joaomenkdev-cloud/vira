@@ -1,10 +1,8 @@
 /*
- * Vira design tokens (docs/DESIGN.md, section 2). Components never use literal
- * values: they go through these custom properties, exposed to Tailwind in
- * globals.css. The contrast of every text/background pair is checked by
- * src/styles/contrast.test.ts.
- *
- * These move to packages/ui in delivery N1 (visual foundation).
+ * Vira design tokens (docs/DESIGN.md, section 2): the single source of every
+ * visual value. Components never use literal values: they go through these
+ * custom properties, exposed to Tailwind in theme.css. The contrast of every
+ * text/background pair is checked by contrast.test.ts.
  */
 :root {
   /* Surfaces and text */
@@ -25,6 +23,9 @@
   --vira-accent-ink: #b8222e;
   --vira-on-accent: #ffffff;
 
+  /* Behind modals and bottom sheets */
+  --vira-scrim: rgb(11 11 12 / 0.48);
+
   /* Status (no blue: neutral information uses ink on surface-sunken) */
   --vira-success: #146c43;
   --vira-success-bg: #e8f5ee;
@@ -32,6 +33,15 @@
   --vira-warning-bg: #fff4e0;
   --vira-danger: #b3261e;
   --vira-danger-bg: #fdecec;
+  --vira-info: #0b0b0c;
+  --vira-info-bg: #f2f2ef;
+
+  /* Layout widths */
+  --vira-width-page: 1200px;
+  --vira-width-event: 1120px;
+  --vira-width-checkout: 960px;
+  --vira-width-reading: 68ch;
+  --vira-width-empty-state: 420px;
 
   /* Radii */
   --vira-radius-sm: 6px;
@@ -47,4 +57,11 @@
   --vira-duration-slow: 320ms;
   --vira-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --vira-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* Layers */
+  --vira-z-sticky: 10;
+  --vira-z-dropdown: 20;
+  --vira-z-overlay: 30;
+  --vira-z-modal: 40;
+  --vira-z-toast: 50;
 }

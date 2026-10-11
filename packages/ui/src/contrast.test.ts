@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * values, using the WCAG 2.2 relative luminance formula.
  */
 
-const css = readFileSync(join(import.meta.dirname, "..", "app", "tokens.css"), "utf8");
+const css = readFileSync(join(import.meta.dirname, "tokens.css"), "utf8");
 
 function token(name: string): string {
   const match = new RegExp(`--vira-${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(css);
@@ -48,6 +48,7 @@ const TEXT_PAIRS: readonly [string, string][] = [
   ["warning", "warning-bg"],
   ["danger", "danger-bg"],
   ["danger", "surface"],
+  ["info", "info-bg"],
 ];
 
 /** Non-text pairs (focus ring, field borders): 3:1. */

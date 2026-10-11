@@ -27,7 +27,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <body className="flex min-h-dvh flex-col bg-bg text-ink antialiased">
         <a
           href="#conteudo"
-          className="sr-only rounded-md bg-ink px-4 py-3 text-label text-surface focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50"
+          className="sr-only rounded-md bg-ink px-4 py-3 text-label text-surface focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-toast"
         >
           Pular para o conteúdo
         </a>
