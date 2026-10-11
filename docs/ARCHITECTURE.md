@@ -88,7 +88,7 @@ Ferramentas: pnpm workspaces + Turborepo ([ADR-0001](adr/0001-monorepo.md)). `pa
 
 | Módulo | Responsabilidade | Depende de |
 | --- | --- | --- |
-| `auth` | Cadastro, login com senha, OAuth (Google, GitHub), sessões, refresh rotativo, CSRF, verificação de e-mail, redefinição de senha. | `users`, `audit` |
+| `auth` | Cadastro, login com senha, OAuth (Google, GitHub), sessões, refresh rotativo, CSRF, verificação de e-mail, redefinição de senha. Até a N6 também é dono das tabelas `users` e `verification_tokens` (ver "Módulo `auth`" na seção 6). | `users` (a partir da N6), `audit`, `outbox` |
 | `users` | Perfil, papéis (BUYER, ORGANIZER, ADMIN), perfil de organizador, exportação e anonimização de conta (LGPD). | `audit` |
 | `events` | Lado do organizador: rascunho, edição, publicação e cancelamento de eventos; tipos de ingresso; upload de imagem. | `users`, `audit` |
 | `catalog` | Lado público (somente leitura): listagem, busca e detalhe de eventos publicados, paginação por cursor. | — (lê projeções de `events`) |
@@ -290,7 +290,37 @@ O resultado do check-in é uma resposta de negócio, por isso volta com `200` e 
 
 **Outbox transacional:** efeitos colaterais (e-mails, reembolsos) nunca são disparados de dentro de uma transação de banco. O evento é gravado em `outbox_messages` na mesma transação da mudança de estado e despachado depois. Assim não existe "pedido pago sem e-mail" nem "e-mail de pedido que deu rollback".
 
-Rate limiting usa Redis (`@nestjs/throttler` com storage Redis) e é independente das filas.
+**Consumo das filas.** Cada módulo que consome mensagens registra um `JobHandler` por tipo (`platform/queue/job-handlers.ts`); depois que a aplicação sobe, `QueueConsumers` cria um worker BullMQ para cada fila que tem handler e encaminha cada job ao handler do seu tipo (a fila `email` é compartilhada entre módulos). Um job sem handler falha de forma visível, em vez de sumir. Os logs de falha trazem só a fila, o id, o tipo e a classe do erro, nunca a mensagem. No encerramento, cada worker tem até 10 s para terminar os jobs: sem Redis, o BullMQ nunca termina de fechar, e o processo não espera.
+
+**Rate limiting** usa Redis e é independente das filas (`platform/rate-limit`). Contador de janela fixa por regra e sujeito (`INCR` + `PEXPIRE NX` + `PTTL` num `MULTI`), chave com o hash do sujeito (IP ou e-mail), nunca o valor. Limites por IP são aplicados por um guard (`@RateLimit`) **antes** da validação do corpo e de qualquer caso de uso; limites por conta precisam do corpo e são aplicados no caso de uso, antes do hash da senha. As respostas trazem `RateLimit-*` e o `429` traz `Retry-After`. Se o Redis cair, o limitador deixa passar e registra um aviso (o bloqueio por conta, no banco, é a segunda barreira contra adivinhação de senha). Não usa o `@nestjs/throttler`: ele não cobre limites por conta, que dependem do corpo.
+
+### Módulo `auth` (N3: cadastro, verificação e login)
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant A as API (auth)
+    participant DB as Postgres
+    participant W as Worker (fila email)
+    participant M as SMTP (Mailpit / Resend)
+    C->>A: POST /auth/register
+    A->>A: rate limit por IP, validação Zod, hash argon2id
+    A->>DB: [tx] users + outbox(auth.verification_email_requested { userId })
+    A-->>C: 202 { status: "accepted" }
+    DB-->>W: poller despacha a mensagem para a fila email
+    W->>DB: lê o usuário; grava só o SHA-256 do token (apaga tokens antigos não usados)
+    W->>M: e-mail com o link .../verificar-email#token=...
+    C->>A: POST /auth/email/verify { token }
+    A->>DB: [tx] UPDATE verification_tokens ... used_at IS NULL + users.email_verified_at
+    A-->>C: 200 { user }
+```
+
+- **Camadas:** `domain` (conta, política de bloqueio, token), `application` (`RegisterUser`, `VerifyEmail`, `LoginUser`, `SendVerificationEmail`, `SendAccountExistsNotice`, portas `UserRepository`, `VerificationTokenRepository`, `PasswordHasher`), `infra` (Prisma, argon2id, handlers da fila) e `http` (`AuthController`, sempre `@Public()`).
+- **Três módulos Nest:** `AuthDataModule` (repositórios), `AuthModule` (rotas HTTP; entra na API) e `AuthJobsModule` (envia os e-mails; entra no worker e na API em modo `embedded`).
+- **Porta `Mailer`** (`platform/mail`): adaptador SMTP com nodemailer; qualquer falha vira `MailDeliveryError`, que não carrega destinatário, assunto nem resposta do servidor (vai para logs de job). Mensagens de texto puro, sem HTML.
+- **O token nunca está no payload da outbox**, só o `userId`: quem gera o token é o consumidor, na hora de enviar. A entrega é *pelo menos uma vez*: se o job for repetido depois de o e-mail sair, chega um segundo link e o primeiro deixa de valer.
+- **Anti-enumeração:** o cadastro responde igual e leva o mesmo tempo para e-mail novo e conhecido (o hash vem antes da consulta); no login, e-mail inexistente, senha errada, conta sem senha e conta bloqueada são o mesmo `401` e gastam uma verificação argon2id cada (contra um hash fictício quando não há hash real). A diferença mínima que sobra é o tempo de uma ou duas escritas no banco, muito menor que o do hash.
+- **Cookies e sessão não existem ainda** (N4): o login só valida e responde `200 { user }`.
 
 ## 7. Preocupações transversais (`platform/`)
 

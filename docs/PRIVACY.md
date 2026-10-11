@@ -29,7 +29,7 @@ A Lei Geral de Proteção de Dados (Lei nº 13.709/2018) é tratada como **requi
 | Nome e e-mail do comprador (cópia no pedido) | Comprador | `orders.buyer_name`, `orders.buyer_email` | Comprovante, envio dos ingressos, suporte e contestação | Execução de contrato (V); exercício regular de direitos (VI) | 5 anos após a compra; anonimizado na exclusão da conta | Resend |
 | Nome do titular do ingresso | Titular (pode ser terceiro indicado pelo comprador) | `tickets.holder_name` | Identificação na entrada do evento | Execução de contrato (V) — em favor do titular | Até 90 dias após o evento; depois anonimizado por job | Organizador do evento (só no momento do check-in) |
 | Dados de pagamento (cartão, endereço de cobrança) | Comprador | **Somente no Stripe** | Processar o pagamento | Execução de contrato (V) | Política do Stripe | Stripe (coleta direta, via Payment Element) |
-| Endereço IP | Visitante | Redis (chave de rate limit, como hash) | Segurança: limitar abuso | Legítimo interesse (IX) — prevenção a fraude | Duração da janela (≤ 1 h) | — |
+| Endereço IP e e-mail (nas tentativas de login) | Visitante | Redis (chave de rate limit, só o hash SHA-256 do IP ou do e-mail) | Segurança: limitar abuso | Legítimo interesse (IX) — prevenção a fraude | Duração da janela (≤ 1 h) | — |
 | Cookies de sessão e CSRF | Usuário | Navegador | Manter a sessão autenticada e proteger contra CSRF | Execução de contrato (V); estritamente necessários | Acesso: 10 min; refresh: até 30 dias | — |
 | Registros de auditoria | Usuário (por ID pseudônimo) | `audit_logs` | Segurança, prova de ações sensíveis | Legítimo interesse (IX); exercício regular de direitos (VI) | 5 anos | — |
 | Tentativas de check-in | Titular (por ID do ingresso) | `checkin_attempts` | Controle de acesso e antifraude no evento | Legítimo interesse (IX) | 90 dias após o evento | Organizador do evento |
@@ -58,7 +58,7 @@ Testes automatizados verificam a redação dos logs e o conteúdo enviado ao Sen
 | Vercel | Hospedagem do web | Tráfego HTTP (IP em logs de borda do provedor) | Global |
 | Render | Hospedagem da API e do worker | Tráfego HTTP | EUA |
 | Neon | Banco de dados PostgreSQL | Todos os dados do inventário | Região configurável (preferir `sa-east-1` quando disponível) |
-| Upstash | Redis (filas e rate limit) | IP em hash, IDs | Região configurável |
+| Upstash | Redis (filas e rate limit) | IP e e-mail em hash, IDs | Região configurável |
 | Cloudflare R2 | Imagens dos eventos | Nenhum dado pessoal (imagens re-encodadas sem EXIF) | Global |
 | Sentry | Monitoramento de erros | Nenhum dado pessoal (sanitizado) | EUA/UE |
 | Google / GitHub | Login social | Já detêm a conta do titular; recebem o fato de que houve login no Vira | Global |

@@ -95,11 +95,12 @@ Todo erro é `application/problem+json`:
 | --- | --- | --- |
 | <a id="validation-failed"></a>`validation-failed` | 400 | Corpo, query ou params inválidos |
 | <a id="unauthenticated"></a>`unauthenticated` | 401 | Sem sessão ou token expirado |
-| <a id="invalid-credentials"></a>`invalid-credentials` | 401 | Login falhou (mensagem genérica, sem dizer se o e-mail existe) |
+| <a id="invalid-credentials"></a>`invalid-credentials` | 401 | Login falhou. Mensagem genérica: vale para e-mail inexistente, senha errada, conta sem senha e **conta bloqueada** (nunca diz qual) |
 | <a id="csrf-failed"></a>`csrf-failed` | 403 | Token CSRF ausente/inválido ou origem não permitida |
 | <a id="email-not-verified"></a>`email-not-verified` | 403 | Senha correta, mas e-mail ainda não verificado (só revelado a quem acertou a senha) |
 | <a id="forbidden"></a>`forbidden` | 403 | Papel insuficiente para a **função** (ex.: BUYER chamando rota de organizador) |
 | <a id="not-found"></a>`not-found` | 404 | Recurso inexistente **ou de outra pessoa** |
+| <a id="token-expired"></a>`token-expired` | 410 | Link de uso único expirado, já usado ou desconhecido (não diz qual) |
 | <a id="insufficient-inventory"></a>`insufficient-inventory` | 409 | Estoque não comporta a quantidade |
 | <a id="pending-order-exists"></a>`pending-order-exists` | 409 | Já existe pedido PENDING do comprador para o evento |
 | <a id="invalid-state-transition"></a>`invalid-state-transition` | 409 | Ex.: pagar pedido expirado, publicar evento incompleto |
@@ -128,17 +129,40 @@ Legenda de papel: `PUBLIC`, `BUYER` (qualquer usuário autenticado), `ORGANIZER*
 | Método | Rota | Papel | Corpo | Sucesso | Erros | Rate limit |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/auth/csrf` | PUBLIC | — | `200 { csrfToken }` + cookie | — | — |
-| POST | `/auth/register` | PUBLIC | `{ name, email, password }` | `202` sempre, com a mesma resposta para e-mail novo ou existente; envia link de verificação (ou aviso "você já tem conta") | 400, 429 | 5/h/ip |
-| POST | `/auth/login` | PUBLIC | `{ email, password }` | `200 { user }` + cookies | 400, 401 `invalid-credentials`, 403 `email-not-verified`, 429 | 10/15 min/ip e 5/15 min/conta |
+| POST | `/auth/register` | PUBLIC | `{ name, email, password }` | `202 { status: "accepted" }` sempre, com a mesma resposta para e-mail novo ou existente; envia link de verificação (ou aviso "você já tem conta") | 400, 429 | 5/h/ip |
+| POST | `/auth/login` | PUBLIC | `{ email, password }` | `200 { user }` (+ cookies a partir da N4) | 400, 401 `invalid-credentials`, 403 `email-not-verified`, 429 | 10/15 min/ip e 5/15 min/conta |
 | POST | `/auth/refresh` | cookie de refresh | — | `204` + cookies rotacionados | 401 (inclusive reuso detectado → família revogada) | 30/min/ip |
 | POST | `/auth/logout` | BUYER | — | `204`, revoga a sessão e limpa cookies | 401 | — |
 | POST | `/auth/logout-all` | BUYER | — | `204`, revoga todas as sessões | 401 | — |
 | GET | `/auth/oauth/{provider}` | PUBLIC | `provider ∈ google, github` | `302` para o provedor (state + PKCE) | 404 | 20/min/ip |
 | GET | `/auth/oauth/{provider}/callback` | PUBLIC | `code`, `state` | `302` para o web + cookies | `302` para tela de erro | 20/min/ip |
-| POST | `/auth/email/verify` | PUBLIC | `{ token }` | `200 { user }` + cookies (verificar o e-mail inicia a sessão) | 400, 410 (expirado/usado) | 10/h/ip |
+| POST | `/auth/email/verify` | PUBLIC | `{ token }` | `200 { user }` (+ cookies a partir da N4: verificar o e-mail inicia a sessão) | 400, 410 `token-expired` (expirado/usado/desconhecido), 429 | 10/h/ip |
 | POST | `/auth/email/resend` | BUYER | — | `204` | 429 | 3/h/conta |
 | POST | `/auth/password/forgot` | PUBLIC | `{ email }` | `202` sempre (não revela se o e-mail existe) | 429 | 5/h/ip |
 | POST | `/auth/password/reset` | PUBLIC | `{ token, password }` | `204`; revoga todas as sessões | 400, 410 | 10/h/ip |
+
+#### Cadastro, verificação e login (N3)
+
+**Cadastro.** O corpo é estrito: qualquer campo além de `name` (1–120), `email` (até 254, normalizado em minúsculas) e `password` (8–128 caracteres) é `400`, e o papel nunca vem do corpo (toda conta nasce BUYER). A resposta é `202 { "status": "accepted" }` **para qualquer e-mail**; a diferença só aparece na caixa de entrada de quem é dono do endereço:
+
+| E-mail | O que acontece | E-mail enviado |
+| --- | --- | --- |
+| Novo | Conta criada (sem verificar) e pedido de e-mail gravado na outbox, na mesma transação | "Confirme seu e-mail" com o link `<WEB_ORIGIN>/verificar-email#token=<token>` |
+| Já cadastrado | Nada muda na conta; só o aviso na outbox | "Você já tem uma conta" com o link para entrar |
+
+O token vai no **fragmento** (`#token=`) para não chegar a logs de servidor nem ao `Referer`; a página do web (N7) o lê no navegador e o envia no corpo de `POST /auth/email/verify`. Ele tem 256 bits, vale 24 h, é de uso único e só o hash SHA-256 fica no banco; quem o gera é o consumidor da fila `email`, na hora de enviar, então ele nunca passa pela outbox nem pelo Redis. O cadastro faz o hash da senha antes de consultar o e-mail, para que o tempo de resposta não revele se ele já existe.
+
+**Login.** Valida o par e responde `200 { user }`; cookies e sessão chegam na N4. `user` é `{ id, name, email, role, emailVerified }`.
+
+| Situação | Resposta |
+| --- | --- |
+| E-mail inexistente, senha errada, conta sem senha, **conta bloqueada** (mesmo com a senha certa) | `401 invalid-credentials`, mesmo corpo e mesmo custo (uma verificação argon2id contra um hash fictício quando não há hash real) |
+| Senha certa, e-mail não verificado | `403 email-not-verified` (só quem acertou a senha vê isto) |
+| Mais de 5 tentativas em 15 min na mesma conta (existente ou não) | `429`, antes de qualquer hash |
+
+**Bloqueio progressivo.** A 5ª falha seguida bloqueia a conta por 1 min e cada nova falha dobra o bloqueio, até 1 h. Tentativas durante o bloqueio não contam (não dá para prolongá-lo de fora). Login com sucesso zera o contador.
+
+**Rate limit.** Por IP, antes de validar o corpo: cadastro 5/h, verificação 10/h, login 10/15 min. Por conta (chave: hash do e-mail), no caso de uso e antes do hash: login 5/15 min. Toda resposta dessas rotas traz `RateLimit-Limit`, `RateLimit-Remaining` e `RateLimit-Reset` (segundos); o `429` acrescenta `Retry-After`. Se o Redis estiver fora, a requisição passa e o aviso vai para o log (o bloqueio por conta, no banco, continua valendo).
 
 ### Conta e privacidade (`users`)
 
