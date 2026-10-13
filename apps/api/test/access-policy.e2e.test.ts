@@ -61,7 +61,7 @@ describe("every application route declares an access policy", () => {
     expect(collectRoutes(testApp).map((r) => r.name)).toContain("GET HealthController.live");
   });
 
-  it("keeps sign-up, verification, login, refresh and the CSRF token public, and sessions private", () => {
+  it("keeps sign-up, verification, password and social login, refresh and the CSRF token public, and sessions private", () => {
     const authRoutes = collectRoutes(testApp).filter((route) =>
       route.name.includes("AuthController"),
     );
@@ -79,6 +79,8 @@ describe("every application route declares an access policy", () => {
       "POST AuthController.logoutAll": buyer,
       "GET AuthController.sessions": buyer,
       "DELETE AuthController.revokeSession": buyer,
+      "GET OAuthController.start": publicRoute,
+      "GET OAuthController.callback": publicRoute,
     });
   });
 
