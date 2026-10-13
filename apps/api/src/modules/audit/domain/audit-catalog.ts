@@ -1,4 +1,4 @@
-import { ROLES } from "@vira/shared";
+import { OAUTH_PROVIDERS, ROLES } from "@vira/shared";
 import { z } from "zod";
 
 /**
@@ -23,12 +23,25 @@ export const AUDIT_CATALOG = {
   },
   "auth.login_succeeded": {
     entityType: "user",
-    metadata: z.strictObject({ method: z.enum(["password", "google", "github"]) }),
+    metadata: z.strictObject({ method: z.enum(["password", ...OAUTH_PROVIDERS]) }),
   },
   "auth.login_failed": {
     entityType: "user",
     metadata: z.strictObject({
-      reason: z.enum(["invalid_credentials", "locked", "email_not_verified"]),
+      reason: z.enum([
+        "invalid_credentials",
+        "locked",
+        "email_not_verified",
+        "provider_email_not_verified",
+      ]),
+    }),
+  },
+  "auth.oauth_linked": {
+    entityType: "user",
+    metadata: z.strictObject({
+      provider: z.enum(OAUTH_PROVIDERS),
+      /** The account was never verified: the e-mail's owner took it over (no password left). */
+      tookOverUnverified: z.boolean(),
     }),
   },
   "auth.refresh_reuse_detected": {

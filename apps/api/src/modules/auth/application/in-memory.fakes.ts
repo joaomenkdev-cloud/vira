@@ -1,3 +1,5 @@
+import type { OAuthProviderName } from "@vira/shared";
+
 import type {
   TransactionContext,
   TransactionRunner,
@@ -10,9 +12,11 @@ import type {
 } from "../../../platform/rate-limit/rate-limiter.js";
 import { AuditLog } from "../../audit/application/public-api.js";
 import { Outbox } from "../../outbox/application/public-api.js";
+import type { OAuthAccount } from "../domain/oauth.js";
 import { isUsable, type Session, type SessionRevokeReason } from "../domain/session.js";
 import { isLocked, type User } from "../domain/user.js";
 import type { TokenPurpose, VerificationToken } from "../domain/verification-token.js";
+import type { OAuthAccountRepository } from "./ports/oauth-account-repository.js";
 import type { PasswordHasher } from "./ports/password-hasher.js";
 import type { ActiveSession, SessionRepository } from "./ports/session-repository.js";
 import { EmailAlreadyRegisteredError, type UserRepository } from "./ports/user-repository.js";
@@ -87,6 +91,20 @@ export class InMemoryUserRepository implements UserRepository {
     return Promise.resolve();
   }
 
+  confirmEmailThroughProvider(userId: string, at: Date, tx?: TransactionContext): Promise<void> {
+    const user = this.users.get(userId);
+    if (!user || user.emailVerifiedAt) return Promise.resolve();
+    this.users.set(userId, {
+      ...user,
+      emailVerifiedAt: at,
+      passwordHash: null,
+      failedLoginCount: 0,
+      lockedUntil: null,
+    });
+    undoLogOf(tx)?.push(() => this.users.set(userId, user));
+    return Promise.resolve();
+  }
+
   recordFailedLogin(userId: string): Promise<number> {
     const user = this.users.get(userId);
     if (!user) return Promise.reject(new Error("no such user"));
@@ -118,6 +136,35 @@ export class InMemoryUserRepository implements UserRepository {
 
   isLockedNow(id: string, now: Date): boolean {
     return isLocked(this.get(id), now);
+  }
+}
+
+export class InMemoryOAuthAccountRepository implements OAuthAccountRepository {
+  readonly accounts: OAuthAccount[] = [];
+  /** Runs once inside `link`, before the insert: simulates a concurrent request. */
+  beforeLink: (() => void) | undefined;
+
+  findUserId(provider: OAuthProviderName, providerAccountId: string): Promise<string | null> {
+    const account = this.accounts.find(
+      (a) => a.provider === provider && a.providerAccountId === providerAccountId,
+    );
+    return Promise.resolve(account?.userId ?? null);
+  }
+
+  link(account: OAuthAccount, tx?: TransactionContext): Promise<boolean> {
+    const interfere = this.beforeLink;
+    this.beforeLink = undefined;
+    interfere?.();
+    if (
+      this.accounts.some(
+        (a) => a.provider === account.provider && a.providerAccountId === account.providerAccountId,
+      )
+    ) {
+      return Promise.resolve(false);
+    }
+    this.accounts.push(account);
+    undoLogOf(tx)?.push(() => this.accounts.splice(this.accounts.indexOf(account), 1));
+    return Promise.resolve(true);
   }
 }
 

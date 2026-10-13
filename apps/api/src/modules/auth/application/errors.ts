@@ -37,3 +37,19 @@ export class SessionNotFoundError extends Error {
     this.name = "SessionNotFoundError";
   }
 }
+
+/** The provider is unknown or has no credentials configured. */
+export class OAuthProviderUnavailableError extends Error {
+  constructor() {
+    super("OAuth provider unavailable");
+    this.name = "OAuthProviderUnavailableError";
+  }
+}
+
+/** The provider does not vouch for the e-mail, so the account cannot be matched or opened. */
+export class ProviderEmailNotVerifiedError extends Error {
+  constructor() {
+    super("Provider e-mail not verified");
+    this.name = "ProviderEmailNotVerifiedError";
+  }
+}

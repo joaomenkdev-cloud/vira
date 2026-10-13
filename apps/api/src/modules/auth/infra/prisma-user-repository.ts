@@ -68,6 +68,19 @@ export class PrismaUserRepository implements UserRepository {
     });
   }
 
+  async confirmEmailThroughProvider(
+    userId: string,
+    at: Date,
+    tx?: TransactionContext,
+  ): Promise<void> {
+    // Conditional on the account still being unverified, so a concurrent verification
+    // (or a password set after it) is never undone.
+    await clientFor(this.prisma, tx).user.updateMany({
+      where: { id: userId, emailVerifiedAt: null },
+      data: { emailVerifiedAt: at, passwordHash: null, failedLoginCount: 0, lockedUntil: null },
+    });
+  }
+
   async recordFailedLogin(userId: string): Promise<number> {
     // One UPDATE ... SET n = n + 1 RETURNING n: concurrent failures never share a count.
     const row = await this.prisma.user.update({

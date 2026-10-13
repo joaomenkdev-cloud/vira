@@ -41,6 +41,29 @@ export function newUser(input: {
   });
 }
 
+/**
+ * An account opened through a social login. The provider vouched for the e-mail, so it
+ * starts verified; there is no password until the person sets one (N6).
+ */
+export function newSocialUser(input: {
+  readonly id: string;
+  readonly name: string;
+  readonly email: string;
+  readonly now: Date;
+}): User {
+  return Object.freeze({
+    id: input.id,
+    email: input.email,
+    name: input.name,
+    passwordHash: null,
+    role: "BUYER",
+    emailVerifiedAt: input.now,
+    failedLoginCount: 0,
+    lockedUntil: null,
+    createdAt: input.now,
+  });
+}
+
 export function isLocked(user: User, now: Date): boolean {
   return user.lockedUntil !== null && user.lockedUntil.getTime() > now.getTime();
 }
