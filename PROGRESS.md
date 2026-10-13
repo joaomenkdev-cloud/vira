@@ -4,10 +4,10 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 
 ## Estado atual
 
-- **Marco:** 0 — Fundação
-- **Concluído (mergeado):** F1 a F6 e N3 (PRs #1, #2, #8, #10, #11, #12, #16) e Dependabot (#4–#7, #9 CodeQL v4).
-- **Entregas abertas (pilha do web):** F7 (#13, base `main`), N1 (#14) e N2 (#15), sendo mergeadas nessa ordem; depois de cada merge, mudar a base do PR seguinte para `main` antes de apagar a branch mergeada.
-- **Próximo passo:** **N4 — Sessões e CSRF** (`feat/auth-sessions`).
+- **Marco:** 1 — Núcleo (o Marco 0 terminou com o merge da F7).
+- **Concluído (mergeado):** F1 a F7, N1, N2 e N3 (PRs #1, #2, #8, #10–#16) e Dependabot (#4–#7, #9 CodeQL v4).
+- **Entrega aberta:** N4 — Sessões e CSRF (`feat/auth-sessions`), PR draft.
+- **Próximo passo:** N5 — Login social (`feat/auth-oauth`), depois do merge da N4.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,38 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-13 — N4: sessões e CSRF
+
+Auditoria (antes de codar): o `AccessGuard` lia `request.user`, mas nada o preenchia; não havia leitor de cookies na API (nem `cookie-parser`); o `audit-catalog` já previa `auth.refresh_reuse_detected` e `auth.logout_all`; o tipo `csrf-failed` já estava documentado na API.md, mas não existia no código; a CORS da API já aceitava o header `X-CSRF-Token`. Sem Docker local, a integração rodou contra Postgres 16, Redis e Mailpit instalados na sessão (com um ajuste local no `infrastructure.ts`, não commitado).
+
+Feito (API; a N4 não mexe no web):
+
+- Migration `sessions` (uma linha por refresh token, `family_id` por login; `CHECK`s de hash com 32 bytes, expiração dentro da absoluta, revogação sempre com motivo) e o enum `session_revoke_reason`.
+- `platform/security`: `AccessTokens` (JWT HS256 sobre `node:crypto`), middleware que autentica por `Authorization: Bearer` ou pelo cookie `__Host-vira_at`, `CsrfTokens` (double-submit assinado) e `CsrfGuard`. `JWT_SECRET` e `CSRF_SECRET` obrigatórios, com 256 bits e diferentes entre si.
+- Módulo `auth`: `StartSession`, `RefreshSession` (rotação e detecção de reuso), `EndSession` (logout, logout-all, uma sessão) e `ListSessions`; rotas `refresh`, `logout`, `logout-all`, `csrf`, `GET /auth/sessions` e `DELETE /auth/sessions/{id}`; login e verificação de e-mail passam a abrir a sessão.
+- Auditoria: `auth.refresh_reuse_detected`, `auth.logout_all` e a nova `auth.session_revoked`.
+- Testes: unitários (JWT com `alg: none`, outro algoritmo, assinatura trocada, papel adulterado, emissor e audiência; domínio da sessão; casos de uso com repositório em memória, inclusive a corrida pela rotação), e2e sem infraestrutura (cookie e Bearer, token inválido, CSRF ausente, diferente do cookie ou de outra sessão, origem estranha, `Sec-Fetch-Site`) e integração com Postgres e Redis reais (flags exatas dos cookies, só o hash no banco, rotação, reuso revogando a família com auditoria, dois refreshes simultâneos, expiração ociosa e absoluta, rate limit do refresh, CSRF, login de outra origem, logout, logout-all, lista e revogação de sessões, `CHECK`s).
+
+Decisões tomadas por conta própria:
+
+- **JWT escrito sobre `node:crypto`, sem biblioteca:** a superfície aceita é exatamente um cabeçalho (`{"alg":"HS256","typ":"JWT"}`, comparado byte a byte), então não há negociação de algoritmo. `iss: vira-api`, `aud: vira`, 30 s de tolerância só para `iat` no futuro.
+- **O id da sessão (`sid`) é o `family_id`:** não muda nos refreshes, então o token CSRF continua valendo depois de um refresh e a lista de sessões mostra um item por login.
+- **Token CSRF só nas rotas com papel acessadas pelo cookie** (as que agem com a sessão). Rotas públicas (login, cadastro, verificação, refresh) e chamadas com `Bearer` não pedem token; todas as requisições que alteram dados passam pela checagem de origem. Isso detalha o ADR-0005 ("em métodos inseguros") sem mudar a decisão; a regra está na API.md.
+- **Origem:** com `Origin`, ele precisa ser exatamente o `WEB_ORIGIN`; sem `Origin`, `Sec-Fetch-Site` precisa ser `same-origin` (ou `none`); sem nenhum dos dois, é um cliente que não é navegador e passa. `same-site` é recusado (um subdomínio pode ser de outra pessoa).
+- **`GET /auth/csrf` aceita a sessão do cookie de refresh** quando o de acesso expirou (a rota está dentro do `Path` do refresh). Sem sessão nenhuma: `401`, porque um token sem sessão não protege nada.
+- **Reuso estrito:** perder a corrida pela rotação (dois refreshes simultâneos com o mesmo token) também revoga a família. Uma janela de tolerância deixaria um ladrão que rotacionou primeiro com a sessão viva. O web (N7) precisa serializar o refresh.
+- **Cookie CSRF `HttpOnly`:** a página recebe o token no corpo de `GET /auth/csrf`, então o cookie não precisa ser lido por JavaScript. Ele dura a sessão do navegador e é apagado a cada login.
+- **Um novo login encerra a sessão cujo refresh token o navegador ainda tinha** (os cookies novos a sobrescrevem, e ela ficaria órfã até expirar).
+- **Lista e revogação de sessões (`/auth/sessions`)** entraram além do roadmap, a pedido do planejamento da N4. Mostram só datas: guardar `User-Agent` ou IP seria dado pessoal a mais.
+- **`revokedSessions` em `auth.refresh_reuse_detected` conta tokens** da família revogados; em `auth.logout_all`, conta logins ativos.
+- **`Max-Age` dos cookies arredondado para cima:** o JWT expira em segundos inteiros, e o truncamento dava 599 s.
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Limpeza das sessões expiradas** (DATA_MODEL: diária, as expiradas há mais de 30 dias) ainda não tem job.
+- **Revogar sessões ao trocar ou redefinir a senha** fica para a N6, que cria essas rotas.
+- **O web precisa** chamar `GET /auth/csrf` depois do login, mandar `X-CSRF-Token` e fazer um refresh por vez (N7).
 
 ### 2026-10-11 — N3: cadastro e login por senha
 

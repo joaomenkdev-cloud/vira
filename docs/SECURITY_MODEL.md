@@ -69,15 +69,15 @@ Legenda: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosur
 | | Ameaça | Controle | Prova |
 | --- | --- | --- | --- |
 | S | Credential stuffing / força bruta | Rate limit por IP e por conta; bloqueio progressivo (`locked_until`) após 5 falhas; argon2id (m=19 MiB, t=2, p=1, parâmetros OWASP) torna o ataque offline caro; mensagem genérica de erro. | `auth.int.test.ts` (rate limit por IP e por conta, bloqueio e desbloqueio, tudo contra Redis e Postgres reais); `login-user.test.ts` |
-| S | Roubo de sessão por XSS | Cookies `HttpOnly`, `Secure`, prefixo `__Host-`; CSP estrita com nonce; React escapa por padrão; markdown sanitizado. | Teste de flags dos cookies; teste de CSP no E2E |
-| S | Reuso de refresh token roubado | Refresh opaco, guardado só como hash SHA-256, **rotação a cada uso** e **detecção de reuso**: token já rotacionado revoga a família inteira. | Teste: usar o token antigo após rotação revoga as duas sessões |
-| S | Login CSRF / CSRF em ações | `SameSite=Lax`, token CSRF double-submit assinado com o id da sessão em todo método inseguro, verificação de `Origin`/`Sec-Fetch-Site`. OAuth com `state` e PKCE. | Teste: POST sem token → 403; com origem estranha → 403 |
+| S | Roubo de sessão por XSS | Cookies `HttpOnly`, `Secure`, prefixo `__Host-`; CSP estrita com nonce; React escapa por padrão; markdown sanitizado. | `sessions.int.test.ts`: flags exatas dos três cookies (sem `Domain`); teste de CSP no E2E |
+| S | Reuso de refresh token roubado | Refresh opaco, guardado só como hash SHA-256, **rotação a cada uso** e **detecção de reuso**: token já rotacionado revoga a família inteira. Expiração ociosa de 7 dias e absoluta de 30. | `sessions.int.test.ts`: o token antigo reapresentado revoga a família (inclusive o token novo do dono) e gera auditoria; dois refreshes simultâneos com o mesmo token → só um rotaciona; expiração ociosa e absoluta; `sessions.test.ts` |
+| S | Login CSRF / CSRF em ações | `SameSite=Lax`; em todo método inseguro, `Origin` igual ao do web (ou, sem `Origin`, `Sec-Fetch-Site: same-origin`); nas rotas que exigem papel e chegam com o cookie de acesso, token double-submit assinado (HMAC com o id da sessão) no header `X-CSRF-Token` igual ao cookie. OAuth com `state` e PKCE. | `request-security.e2e.test.ts` e `sessions.int.test.ts`: POST sem token, com token só no header, com token de outra sessão → 403; login com origem estranha → 403 e nenhuma sessão |
 | S | Tomada de conta via OAuth com e-mail não verificado | Vínculo automático com conta existente só quando o provedor afirma e-mail verificado (`email_verified` no Google; e-mail primário verificado no GitHub). | Teste com perfil de provedor não verificado |
-| T | Adulteração do JWT | Assinatura HS256 com segredo ≥ 256 bits, `alg` fixado na verificação, `iss`/`aud`/`exp` validados, expiração de 10 min. | Teste com `alg: none` e assinatura trocada |
-| R | Usuário nega ter feito login ou alterado senha | Auditoria de `auth.login_succeeded/failed`, `password_changed`, `refresh_reuse_detected`, `logout_all`. | `auth.int.test.ts`: cadastro, verificação, login com sucesso e falha, bloqueio, e a ausência de e-mail, nome e senha no log |
+| T | Adulteração do JWT | Assinatura HS256 com segredo ≥ 256 bits, `alg` fixado na verificação, `iss`/`aud`/`exp` validados, expiração de 10 min. | `access-token.test.ts` e `request-security.e2e.test.ts`: `alg: none`, outro algoritmo, assinatura trocada, papel adulterado, assinado com a chave do CSRF, emissor e audiência errados |
+| R | Usuário nega ter feito login ou alterado senha | Auditoria de `auth.login_succeeded/failed`, `password_changed`, `refresh_reuse_detected`, `logout_all`, `session_revoked`. | `auth.int.test.ts`: cadastro, verificação, login com sucesso e falha, bloqueio, e a ausência de e-mail, nome e senha no log; `sessions.int.test.ts`: reuso e `logout-all` auditados |
 | I | Enumeração de contas | Cadastro e "esqueci a senha" respondem `202` idêntico; login responde `invalid-credentials` genérico; tempo de resposta equalizado (hash fictício quando o usuário não existe). | `auth.int.test.ts`: cadastro de e-mail novo e conhecido com respostas idênticas; senha errada e e-mail inexistente indistinguíveis e com o mesmo custo (uma verificação argon2id cada); `argon2-password-hasher.test.ts` |
 | D | Esgotar CPU com argon2 | Rate limit antes do hash; limite de tamanho da senha (8–128 caracteres). | `auth.e2e.test.ts`: senha gigante → 400 sem nenhum hash; `auth.int.test.ts`: 429 sem nenhum hash |
-| E | Usuário se promove a ADMIN | Papel nunca vem do corpo (schemas estritos); mudança de papel só por `ADMIN` e auditada; papel lido do banco ao emitir o JWT. | `auth.e2e.test.ts` e `auth.int.test.ts`: `role` no corpo do cadastro → 400 e nenhuma conta criada (`PATCH /me` entra com a N6) |
+| E | Usuário se promove a ADMIN | Papel nunca vem do corpo (schemas estritos); mudança de papel só por `ADMIN` e auditada; papel lido do banco ao emitir o JWT (inclusive a cada refresh). | `auth.e2e.test.ts` e `auth.int.test.ts`: `role` no corpo do cadastro → 400 e nenhuma conta criada (`PATCH /me` entra com a N6) |
 
 ### 3.2 Compra (reserva e pagamento)
 
@@ -131,6 +131,14 @@ Decisões tomadas e riscos aceitos, para o revisor não precisar redescobri-los:
 - **Auditoria depois do commit:** o registro é gravado logo após a operação, não na mesma transação; uma falha entre os dois responde `500` embora a operação tenha ocorrido.
 - **Reenvio da verificação:** `POST /auth/email/resend` exige sessão (API.md), mas sem e-mail verificado não há sessão. Quem perdeu o e-mail de verificação ainda não tem como pedir outro; a decisão está listada no PROGRESS.md.
 
+#### Limites conhecidos das sessões (N4)
+
+- **Revogação em até 10 min:** logout, `logout-all` e a revogação de uma sessão param o refresh na hora, mas um token de acesso já emitido vale até expirar (não há consulta ao banco a cada requisição, ADR-0005).
+- **Refreshes simultâneos derrubam a sessão:** se duas abas renovarem ao mesmo tempo com o mesmo cookie, a segunda apresenta um token já rotacionado e a família é revogada (a regra é estrita de propósito: não dá para distinguir esse caso de um roubo). O web (N7) precisa serializar o refresh, um por vez.
+- **Rotas públicas não pedem token CSRF:** elas não agem com a sessão. Login, cadastro, verificação e refresh ficam protegidos pela checagem de `Origin`/`Sec-Fetch-Site` e pelo `SameSite=Lax`. O refresh só troca o cookie do próprio navegador.
+- **Clientes sem `Origin` nem `Sec-Fetch-Site`** (curl, apps) passam pela checagem de origem: um navegador sempre manda um dos dois em requisições que alteram dados.
+- **Sessões sem dispositivo:** a lista de sessões mostra só datas (login, última renovação, expiração). Guardar `User-Agent` ou IP seria dado pessoal a mais (LGPD, só nome e e-mail).
+
 ## 4. Controles transversais
 
 | Área | Controle |
@@ -179,9 +187,9 @@ Status: ⬜ planejado · 🟨 em andamento · ✅ implementado e testado. O marc
 | V4 API and Web Service | Métodos HTTP corretos, `Content-Type` verificado, limites de tamanho, OpenAPI coerente com o código. | Fundação | 🟨 |
 | V5 File Handling | Upload pré-assinado com tipo e tamanho fixados, verificação de magic bytes, re-encode, bucket privado, nomes gerados pelo servidor. | Núcleo | ⬜ |
 | V6 Authentication | argon2id, política de senha (8–128, checagem contra senhas vazadas via k-anonymity HIBP), anti-enumeração, rate limit e bloqueio, redefinição com token de uso único. N3 entregou argon2id, política 8–128, anti-enumeração, rate limit, bloqueio e verificação de e-mail; faltam HIBP e a redefinição (N6). | Núcleo | 🟨 |
-| V7 Session Management | Refresh opaco com hash, rotação, detecção de reuso, expiração ociosa e absoluta, logout e logout global, revogação ao trocar senha. | Núcleo | ⬜ |
+| V7 Session Management | Refresh opaco com hash, rotação, detecção de reuso, expiração ociosa e absoluta, logout e logout global, revogação ao trocar senha. N4 entregou tudo menos a revogação ao trocar senha (N6). | Núcleo | 🟨 |
 | V8 Authorization | Negar por padrão, papel por função, posse por recurso, testes de autorização em toda rota. | Núcleo / MVP | ⬜ |
-| V9 Self-contained Tokens | JWT com `alg` fixo, `iss`/`aud`/`exp` validados, vida curta; token do QR com HMAC e `kid`. | Núcleo / MVP | ⬜ |
+| V9 Self-contained Tokens | JWT com `alg` fixo, `iss`/`aud`/`exp` validados, vida curta; token do QR com HMAC e `kid`. N4 entregou o JWT; falta o token do QR (V5). | Núcleo / MVP | 🟨 |
 | V10 OAuth and OIDC | Authorization Code + PKCE, `state`, validação do `id_token` (Google), vínculo só com e-mail verificado, sem guardar tokens do provedor. | Núcleo | ⬜ |
 | V11 Cryptography | Bibliotecas padrão (`node:crypto`, argon2), aleatoriedade com CSPRNG, comparação em tempo constante, chaves ≥ 256 bits, rotação por `kid`. N3: argon2id (`@node-rs/argon2`) e tokens de 256 bits do CSPRNG guardados só como SHA-256. | Núcleo / MVP | 🟨 |
 | V12 Secure Communication | TLS em todos os saltos (web, API, banco, Redis), HSTS. | MVP (deploy) | 🟨 |

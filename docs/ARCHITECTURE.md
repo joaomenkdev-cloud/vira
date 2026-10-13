@@ -315,12 +315,13 @@ sequenceDiagram
     A-->>C: 200 { user }
 ```
 
-- **Camadas:** `domain` (conta, política de bloqueio, token), `application` (`RegisterUser`, `VerifyEmail`, `LoginUser`, `SendVerificationEmail`, `SendAccountExistsNotice`, portas `UserRepository`, `VerificationTokenRepository`, `PasswordHasher`), `infra` (Prisma, argon2id, handlers da fila) e `http` (`AuthController`, sempre `@Public()`).
+- **Camadas:** `domain` (conta, política de bloqueio, token, sessão), `application` (`RegisterUser`, `VerifyEmail`, `LoginUser`, `SendVerificationEmail`, `SendAccountExistsNotice`, `StartSession`, `RefreshSession`, `EndSession`, `ListSessions`, portas `UserRepository`, `VerificationTokenRepository`, `SessionRepository`, `PasswordHasher`), `infra` (Prisma, argon2id, handlers da fila) e `http` (`AuthController`, público exceto logout e sessões; cookies em `session-cookies.ts`).
 - **Três módulos Nest:** `AuthDataModule` (repositórios), `AuthModule` (rotas HTTP; entra na API) e `AuthJobsModule` (envia os e-mails; entra no worker e na API em modo `embedded`).
 - **Porta `Mailer`** (`platform/mail`): adaptador SMTP com nodemailer; qualquer falha vira `MailDeliveryError`, que não carrega destinatário, assunto nem resposta do servidor (vai para logs de job). Mensagens de texto puro, sem HTML.
 - **O token nunca está no payload da outbox**, só o `userId`: quem gera o token é o consumidor, na hora de enviar. A entrega é *pelo menos uma vez*: se o job for repetido depois de o e-mail sair, chega um segundo link e o primeiro deixa de valer.
 - **Anti-enumeração:** o cadastro responde igual e leva o mesmo tempo para e-mail novo e conhecido (o hash vem antes da consulta); no login, e-mail inexistente, senha errada, conta sem senha e conta bloqueada são o mesmo `401` e gastam uma verificação argon2id cada (contra um hash fictício quando não há hash real). A diferença mínima que sobra é o tempo de uma ou duas escritas no banco, muito menor que o do hash.
-- **Cookies e sessão não existem ainda** (N4): o login só valida e responde `200 { user }`.
+- **Sessões (N4):** login e verificação de e-mail abrem uma família de refresh tokens (`sessions`) e emitem o JWT de acesso; o refresh rotaciona com detecção de reuso. Contrato completo em [API.md](API.md#sessões-e-csrf-n4).
+- **`platform/security`:** `AccessTokens` (JWT HS256 com `node:crypto`, cabeçalho fixo), o middleware que preenche `request.user` a partir do `Authorization: Bearer` ou do cookie de acesso, o `AccessGuard` (papéis, nega por padrão) e o `CsrfGuard` (origem em todo método inseguro; token double-submit nas rotas com papel acessadas pelo cookie), nessa ordem.
 
 ## 7. Preocupações transversais (`platform/`)
 
