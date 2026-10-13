@@ -7,6 +7,7 @@ import { JobHandlerRegistry } from "../src/platform/queue/job-handlers.js";
 import { QueueConsumers } from "../src/platform/queue/queue-consumers.js";
 import {
   createTestApp,
+  TEST_SECRETS,
   TEST_WEB_ORIGIN,
   UNREACHABLE_INFRASTRUCTURE,
 } from "./support/create-test-app.js";
@@ -48,6 +49,7 @@ describe("who consumes the authentication e-mail messages", () => {
       WEB_ORIGIN: TEST_WEB_ORIGIN,
       LOG_LEVEL: "silent",
       ...UNREACHABLE_INFRASTRUCTURE,
+      ...TEST_SECRETS,
     });
     const worker = await withoutWorkers(
       Test.createTestingModule({ imports: [WorkerModule.register({ config })] }),

@@ -17,6 +17,8 @@ import { RateLimitModule } from "../platform/rate-limit/rate-limit.module.js";
 import { RedisModule } from "../platform/redis/redis.module.js";
 import { RuntimeModule } from "../platform/runtime/runtime.module.js";
 import { AccessGuard } from "../platform/security/access.guard.js";
+import { CsrfGuard } from "../platform/security/csrf.guard.js";
+import { SecurityModule } from "../platform/security/security.module.js";
 
 export interface AppModuleOptions {
   readonly config: AppConfig;
@@ -36,6 +38,7 @@ export class AppModule {
         RateLimitModule,
         MailModule,
         RuntimeModule,
+        SecurityModule,
         AuditModule,
         OutboxModule,
         AuthModule,
@@ -46,7 +49,10 @@ export class AppModule {
           : []),
       ],
       providers: [
+        // Guards run in this order: who may call the route, then whether the browser
+        // request really comes from our own pages.
         { provide: APP_GUARD, useClass: AccessGuard },
+        { provide: APP_GUARD, useClass: CsrfGuard },
         { provide: APP_FILTER, useClass: ProblemDetailsFilter },
         { provide: APP_PIPE, useFactory: createValidationPipe },
       ],

@@ -4,18 +4,7 @@ import type { Request } from "express";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import { ProblemException } from "../errors/problem.exception.js";
-import {
-  ACCESS_POLICY,
-  type AccessPolicy,
-  type AuthenticatedUser,
-  decideAccess,
-} from "./access-policy.js";
-
-declare module "express" {
-  interface Request {
-    user?: AuthenticatedUser;
-  }
-}
+import { ACCESS_POLICY, type AccessPolicy, decideAccess } from "./access-policy.js";
 
 @Injectable()
 export class AccessGuard implements CanActivate {

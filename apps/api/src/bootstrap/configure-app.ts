@@ -4,6 +4,8 @@ import { Logger } from "nestjs-pino";
 import type { AppConfig } from "../platform/config/config.schema.js";
 import { applyHttpHardening } from "../platform/http/http-hardening.js";
 import { setupOpenApi } from "../platform/openapi/setup-openapi.js";
+import { AccessTokens } from "../platform/security/access-token.js";
+import { authenticateRequests } from "../platform/security/authentication.middleware.js";
 
 export const API_PREFIX = "api/v1";
 
@@ -12,6 +14,7 @@ export function configureApp(app: NestExpressApplication, config: AppConfig): vo
   app.useLogger(app.get(Logger));
   app.flushLogs();
   applyHttpHardening(app, config);
+  app.use(authenticateRequests(app.get(AccessTokens)));
   app.setGlobalPrefix(API_PREFIX);
   setupOpenApi(app, config);
   app.enableShutdownHooks();

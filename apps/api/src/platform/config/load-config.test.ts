@@ -7,6 +7,8 @@ const validEnv = {
   DATABASE_URL: "postgresql://vira:vira_local@127.0.0.1:5432/vira",
   REDIS_URL: "redis://127.0.0.1:6379",
   SMTP_URL: "smtp://127.0.0.1:1025",
+  JWT_SECRET: "a".repeat(43),
+  CSRF_SECRET: "b".repeat(43),
 };
 
 const productionEnv = {
@@ -16,6 +18,8 @@ const productionEnv = {
   REDIS_URL: "rediss://default:pw@cache.example:6379",
   SMTP_URL: "smtps://resend:pw@smtp.example:465",
   MAIL_FROM: "Vira <no-reply@vira.example>",
+  JWT_SECRET: "c".repeat(44),
+  CSRF_SECRET: "d".repeat(44),
 };
 
 function captureError(env: NodeJS.ProcessEnv): ConfigValidationError {
@@ -39,6 +43,7 @@ describe("loadConfig", () => {
       redis: { url: validEnv.REDIS_URL },
       mail: { smtpUrl: validEnv.SMTP_URL, from: "Vira <no-reply@vira.localhost>" },
       worker: { mode: "separate", outboxPollIntervalMs: 5_000 },
+      auth: { jwtSecret: validEnv.JWT_SECRET, csrfSecret: validEnv.CSRF_SECRET },
     });
   });
 
@@ -109,6 +114,16 @@ describe("loadConfig", () => {
     }
   });
 
+  it("requires 256-bit signing secrets, one per purpose", () => {
+    const short = captureError({ ...validEnv, JWT_SECRET: "x".repeat(42), CSRF_SECRET: "" });
+    expect(short.issues.map((i) => i.variable).sort()).toEqual(["CSRF_SECRET", "JWT_SECRET"]);
+
+    const shared = captureError({ ...validEnv, CSRF_SECRET: validEnv.JWT_SECRET });
+    expect(shared.issues).toEqual([
+      { variable: "CSRF_SECRET", message: "must differ from JWT_SECRET" },
+    ]);
+  });
+
   describe("in production", () => {
     it("accepts encrypted connections and disables the API docs by default", () => {
       expect(loadConfig(productionEnv).docs.enabled).toBe(false);
@@ -157,7 +172,9 @@ describe("loadConfig", () => {
   it("reports every invalid variable at once", () => {
     const error = captureError({ PORT: "0", LOG_LEVEL: "verbose" });
     expect(error.issues.map((i) => i.variable).sort()).toEqual([
+      "CSRF_SECRET",
       "DATABASE_URL",
+      "JWT_SECRET",
       "LOG_LEVEL",
       "PORT",
       "REDIS_URL",
@@ -175,6 +192,8 @@ describe("loadConfig", () => {
       DATABASE_URL: `mysql://vira:${secret}@db/vira`,
       REDIS_URL: secret,
       SMTP_URL: `ftp://mail:${secret}@mail.example`,
+      JWT_SECRET: secret,
+      CSRF_SECRET: secret,
     });
     expect(error.message).not.toContain(secret);
     expect(JSON.stringify(error.issues)).not.toContain(secret);

@@ -20,6 +20,12 @@ export const UNREACHABLE_INFRASTRUCTURE = {
   SMTP_URL: "smtp://127.0.0.1:1",
 };
 
+/** Signing keys for tests only; production keys come from the environment. */
+export const TEST_SECRETS = {
+  JWT_SECRET: "test-jwt-secret-0123456789-abcdefghijklmnopqrstuvwxyz",
+  CSRF_SECRET: "test-csrf-secret-0123456789-abcdefghijklmnopqrstuvwxyz",
+};
+
 export interface TestApp {
   readonly app: NestExpressApplication;
   readonly config: AppConfig;
@@ -44,6 +50,7 @@ export async function createTestApp({
     WEB_ORIGIN: TEST_WEB_ORIGIN,
     LOG_LEVEL: "info",
     ...UNREACHABLE_INFRASTRUCTURE,
+    ...TEST_SECRETS,
     ...env,
   });
   const logs: string[] = [];

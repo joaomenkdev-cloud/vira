@@ -12,6 +12,7 @@ describe("problem types", () => {
   it("documents each type with the status the API reference lists", () => {
     expect(PROBLEM_TYPES["invalid-credentials"].status).toBe(401);
     expect(PROBLEM_TYPES["email-not-verified"].status).toBe(403);
+    expect(PROBLEM_TYPES["csrf-failed"].status).toBe(403);
     expect(PROBLEM_TYPES["token-expired"].status).toBe(410);
   });
 
