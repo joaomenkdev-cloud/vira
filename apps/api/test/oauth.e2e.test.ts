@@ -3,6 +3,7 @@ import request, { type Response } from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { OAUTH_PROVIDERS } from "../src/modules/auth/application/ports/oauth-provider.js";
+import { OAuthAttemptCookie } from "../src/modules/auth/http/oauth-attempt-cookie.js";
 import { problemTypeUri } from "../src/platform/errors/problem-types.js";
 import { RATE_LIMITER } from "../src/platform/rate-limit/rate-limiter.js";
 import { CLOCK } from "../src/platform/runtime/runtime.js";
@@ -210,16 +211,14 @@ describe("social login: redirects and refusals (no infrastructure)", () => {
     });
 
     it("only remembers a return path on the web's own origin", async () => {
-      const decode = (cookie: string) =>
-        JSON.parse(
-          Buffer.from(cookie.split("=")[1]?.split(".")[0] ?? "", "base64url").toString(),
-        ) as { returnTo: string | null };
+      const attempts = testApp.app.get(OAuthAttemptCookie);
+      const returnTo = async (next: string) =>
+        attempts.read((await start("google", next)).cookie.slice(ATTEMPT_COOKIE.length + 1))
+          ?.returnTo;
 
-      expect(decode((await start("google", "/eventos/show")).cookie).returnTo).toBe(
-        "/eventos/show",
-      );
-      expect(decode((await start("google", "//evil.example")).cookie).returnTo).toBeNull();
-      expect(decode((await start("google", "https://evil.example")).cookie).returnTo).toBeNull();
+      expect(await returnTo("/eventos/show")).toBe("/eventos/show");
+      expect(await returnTo("//evil.example")).toBeNull();
+      expect(await returnTo("https://evil.example")).toBeNull();
     });
 
     it("limits each route to 20 requests a minute per IP", async () => {

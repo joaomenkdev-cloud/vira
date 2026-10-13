@@ -43,16 +43,28 @@ describe("OAuthAttemptCookie", () => {
     });
   });
 
-  it("refuses a cookie whose content was changed", () => {
+  it("keeps the verifier and the nonce unreadable", () => {
+    const { attempt, value } = written(cookies, clock);
+    const raw = Buffer.from(value, "base64url").toString("latin1");
+    for (const secret of [attempt.state, attempt.codeVerifier, attempt.nonce]) {
+      expect(value).not.toContain(secret);
+      expect(raw).not.toContain(secret);
+    }
+    expect(raw).not.toContain("codeVerifier");
+  });
+
+  it("refuses a cookie whose bytes were changed, cut or made up", () => {
     const { value } = written(cookies, clock);
-    const [payload = "", mac = ""] = value.split(".");
-    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString()) as object;
-    const forged = Buffer.from(JSON.stringify({ ...decoded, returnTo: "/elsewhere" })).toString(
-      "base64url",
-    );
-    expect(cookies.read(`${forged}.${mac}`)).toBeNull();
-    expect(cookies.read(`${payload}.${mac.slice(0, -2)}AA`)).toBeNull();
-    expect(cookies.read(payload)).toBeNull();
+    const raw = Buffer.from(value, "base64url");
+    for (const index of [0, 12, 28, raw.length - 1]) {
+      const altered = Buffer.from(raw);
+      altered[index] = (altered[index] ?? 0) ^ 1;
+      expect(cookies.read(altered.toString("base64url")), `byte ${index}`).toBeNull();
+    }
+    expect(cookies.read(raw.subarray(0, raw.length - 1).toString("base64url"))).toBeNull();
+    expect(cookies.read(raw.subarray(0, 28).toString("base64url"))).toBeNull();
+    expect(cookies.read("not-a-cookie")).toBeNull();
+    expect(cookies.read("a".repeat(5000))).toBeNull();
     expect(cookies.read(undefined)).toBeNull();
   });
 
