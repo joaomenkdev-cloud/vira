@@ -10,9 +10,11 @@ import type {
 } from "../../../platform/rate-limit/rate-limiter.js";
 import { AuditLog } from "../../audit/application/public-api.js";
 import { Outbox } from "../../outbox/application/public-api.js";
+import { isUsable, type Session, type SessionRevokeReason } from "../domain/session.js";
 import { isLocked, type User } from "../domain/user.js";
 import type { TokenPurpose, VerificationToken } from "../domain/verification-token.js";
 import type { PasswordHasher } from "./ports/password-hasher.js";
+import type { ActiveSession, SessionRepository } from "./ports/session-repository.js";
 import { EmailAlreadyRegisteredError, type UserRepository } from "./ports/user-repository.js";
 import type { VerificationTokenRepository } from "./ports/verification-token-repository.js";
 
@@ -153,6 +155,101 @@ export class InMemoryVerificationTokenRepository implements VerificationTokenRep
       token.usedAt = null;
     });
     return Promise.resolve({ userId: token.userId });
+  }
+}
+
+type StoredSession = { -readonly [K in keyof Session]: Session[K] };
+
+export class InMemorySessionRepository implements SessionRepository {
+  readonly rows: StoredSession[] = [];
+  readonly revokeReasons = new Map<string, SessionRevokeReason>();
+  /** Runs once inside `markRotated`, before the update: simulates a concurrent request. */
+  beforeRotate: (() => void) | undefined;
+
+  create(session: Session, tx?: TransactionContext): Promise<void> {
+    if (this.rows.some((row) => row.tokenHash.equals(session.tokenHash))) {
+      return Promise.reject(new Error("duplicate token hash"));
+    }
+    const row = { ...session };
+    this.rows.push(row);
+    undoLogOf(tx)?.push(() => this.rows.splice(this.rows.indexOf(row), 1));
+    return Promise.resolve();
+  }
+
+  findByTokenHash(tokenHash: Buffer): Promise<Session | null> {
+    const row = this.rows.find((r) => r.tokenHash.equals(tokenHash));
+    return Promise.resolve(row ? { ...row } : null);
+  }
+
+  markRotated(id: string, now: Date, tx?: TransactionContext): Promise<boolean> {
+    const interfere = this.beforeRotate;
+    this.beforeRotate = undefined;
+    interfere?.();
+    const row = this.rows.find((r) => r.id === id);
+    if (row?.rotatedAt !== null || row.revokedAt !== null) return Promise.resolve(false);
+    row.rotatedAt = now;
+    undoLogOf(tx)?.push(() => {
+      row.rotatedAt = null;
+    });
+    return Promise.resolve(true);
+  }
+
+  revokeFamily(familyId: string, reason: SessionRevokeReason, now: Date): Promise<number> {
+    return Promise.resolve(this.revokeWhere((row) => row.familyId === familyId, reason, now));
+  }
+
+  revokeActiveFamilyOf(
+    userId: string,
+    familyId: string,
+    reason: SessionRevokeReason,
+    now: Date,
+  ): Promise<boolean> {
+    const family = (row: StoredSession) => row.userId === userId && row.familyId === familyId;
+    if (!this.rows.some((row) => family(row) && isUsable(row, now))) return Promise.resolve(false);
+    this.revokeWhere(family, reason, now);
+    return Promise.resolve(true);
+  }
+
+  revokeAllOf(userId: string, reason: SessionRevokeReason, now: Date): Promise<number> {
+    const active = new Set(
+      this.rows.filter((r) => r.userId === userId && isUsable(r, now)).map((r) => r.familyId),
+    );
+    this.revokeWhere((row) => row.userId === userId, reason, now);
+    return Promise.resolve(active.size);
+  }
+
+  listActive(userId: string, now: Date): Promise<ActiveSession[]> {
+    return Promise.resolve(
+      this.rows
+        .filter((row) => row.userId === userId && isUsable(row, now))
+        .sort((a, b) => b.authenticatedAt.getTime() - a.authenticatedAt.getTime())
+        .map((row) => ({
+          id: row.familyId,
+          authenticatedAt: row.authenticatedAt,
+          lastRefreshedAt: row.createdAt,
+          expiresAt: row.expiresAt,
+        })),
+    );
+  }
+
+  /** Test helper: every row of a family. */
+  family(familyId: string): StoredSession[] {
+    return this.rows.filter((row) => row.familyId === familyId);
+  }
+
+  private revokeWhere(
+    match: (row: StoredSession) => boolean,
+    reason: SessionRevokeReason,
+    now: Date,
+  ): number {
+    let count = 0;
+    for (const row of this.rows) {
+      if (!match(row) || row.revokedAt !== null) continue;
+      row.revokedAt = now;
+      this.revokeReasons.set(row.id, reason);
+      count++;
+    }
+    return count;
   }
 }
 
