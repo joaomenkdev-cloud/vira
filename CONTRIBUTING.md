@@ -108,6 +108,15 @@ Nenhum e-mail sai da sua máquina em desenvolvimento: a API envia por SMTP para 
 
 Os testes de integração fazem exatamente isso, lendo as mensagens pela API HTTP do Mailpit (`apps/api/test/support/mailpit-inbox.ts`). `MAIL_FROM` (opcional fora de produção) define o remetente; em produção `SMTP_URL` precisa de `smtps://` ou `requireTLS=true`.
 
+### Login social local (Google e GitHub)
+
+Opcional: sem credenciais, as rotas `/api/v1/auth/oauth/*` respondem `404` e o resto funciona. Para testar de verdade, crie um app de teste em cada provedor e preencha as variáveis comentadas no `apps/api/.env.example`:
+
+- **Google:** Google Cloud Console → APIs e serviços → Credenciais → ID do cliente OAuth do tipo "Aplicativo da Web", com a URI de redirecionamento `http://localhost:3001/api/v1/auth/oauth/google/callback`.
+- **GitHub:** Settings → Developer settings → OAuth Apps, com a callback `http://localhost:3001/api/v1/auth/oauth/github/callback`.
+
+A callback fica na origem do web porque o navegador só fala com ele (o web encaminha `/api/v1` para a API). Abra `http://localhost:3001/api/v1/auth/oauth/google` no navegador para começar. Os testes não usam os provedores reais: os adaptadores são testados contra servidores HTTP falsos e o fluxo completo usa um provedor falso (`apps/api/test/support/fake-oauth-provider.ts`).
+
 ### Rodando a API
 
 ```bash
