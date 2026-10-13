@@ -22,6 +22,11 @@ const ACCESS_OPTIONS: CookieOptions = { ...BASE, path: "/" };
 const REFRESH_OPTIONS: CookieOptions = { ...BASE, path: REFRESH_COOKIE_PATH };
 const CSRF_OPTIONS: CookieOptions = { ...BASE, path: "/" };
 
+/** Whole seconds until `expiresAt`, rounded up so the cookie never dies before its token. */
+function maxAge(expiresAt: Date, now: Date): number {
+  return Math.ceil((expiresAt.getTime() - now.getTime()) / 1000) * 1000;
+}
+
 export function writeSessionCookies(
   response: Response,
   credentials: SessionCredentials,
@@ -29,11 +34,11 @@ export function writeSessionCookies(
 ): void {
   response.cookie(ACCESS_COOKIE, credentials.accessToken, {
     ...ACCESS_OPTIONS,
-    maxAge: credentials.accessTokenExpiresAt.getTime() - now.getTime(),
+    maxAge: maxAge(credentials.accessTokenExpiresAt, now),
   });
   response.cookie(REFRESH_COOKIE, credentials.refreshToken, {
     ...REFRESH_OPTIONS,
-    maxAge: credentials.refreshTokenExpiresAt.getTime() - now.getTime(),
+    maxAge: maxAge(credentials.refreshTokenExpiresAt, now),
   });
 }
 
