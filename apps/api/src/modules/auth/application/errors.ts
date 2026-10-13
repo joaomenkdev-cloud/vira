@@ -21,3 +21,19 @@ export class InvalidTokenError extends Error {
     this.name = "InvalidTokenError";
   }
 }
+
+/** No usable session for this refresh token: unknown, expired, revoked or reused. */
+export class InvalidSessionError extends Error {
+  constructor() {
+    super("Invalid session");
+    this.name = "InvalidSessionError";
+  }
+}
+
+/** No active session with this id belongs to the caller. */
+export class SessionNotFoundError extends Error {
+  constructor() {
+    super("Session not found");
+    this.name = "SessionNotFoundError";
+  }
+}

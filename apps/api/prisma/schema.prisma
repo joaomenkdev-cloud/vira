@@ -88,6 +88,7 @@ model User {
   anonymizedAt     DateTime? @map("anonymized_at") @db.Timestamptz(3)
 
   verificationTokens VerificationToken[]
+  sessions           Session[]
 
   @@map("users")
 }
@@ -108,4 +109,39 @@ model VerificationToken {
 
   @@index([userId, purpose])
   @@map("verification_tokens")
+}
+
+enum SessionRevokeReason {
+  LOGOUT
+  REUSE_DETECTED
+  PASSWORD_CHANGED
+  ACCOUNT_DELETED
+
+  @@map("session_revoke_reason")
+}
+
+/// Refresh tokens (docs/DATA_MODEL.md#sessions, ADR-0005). One row per token; the
+/// rotations of one login share `familyId`, which is the session id of the access token.
+/// Only the SHA-256 hash is stored: the token itself exists only in the cookie.
+model Session {
+  id                String               @id @db.Uuid
+  userId            String               @map("user_id") @db.Uuid
+  familyId          String               @map("family_id") @db.Uuid
+  tokenHash         Bytes                @unique @map("token_hash")
+  /// When the person logged in; the same for every rotation of the family.
+  authenticatedAt   DateTime             @map("authenticated_at") @db.Timestamptz(3)
+  createdAt         DateTime             @map("created_at") @db.Timestamptz(3)
+  /// 30 days after the login; the same for every rotation of the family.
+  absoluteExpiresAt DateTime             @map("absolute_expires_at") @db.Timestamptz(3)
+  /// 7 days of inactivity, capped by `absoluteExpiresAt`.
+  expiresAt         DateTime             @map("expires_at") @db.Timestamptz(3)
+  rotatedAt         DateTime?            @map("rotated_at") @db.Timestamptz(3)
+  revokedAt         DateTime?            @map("revoked_at") @db.Timestamptz(3)
+  revokeReason      SessionRevokeReason? @map("revoke_reason")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("sessions")
 }

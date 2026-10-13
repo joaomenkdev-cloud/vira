@@ -190,16 +190,21 @@ Não guardamos tokens de acesso dos provedores: só usamos o perfil no login.
 
 ### `sessions` (refresh tokens)
 
+Uma linha por refresh token. Os tokens de um mesmo login formam uma **família** (`family_id`), que é também o id da sessão (`sid`) levado pelo token de acesso e o id mostrado em `GET /auth/sessions`.
+
 | Campo | Tipo | Regras | Dado pessoal |
 | --- | --- | --- | --- |
 | `user_id` | uuid | FK → users, `ON DELETE CASCADE` | — |
 | `family_id` | uuid | Agrupa a cadeia de rotações de um login | Não |
-| `token_hash` | bytea | SHA-256 do token (32 bytes aleatórios); `UNIQUE`. O token em claro só existe no cookie. | Não |
-| `expires_at` | timestamptz | Absoluto: 30 dias; ocioso: 7 dias | Não |
-| `rotated_at` | timestamptz | Preenchido quando o token é trocado | Não |
-| `revoked_at`, `revoke_reason` | timestamptz, enum | `LOGOUT`, `REUSE_DETECTED`, `PASSWORD_CHANGED`, `ACCOUNT_DELETED` | Não |
+| `token_hash` | bytea | SHA-256 do token (32 bytes aleatórios); `UNIQUE`; `CHECK` de 32 bytes. O token em claro só existe no cookie. | Não |
+| `authenticated_at` | timestamptz | Hora do login; copiada para cada rotação | Não |
+| `created_at` | timestamptz | Emissão deste token (o login ou o último refresh); `>= authenticated_at` | Não |
+| `absolute_expires_at` | timestamptz | Login + 30 dias; copiado para cada rotação | Não |
+| `expires_at` | timestamptz | Emissão + 7 dias (expiração ociosa), nunca depois de `absolute_expires_at` (`CHECK`) | Não |
+| `rotated_at` | timestamptz | Preenchido quando o token é trocado; troca por `UPDATE` condicional (`WHERE rotated_at IS NULL AND revoked_at IS NULL`), então de dois pedidos simultâneos só um vence | Não |
+| `revoked_at`, `revoke_reason` | timestamptz, enum | `LOGOUT`, `REUSE_DETECTED`, `PASSWORD_CHANGED`, `ACCOUNT_DELETED`; os dois juntos ou nenhum (`CHECK`) | Não |
 
-Índices: `UNIQUE(token_hash)`, `(user_id)`, `(family_id)`. **Detecção de reuso:** apresentar um token já rotacionado revoga a família inteira e registra `auth.refresh_reuse_detected` na auditoria. Limpeza diária remove sessões expiradas há mais de 30 dias.
+Índices: `UNIQUE(token_hash)`, `(user_id)`, `(family_id)`. **Detecção de reuso:** apresentar um token já rotacionado (ou perder a corrida para rotacioná-lo) revoga a família inteira e registra `auth.refresh_reuse_detected` na auditoria, com `revokedSessions` = quantos tokens da família foram revogados. Limpeza diária remove sessões expiradas há mais de 30 dias (job ainda não implementado).
 
 ### `verification_tokens`
 
@@ -368,7 +373,7 @@ Append-only ([ARCHITECTURE.md](ARCHITECTURE.md#7-preocupações-transversais-pla
 | `occurred_at` | timestamptz | |
 | `actor_id` | uuid | Nullable (sistema/webhook). Pseudônimo: continua válido após a anonimização do usuário |
 | `actor_role` | text | `SYSTEM`, `BUYER`, `ORGANIZER` ou `ADMIN`; `CHECK`: `SYSTEM` se e somente se `actor_id` é `NULL` |
-| `action` | text | `CHECK` no formato `area.acao`. O catálogo completo, com o tipo de entidade e o schema de `metadata` de cada ação, está em `apps/api/src/modules/audit/domain/audit-catalog.ts`. Ex.: `auth.login_succeeded`, `auth.refresh_reuse_detected`, `event.published`, `order.paid`, `order.refunded`, `ticket.checked_in`, `user.data_exported`, `user.anonymized`, `admin.role_changed` |
+| `action` | text | `CHECK` no formato `area.acao`. O catálogo completo, com o tipo de entidade e o schema de `metadata` de cada ação, está em `apps/api/src/modules/audit/domain/audit-catalog.ts`. Ex.: `auth.login_succeeded`, `auth.refresh_reuse_detected`, `auth.logout_all`, `auth.session_revoked`, `event.published`, `order.paid`, `order.refunded`, `ticket.checked_in`, `user.data_exported`, `user.anonymized`, `admin.role_changed` |
 | `entity_type`, `entity_id` | text, uuid | Tipo fixado por ação no catálogo (`user`, `session`, `event`, `order`, `payment`, `ticket`); `entity_id` nulo quando a entidade não existe (ex.: login com e-mail desconhecido) |
 | `request_id` | text | Correlaciona com os logs |
 | `metadata` | jsonb | Sem dados pessoais: schema estrito por ação (chaves desconhecidas são rejeitadas); `CHECK` garante objeto JSON |

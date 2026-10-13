@@ -6,10 +6,26 @@ export const ACCESS_POLICY = "vira:access-policy";
 export type AccessPolicy =
   { readonly kind: "public" } | { readonly kind: "role"; readonly role: Role };
 
-/** The authenticated caller, set on the request by the auth module. */
+/**
+ * The authenticated caller, set on the request from a valid access token
+ * (authentication.middleware.ts).
+ */
 export interface AuthenticatedUser {
   readonly id: string;
   readonly role: Role;
+  /** Session (refresh-token family) the access token was issued from. */
+  readonly sessionId: string;
+  /**
+   * Where the access token came from. Only a cookie is sent by the browser on its own,
+   * so only cookie-authenticated requests need a CSRF token (csrf.guard.ts).
+   */
+  readonly credential: "cookie" | "bearer";
+}
+
+declare module "express" {
+  interface Request {
+    user?: AuthenticatedUser;
+  }
 }
 
 export type AccessDecision = "allow" | "unauthenticated" | "forbidden" | "undeclared";
@@ -29,7 +45,7 @@ export const RequireRole = (role: Role): ClassDecorator & MethodDecorator =>
  */
 export function decideAccess(
   policy: AccessPolicy | undefined,
-  user: AuthenticatedUser | undefined,
+  user: Pick<AuthenticatedUser, "role"> | undefined,
 ): AccessDecision {
   if (!policy) return "undeclared";
   if (policy.kind === "public") return "allow";

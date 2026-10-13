@@ -8,6 +8,7 @@ export const PROBLEM_TYPES = {
   "invalid-credentials": { status: 401, title: "E-mail ou senha inválidos" },
   forbidden: { status: 403, title: "Acesso negado" },
   "email-not-verified": { status: 403, title: "E-mail ainda não verificado" },
+  "csrf-failed": { status: 403, title: "Requisição de origem não confirmada" },
   "not-found": { status: 404, title: "Recurso não encontrado" },
   "token-expired": { status: 410, title: "Link expirado ou já utilizado" },
   "payload-too-large": { status: 413, title: "Corpo da requisição muito grande" },

@@ -61,17 +61,25 @@ describe("every application route declares an access policy", () => {
     expect(collectRoutes(testApp).map((r) => r.name)).toContain("GET HealthController.live");
   });
 
-  it("declares the sign-up, verification and login routes as public", () => {
+  it("keeps sign-up, verification, login, refresh and the CSRF token public, and sessions private", () => {
     const authRoutes = collectRoutes(testApp).filter((route) =>
       route.name.includes("AuthController"),
     );
+    const policies = Object.fromEntries(authRoutes.map((route) => [route.name, route.policy]));
 
-    expect(authRoutes.map((route) => route.name).sort()).toEqual([
-      "POST AuthController.login",
-      "POST AuthController.register",
-      "POST AuthController.verify",
-    ]);
-    for (const route of authRoutes) expect(route.policy, route.name).toEqual({ kind: "public" });
+    const publicRoute = { kind: "public" };
+    const buyer = { kind: "role", role: "BUYER" };
+    expect(policies).toEqual({
+      "POST AuthController.register": publicRoute,
+      "POST AuthController.verify": publicRoute,
+      "POST AuthController.login": publicRoute,
+      "POST AuthController.refresh": publicRoute,
+      "GET AuthController.csrf": publicRoute,
+      "POST AuthController.logout": buyer,
+      "POST AuthController.logoutAll": buyer,
+      "GET AuthController.sessions": buyer,
+      "DELETE AuthController.revokeSession": buyer,
+    });
   });
 
   it("has no route without @Public() or @RequireRole()", () => {

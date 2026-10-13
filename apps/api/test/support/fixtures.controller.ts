@@ -62,6 +62,13 @@ export class FixturesController {
   organizer(): { reached: true } {
     return { reached: true };
   }
+
+  /** A state-changing route that acts with the caller's session. */
+  @RequireRole("BUYER")
+  @Post("buyer-action")
+  buyerAction(): { reached: true } {
+    return { reached: true };
+  }
 }
 
 @Module({ controllers: [FixturesController] })

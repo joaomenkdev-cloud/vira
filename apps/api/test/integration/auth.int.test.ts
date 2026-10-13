@@ -48,6 +48,14 @@ class CountingHasher {
   }
 }
 
+/** Cookies the API sets when a session starts (cookie flags: sessions.int.test.ts). */
+const SESSION_COOKIES = ["__Host-vira_at", "__Host-vira_csrf", "__Secure-vira_rt"];
+
+function sessionCookieNames(response: Response): string[] {
+  const cookies = (response.headers["set-cookie"] ?? []) as unknown as string[];
+  return cookies.map((cookie) => cookie.split("=", 1)[0] ?? "").sort();
+}
+
 function problemOf(response: Response): ProblemDetails {
   return problemDetailsSchema.parse(response.body);
 }
@@ -237,7 +245,7 @@ describe.skipIf(!dockerAvailable)(
         expect(JSON.stringify(outbox)).not.toContain(email);
       });
 
-      it("verifies the address with the link's token and answers with the user", async () => {
+      it("verifies the address with the link's token, answers with the user and opens a session", async () => {
         const email = nextEmail();
         const token = await signUp(email);
 
@@ -254,7 +262,7 @@ describe.skipIf(!dockerAvailable)(
         });
         const user = await prisma.user.findUniqueOrThrow({ where: { email } });
         expect(user.emailVerifiedAt).not.toBeNull();
-        expect(response.headers["set-cookie"]).toBeUndefined();
+        expect(sessionCookieNames(response)).toEqual(SESSION_COOKIES);
       });
 
       it("tells the owner of a known address that they already have an account, with no link", async () => {
@@ -339,7 +347,7 @@ describe.skipIf(!dockerAvailable)(
     });
 
     describe("login", () => {
-      it("answers 200 with the user and no cookies", async () => {
+      it("answers 200 with the user and opens a session", async () => {
         const { email, id } = await verifiedUser();
 
         const response = await login(email, PASSWORD).expect(200);
@@ -347,7 +355,7 @@ describe.skipIf(!dockerAvailable)(
         expect(response.body).toEqual({
           user: { id, name: "Ana Souza", email, role: "BUYER", emailVerified: true },
         });
-        expect(response.headers["set-cookie"]).toBeUndefined();
+        expect(sessionCookieNames(response)).toEqual(SESSION_COOKIES);
         expect(JSON.stringify(response.body)).not.toContain("argon2");
       });
 
@@ -365,6 +373,7 @@ describe.skipIf(!dockerAvailable)(
 
         expect(problemOf(wrongPassword).type).toBe(problemTypeUri("invalid-credentials"));
         expect(observable(unknownAddress)).toEqual(observable(wrongPassword));
+        expect(wrongPassword.headers["set-cookie"]).toBeUndefined();
       });
 
       it("spends one password verification per attempt, whether the address exists or not", async () => {

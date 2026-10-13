@@ -17,6 +17,15 @@ function smtpUsesTls(smtpUrl: string): boolean {
   return url.protocol === "smtps:" || url.searchParams.get("requireTLS") === "true";
 }
 
+/**
+ * HMAC keys (JWT_SECRET, CSRF_SECRET): at least 256 bits. 32 random bytes in base64
+ * (`openssl rand -base64 32`) are 44 characters.
+ */
+const SECRET_MIN_LENGTH = 43;
+const secretSchema = z
+  .string()
+  .min(SECRET_MIN_LENGTH, `must have at least ${SECRET_MIN_LENGTH} characters (256 bits)`);
+
 function usesTls(databaseUrl: string): boolean {
   const sslMode = new URL(databaseUrl).searchParams.get("sslmode");
   return sslMode !== null && ENCRYPTED_SSL_MODES.has(sslMode);
@@ -41,8 +50,18 @@ export const envSchema = z
     SMTP_URL: z.url({ protocol: /^smtps?$/ }),
     MAIL_FROM: z.string().max(200).regex(MAIL_FROM_PATTERN).optional(),
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).max(60_000).default(5_000),
+    JWT_SECRET: secretSchema,
+    CSRF_SECRET: secretSchema,
   })
   .superRefine((env, ctx) => {
+    // One key per purpose: a CSRF token must never verify as a JWT signature, or vice versa.
+    if (env.JWT_SECRET === env.CSRF_SECRET) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["CSRF_SECRET"],
+        message: "must differ from JWT_SECRET",
+      });
+    }
     if (env.NODE_ENV !== "production") return;
     // Every hop is encrypted in production (docs/SECURITY_MODEL.md, ASVS V12).
     if (!env.WEB_ORIGIN.startsWith("https://")) {
@@ -100,6 +119,7 @@ export const envSchema = z
     redis: { url: env.REDIS_URL },
     mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM ?? DEFAULT_MAIL_FROM },
     worker: { mode: env.WORKER_MODE, outboxPollIntervalMs: env.OUTBOX_POLL_INTERVAL_MS },
+    auth: { jwtSecret: env.JWT_SECRET, csrfSecret: env.CSRF_SECRET },
   }));
 
 export type AppConfig = z.output<typeof envSchema>;

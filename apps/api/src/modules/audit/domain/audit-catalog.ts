@@ -35,6 +35,7 @@ export const AUDIT_CATALOG = {
     entityType: "session",
     metadata: z.strictObject({ revokedSessions: z.number().int().positive() }),
   },
+  "auth.session_revoked": { entityType: "session", metadata: z.strictObject({}) },
   "auth.password_changed": {
     entityType: "user",
     metadata: z.strictObject({ via: z.enum(["change", "reset"]) }),

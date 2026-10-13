@@ -16,6 +16,8 @@ describe("runWorker", () => {
         REDIS_URL: "redis://insecure.example",
         SMTP_URL: "smtps://mail.example",
         MAIL_FROM: "Vira <no-reply@vira.example>",
+        JWT_SECRET: "j".repeat(44),
+        CSRF_SECRET: "c".repeat(44),
       },
       { writeError: (message) => errors.push(message) },
     );

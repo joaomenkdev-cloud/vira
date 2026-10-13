@@ -5,6 +5,12 @@ useDefault = true
 [allowlist]
 description = "Documentation placeholders and local-only development credentials"
 paths = ['''\.env\.example$''']
-# Exact local-only values from docker-compose.yml and infra/seaweedfs/s3.json.
+# Exact local-only values from docker-compose.yml and infra/seaweedfs/s3.json, and the
+# signing keys the API tests use (apps/api/test/support/create-test-app.ts).
 # Never add real credentials here.
-regexes = ['''vira-local-secret''', '''vira_local''']
+regexes = [
+  '''vira-local-secret''',
+  '''vira_local''',
+  '''test-jwt-secret-0123456789-abcdefghijklmnopqrstuvwxyz''',
+  '''test-csrf-secret-0123456789-abcdefghijklmnopqrstuvwxyz''',
+]

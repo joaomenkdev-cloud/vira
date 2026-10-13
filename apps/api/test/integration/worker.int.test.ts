@@ -9,6 +9,7 @@ import { loadConfig } from "../../src/platform/config/load-config.js";
 import { PrismaService } from "../../src/platform/database/prisma.service.js";
 import {
   createTestApp,
+  TEST_SECRETS,
   TEST_WEB_ORIGIN,
   UNREACHABLE_INFRASTRUCTURE,
 } from "../support/create-test-app.js";
@@ -96,6 +97,7 @@ describe.skipIf(!dockerAvailable)("worker modes (PostgreSQL + Redis)", () => {
       WEB_ORIGIN: TEST_WEB_ORIGIN,
       LOG_LEVEL: "silent",
       ...UNREACHABLE_INFRASTRUCTURE,
+      ...TEST_SECRETS,
       ...env,
     });
     const worker = await NestFactory.createApplicationContext(WorkerModule.register({ config }), {

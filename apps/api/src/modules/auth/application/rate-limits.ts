@@ -10,4 +10,5 @@ export const AUTH_RATE_LIMITS = {
   verifyEmail: { name: "auth.verify.ip", limit: 10, windowSeconds: 60 * 60 },
   loginIp: { name: "auth.login.ip", limit: 10, windowSeconds: 15 * 60 },
   loginAccount: { name: "auth.login.account", limit: 5, windowSeconds: 15 * 60 },
+  refresh: { name: "auth.refresh.ip", limit: 30, windowSeconds: 60 },
 } as const satisfies Record<string, RateLimitRule>;

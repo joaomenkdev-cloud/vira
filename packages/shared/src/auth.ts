@@ -88,3 +88,33 @@ export type VerifyEmailRequest = z.infer<typeof verifyEmailRequestSchema>;
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type PublicUser = z.infer<typeof publicUserSchema>;
 export type UserResponse = z.infer<typeof userResponseSchema>;
+
+/** Sessions and CSRF (N4, docs/API.md#autenticação-auth). */
+
+export const csrfTokenResponseSchema = z
+  .strictObject({
+    csrfToken: z.string().meta({
+      description: "Enviar no header `X-CSRF-Token` em `POST`/`PUT`/`PATCH`/`DELETE`",
+    }),
+  })
+  .meta({ id: "CsrfTokenResponse" });
+
+export const sessionIdSchema = z.uuid().meta({ description: "Id da sessão" });
+
+export const sessionSchema = z
+  .strictObject({
+    id: sessionIdSchema,
+    authenticatedAt: z.iso.datetime().meta({ description: "Quando o login foi feito" }),
+    lastRefreshedAt: z.iso.datetime().meta({ description: "Última renovação da sessão" }),
+    expiresAt: z.iso.datetime().meta({ description: "Quando a sessão acaba se não for usada" }),
+    current: z.boolean().meta({ description: "É a sessão desta requisição" }),
+  })
+  .meta({ id: "Session" });
+
+export const sessionListResponseSchema = z
+  .strictObject({ data: z.array(sessionSchema) })
+  .meta({ id: "SessionList" });
+
+export type CsrfTokenResponse = z.infer<typeof csrfTokenResponseSchema>;
+export type SessionSummary = z.infer<typeof sessionSchema>;
+export type SessionListResponse = z.infer<typeof sessionListResponseSchema>;

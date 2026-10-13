@@ -21,7 +21,7 @@ Este documento é o contrato planejado. Mudanças incompatíveis exigem `/api/v2
 | Cookie `__Host-vira_at` | JWT de acesso (10 min), `HttpOnly; Secure; SameSite=Lax; Path=/`. Enviado automaticamente pelo navegador via proxy de mesma origem. |
 | Cookie `__Secure-vira_rt` | Refresh token opaco (rotativo), `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth`. |
 | `Authorization: Bearer <jwt>` | Aceito para clientes não-navegador (testes, futuros apps). Não exige CSRF. |
-| Header `X-CSRF-Token` | Obrigatório em `POST`/`PUT`/`PATCH`/`DELETE` autenticados por cookie. Padrão double-submit com token assinado (HMAC com o id da sessão), obtido em `GET /auth/csrf`. A API também confere `Origin`/`Sec-Fetch-Site`. |
+| Header `X-CSRF-Token` | Obrigatório em `POST`/`PUT`/`PATCH`/`DELETE` de rotas que exigem papel quando a sessão vem do cookie de acesso. Padrão double-submit com token assinado (HMAC com o id da sessão), obtido em `GET /auth/csrf`; o valor do header precisa ser igual ao do cookie `__Host-vira_csrf`. Em **todo** método que altera dados, a API também confere `Origin` (igual ao do web) ou, sem ele, `Sec-Fetch-Site: same-origin`. |
 
 Detalhes em [ADR-0005](adr/0005-autenticacao-e-tokens.md).
 
@@ -128,15 +128,17 @@ Legenda de papel: `PUBLIC`, `BUYER` (qualquer usuário autenticado), `ORGANIZER*
 
 | Método | Rota | Papel | Corpo | Sucesso | Erros | Rate limit |
 | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/auth/csrf` | PUBLIC | — | `200 { csrfToken }` + cookie | — | — |
+| GET | `/auth/csrf` | sessão (cookie de acesso ou de refresh) | — | `200 { csrfToken }` + cookie `__Host-vira_csrf` | 401 | — |
 | POST | `/auth/register` | PUBLIC | `{ name, email, password }` | `202 { status: "accepted" }` sempre, com a mesma resposta para e-mail novo ou existente; envia link de verificação (ou aviso "você já tem conta") | 400, 429 | 5/h/ip |
-| POST | `/auth/login` | PUBLIC | `{ email, password }` | `200 { user }` (+ cookies a partir da N4) | 400, 401 `invalid-credentials`, 403 `email-not-verified`, 429 | 10/15 min/ip e 5/15 min/conta |
+| POST | `/auth/login` | PUBLIC | `{ email, password }` | `200 { user }` + cookies da sessão | 400, 401 `invalid-credentials`, 403 `email-not-verified`, 429 | 10/15 min/ip e 5/15 min/conta |
 | POST | `/auth/refresh` | cookie de refresh | — | `204` + cookies rotacionados | 401 (inclusive reuso detectado → família revogada) | 30/min/ip |
 | POST | `/auth/logout` | BUYER | — | `204`, revoga a sessão e limpa cookies | 401 | — |
-| POST | `/auth/logout-all` | BUYER | — | `204`, revoga todas as sessões | 401 | — |
+| POST | `/auth/logout-all` | BUYER | — | `204`, revoga todas as sessões e limpa cookies | 401 | — |
+| GET | `/auth/sessions` | BUYER | — | `200 { data: [{ id, authenticatedAt, lastRefreshedAt, expiresAt, current }] }` | 401 | — |
+| DELETE | `/auth/sessions/{id}` | BUYER | — | `204`, revoga a sessão (e limpa os cookies se for a atual) | 400, 401, 404 (de outra conta, inexistente ou já encerrada) | — |
 | GET | `/auth/oauth/{provider}` | PUBLIC | `provider ∈ google, github` | `302` para o provedor (state + PKCE) | 404 | 20/min/ip |
 | GET | `/auth/oauth/{provider}/callback` | PUBLIC | `code`, `state` | `302` para o web + cookies | `302` para tela de erro | 20/min/ip |
-| POST | `/auth/email/verify` | PUBLIC | `{ token }` | `200 { user }` (+ cookies a partir da N4: verificar o e-mail inicia a sessão) | 400, 410 `token-expired` (expirado/usado/desconhecido), 429 | 10/h/ip |
+| POST | `/auth/email/verify` | PUBLIC | `{ token }` | `200 { user }` + cookies da sessão (verificar o e-mail inicia a sessão) | 400, 410 `token-expired` (expirado/usado/desconhecido), 429 | 10/h/ip |
 | POST | `/auth/email/resend` | BUYER | — | `204` | 429 | 3/h/conta |
 | POST | `/auth/password/forgot` | PUBLIC | `{ email }` | `202` sempre (não revela se o e-mail existe) | 429 | 5/h/ip |
 | POST | `/auth/password/reset` | PUBLIC | `{ token, password }` | `204`; revoga todas as sessões | 400, 410 | 10/h/ip |
@@ -152,7 +154,7 @@ Legenda de papel: `PUBLIC`, `BUYER` (qualquer usuário autenticado), `ORGANIZER*
 
 O token vai no **fragmento** (`#token=`) para não chegar a logs de servidor nem ao `Referer`; a página do web (N7) o lê no navegador e o envia no corpo de `POST /auth/email/verify`. Ele tem 256 bits, vale 24 h, é de uso único e só o hash SHA-256 fica no banco; quem o gera é o consumidor da fila `email`, na hora de enviar, então ele nunca passa pela outbox nem pelo Redis. O cadastro faz o hash da senha antes de consultar o e-mail, para que o tempo de resposta não revele se ele já existe.
 
-**Login.** Valida o par e responde `200 { user }`; cookies e sessão chegam na N4. `user` é `{ id, name, email, role, emailVerified }`.
+**Login.** Valida o par, inicia a sessão (cookies) e responde `200 { user }`. `user` é `{ id, name, email, role, emailVerified }`.
 
 | Situação | Resposta |
 | --- | --- |
@@ -163,6 +165,24 @@ O token vai no **fragmento** (`#token=`) para não chegar a logs de servidor nem
 **Bloqueio progressivo.** A 5ª falha seguida bloqueia a conta por 1 min e cada nova falha dobra o bloqueio, até 1 h. Tentativas durante o bloqueio não contam (não dá para prolongá-lo de fora). Login com sucesso zera o contador.
 
 **Rate limit.** Por IP, antes de validar o corpo: cadastro 5/h, verificação 10/h, login 10/15 min. Por conta (chave: hash do e-mail), no caso de uso e antes do hash: login 5/15 min. Toda resposta dessas rotas traz `RateLimit-Limit`, `RateLimit-Remaining` e `RateLimit-Reset` (segundos); o `429` acrescenta `Retry-After`. Se o Redis estiver fora, a requisição passa e o aviso vai para o log (o bloqueio por conta, no banco, continua valendo).
+
+#### Sessões e CSRF (N4)
+
+**Cookies.** Login e verificação de e-mail gravam:
+
+| Cookie | Conteúdo | Atributos | Vida |
+| --- | --- | --- | --- |
+| `__Host-vira_at` | JWT de acesso HS256 (`sub`, `role`, `sid`, `iss: vira-api`, `aud: vira`, `iat`, `exp`) | `HttpOnly; Secure; SameSite=Lax; Path=/` | 10 min |
+| `__Secure-vira_rt` | Refresh token opaco (32 bytes, base64url); no banco, só o SHA-256 | `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth` | 7 dias sem uso, 30 no máximo |
+| `__Host-vira_csrf` | Token CSRF (`GET /auth/csrf`) | `HttpOnly; Secure; SameSite=Lax; Path=/` | Sessão do navegador |
+
+Um novo login apaga o cookie CSRF anterior (ele valia para a sessão antiga) e encerra a sessão cujo refresh token o navegador ainda tinha.
+
+**Refresh.** Cada refresh token vale **uma vez**: `POST /auth/refresh` responde `204` com os dois cookies novos e o mesmo id de sessão. Reapresentar um token já trocado revoga a sessão inteira (inclusive o token mais novo, de quem quer que esteja com ele), responde `401`, limpa os cookies e registra `auth.refresh_reuse_detected`. Dois refreshes simultâneos com o mesmo cookie caem nessa regra, então o web faz um de cada vez. O papel é relido do banco a cada refresh.
+
+**CSRF.** A página chama `GET /auth/csrf` depois do login (ou quando o cookie sumir) e manda o `csrfToken` no header `X-CSRF-Token`. Sem o header, com valor diferente do cookie ou com o token de outra sessão: `403 csrf-failed`. Rotas públicas (login, cadastro, verificação, refresh) não pedem o token, só a origem certa. `Authorization: Bearer` não pede token.
+
+**Logout.** `logout` revoga a sessão atual, `logout-all` todas (auditado com quantas estavam ativas), `DELETE /auth/sessions/{id}` uma específica (auditado como `auth.session_revoked`). O refresh para na hora; um token de acesso já emitido vale até expirar (no máximo 10 min).
 
 ### Conta e privacidade (`users`)
 
