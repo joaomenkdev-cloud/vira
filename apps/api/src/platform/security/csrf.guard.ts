@@ -56,12 +56,11 @@ export class CsrfGuard implements CanActivate {
     if (policy?.kind !== "role" || user?.credential !== "cookie") return true;
 
     const header = request.headers[CSRF_HEADER];
-    const cookie = readCookie(request, CSRF_COOKIE);
+    const sent = typeof header === "string" ? header : "";
+    // The signature is always checked; a missing header or cookie simply does not match.
     const valid =
-      typeof header === "string" &&
-      cookie !== undefined &&
-      sameToken(header, cookie) &&
-      this.tokens.verify(header, user.sessionId);
+      this.tokens.verify(sent, user.sessionId) &&
+      sameToken(sent, readCookie(request, CSRF_COOKIE) ?? "");
     if (!valid) throw new ProblemException("csrf-failed");
     return true;
   }

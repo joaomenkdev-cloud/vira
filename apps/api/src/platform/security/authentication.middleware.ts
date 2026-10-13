@@ -17,10 +17,11 @@ export function authenticateRequests(tokens: AccessTokens): RequestHandler {
     // A request that names its credential is judged by that credential alone.
     const credential =
       header !== undefined
-        ? { token: BEARER.exec(header)?.[1], kind: "bearer" as const }
-        : { token: readCookie(request, ACCESS_COOKIE), kind: "cookie" as const };
+        ? { token: BEARER.exec(header)?.[1] ?? "", kind: "bearer" as const }
+        : { token: readCookie(request, ACCESS_COOKIE) ?? "", kind: "cookie" as const };
 
-    const subject = credential.token === undefined ? null : tokens.verify(credential.token);
+    // Always verified: a missing token is just one that does not verify.
+    const subject = tokens.verify(credential.token);
     if (subject) {
       request.user = {
         id: subject.sub,
