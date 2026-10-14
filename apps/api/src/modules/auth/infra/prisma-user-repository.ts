@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
-import type { User as UserRow } from "../../../generated/prisma/client.js";
+import { Prisma, type User as UserRow } from "../../../generated/prisma/client.js";
 import { clientFor } from "../../../platform/database/prisma-transaction.js";
 import { PrismaService } from "../../../platform/database/prisma.service.js";
 import type { TransactionContext } from "../../../platform/database/transaction.js";
@@ -18,6 +18,7 @@ function toDomain(row: UserRow): User {
     passwordHash: row.passwordHash,
     role: row.role,
     emailVerifiedAt: row.emailVerifiedAt,
+    pendingEmail: row.pendingEmail,
     failedLoginCount: row.failedLoginCount,
     lockedUntil: row.lockedUntil,
     createdAt: row.createdAt,
@@ -79,6 +80,46 @@ export class PrismaUserRepository implements UserRepository {
       where: { id: userId, emailVerifiedAt: null },
       data: { emailVerifiedAt: at, passwordHash: null, failedLoginCount: 0, lockedUntil: null },
     });
+  }
+
+  async setPassword(userId: string, passwordHash: string, tx?: TransactionContext): Promise<void> {
+    await clientFor(this.prisma, tx).user.update({
+      where: { id: userId },
+      data: { passwordHash, failedLoginCount: 0, lockedUntil: null },
+    });
+  }
+
+  async setPendingEmail(
+    userId: string,
+    pendingEmail: string,
+    tx?: TransactionContext,
+  ): Promise<void> {
+    await clientFor(this.prisma, tx).user.update({
+      where: { id: userId },
+      data: { pendingEmail },
+    });
+  }
+
+  async confirmEmailChange(
+    userId: string,
+    newEmail: string,
+    at: Date,
+    tx?: TransactionContext,
+  ): Promise<boolean> {
+    try {
+      // Conditional on the address still being the pending one: a link to an address
+      // the person has since replaced confirms nothing.
+      const { count } = await clientFor(this.prisma, tx).user.updateMany({
+        where: { id: userId, pendingEmail: newEmail },
+        data: { email: newEmail, pendingEmail: null, emailVerifiedAt: at },
+      });
+      return count === 1;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new EmailAlreadyRegisteredError();
+      }
+      throw error;
+    }
   }
 
   async recordFailedLogin(userId: string): Promise<number> {

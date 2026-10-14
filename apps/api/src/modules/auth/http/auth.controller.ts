@@ -13,8 +13,14 @@ import {
 } from "@nestjs/common";
 import { ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import {
+  type AcceptedResponse,
+  acceptedResponseSchema,
+  type ConfirmEmailChangeRequest,
+  confirmEmailChangeRequestSchema,
   type CsrfTokenResponse,
   csrfTokenResponseSchema,
+  type ForgotPasswordRequest,
+  forgotPasswordRequestSchema,
   type LoginRequest,
   loginRequestSchema,
   problemDetailsSchema,
@@ -22,6 +28,8 @@ import {
   type RegisterResponse,
   registerRequestSchema,
   registerResponseSchema,
+  type ResetPasswordRequest,
+  resetPasswordRequestSchema,
   sessionIdSchema,
   type SessionListResponse,
   sessionListResponseSchema,
@@ -34,34 +42,23 @@ import type { Request, Response } from "express";
 
 import { ProblemException } from "../../../platform/errors/problem.exception.js";
 import { RateLimit } from "../../../platform/rate-limit/rate-limit.guard.js";
-import {
-  RateLimitExceededError,
-  rateLimitHeaders,
-} from "../../../platform/rate-limit/rate-limiter.js";
 import { CLOCK, type Clock } from "../../../platform/runtime/runtime.js";
-import {
-  type AuthenticatedUser,
-  Public,
-  RequireRole,
-} from "../../../platform/security/access-policy.js";
+import { Public, RequireRole } from "../../../platform/security/access-policy.js";
 import { readCookie } from "../../../platform/security/cookies.js";
 import { CsrfTokens } from "../../../platform/security/csrf.js";
+import { ConfirmEmailChange } from "../application/confirm-email-change.js";
 import { EndSession } from "../application/end-session.js";
-import {
-  EmailNotVerifiedError,
-  InvalidCredentialsError,
-  InvalidSessionError,
-  InvalidTokenError,
-  SessionNotFoundError,
-} from "../application/errors.js";
+import { InvalidSessionError } from "../application/errors.js";
 import { ListSessions } from "../application/list-sessions.js";
 import { LoginUser } from "../application/login-user.js";
 import { AUTH_RATE_LIMITS } from "../application/rate-limits.js";
 import { RefreshSession } from "../application/refresh-session.js";
 import { RegisterUser } from "../application/register-user.js";
-import type { RequestContext } from "../application/request-context.js";
+import { RequestPasswordReset } from "../application/request-password-reset.js";
+import { ResetPassword } from "../application/reset-password.js";
 import { StartSession } from "../application/start-session.js";
 import { VerifyEmail } from "../application/verify-email.js";
+import { asProblem, callerOf, contextOf } from "./problems.js";
 import {
   clearCsrfCookie,
   clearSessionCookies,
@@ -69,32 +66,6 @@ import {
   writeCsrfCookie,
   writeSessionCookies,
 } from "./session-cookies.js";
-
-function contextOf(request: Request): RequestContext {
-  return typeof request.id === "string" ? { requestId: request.id } : {};
-}
-
-/** The documented answer for each way a use case can refuse. */
-async function asProblem<T>(work: () => Promise<T>): Promise<T> {
-  try {
-    return await work();
-  } catch (error) {
-    if (error instanceof InvalidCredentialsError) throw new ProblemException("invalid-credentials");
-    if (error instanceof EmailNotVerifiedError) throw new ProblemException("email-not-verified");
-    if (error instanceof InvalidTokenError) throw new ProblemException("token-expired");
-    if (error instanceof SessionNotFoundError) throw new ProblemException("not-found");
-    if (error instanceof RateLimitExceededError) {
-      throw new ProblemException("rate-limited", { headers: rateLimitHeaders(error.result) });
-    }
-    throw error;
-  }
-}
-
-/** The caller of a route that requires a role; the access guard already ran. */
-function callerOf(request: Request): AuthenticatedUser {
-  if (!request.user) throw new ProblemException("unauthenticated");
-  return request.user;
-}
 
 /**
  * Sign-up, e-mail verification, password login and sessions
@@ -114,6 +85,9 @@ export class AuthController {
     private readonly refreshSession: RefreshSession,
     private readonly endSession: EndSession,
     private readonly listSessions: ListSessions,
+    private readonly requestPasswordReset: RequestPasswordReset,
+    private readonly resetPassword: ResetPassword,
+    private readonly confirmEmailChange: ConfirmEmailChange,
     private readonly csrfTokens: CsrfTokens,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -125,7 +99,8 @@ export class AuthController {
     summary: "Cadastra uma conta",
     description:
       "Responde sempre `202` com o mesmo corpo, haja ou não conta com o e-mail: quem já tem " +
-      "conta recebe um aviso por e-mail, quem não tem recebe o link de verificação.",
+      "conta recebe um aviso por e-mail, quem não tem recebe o link de verificação. Senha " +
+      "encontrada em vazamentos conhecidos: `400` `breached-password`, para qualquer e-mail.",
   })
   @ApiResponse({ status: HttpStatus.ACCEPTED, standardSchema: registerResponseSchema })
   @ApiResponse({ status: HttpStatus.BAD_REQUEST, standardSchema: problemDetailsSchema })
@@ -134,7 +109,7 @@ export class AuthController {
     @Body({ schema: registerRequestSchema }) body: RegisterRequest,
     @Req() request: Request,
   ): Promise<RegisterResponse> {
-    await this.registerUser.execute(body, contextOf(request));
+    await asProblem(() => this.registerUser.execute(body, contextOf(request)));
     return { status: "accepted" };
   }
 
@@ -183,6 +158,70 @@ export class AuthController {
     const user = await asProblem(() => this.loginUser.execute(body, contextOf(request)));
     await this.openSession(user, request, response);
     return { user };
+  }
+
+  @Post("password/forgot")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @RateLimit(AUTH_RATE_LIMITS.forgotPasswordIp)
+  @ApiOperation({
+    summary: "Pede o link de redefinição de senha",
+    description:
+      "Responde sempre `202` com o mesmo corpo, haja ou não conta com o e-mail. Se houver, " +
+      "o link (válido por 30 min, uso único) vai para o e-mail da conta.",
+  })
+  @ApiResponse({ status: HttpStatus.ACCEPTED, standardSchema: acceptedResponseSchema })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, standardSchema: problemDetailsSchema })
+  @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, standardSchema: problemDetailsSchema })
+  async forgotPassword(
+    @Body({ schema: forgotPasswordRequestSchema }) body: ForgotPasswordRequest,
+    @Req() request: Request,
+  ): Promise<AcceptedResponse> {
+    await this.requestPasswordReset.execute(body, contextOf(request));
+    return { status: "accepted" };
+  }
+
+  @Post("password/reset")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RateLimit(AUTH_RATE_LIMITS.resetPasswordIp)
+  @ApiOperation({
+    summary: "Define uma nova senha com o token do link",
+    description:
+      "Token de uso único. Encerra todas as sessões da conta. Expirado, já usado ou " +
+      "desconhecido: `410`. Senha encontrada em vazamentos: `400` `breached-password` (o " +
+      "token continua valendo).",
+  })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, standardSchema: problemDetailsSchema })
+  @ApiResponse({ status: HttpStatus.GONE, standardSchema: problemDetailsSchema })
+  @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, standardSchema: problemDetailsSchema })
+  async reset(
+    @Body({ schema: resetPasswordRequestSchema }) body: ResetPasswordRequest,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<void> {
+    await asProblem(() => this.resetPassword.execute(body, contextOf(request)));
+    // Every session of the account just ended, this browser's included.
+    clearSessionCookies(response);
+  }
+
+  @Post("email/change/confirm")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RateLimit(AUTH_RATE_LIMITS.confirmEmailChangeIp)
+  @ApiOperation({
+    summary: "Confirma a troca de e-mail com o token do link",
+    description:
+      "O link vai para o novo endereço (`POST /me/email`). Token de uso único; expirado, " +
+      "já usado, desconhecido ou de um pedido substituído por outro: `410`.",
+  })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, standardSchema: problemDetailsSchema })
+  @ApiResponse({ status: HttpStatus.GONE, standardSchema: problemDetailsSchema })
+  @ApiResponse({ status: HttpStatus.TOO_MANY_REQUESTS, standardSchema: problemDetailsSchema })
+  async confirmEmail(
+    @Body({ schema: confirmEmailChangeRequestSchema }) body: ConfirmEmailChangeRequest,
+    @Req() request: Request,
+  ): Promise<void> {
+    await asProblem(() => this.confirmEmailChange.execute(body, contextOf(request)));
   }
 
   @Post("refresh")

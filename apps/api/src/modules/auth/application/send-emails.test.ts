@@ -84,7 +84,7 @@ describe("SendVerificationEmail", () => {
     ).toBeNull();
     expect(
       await s.tokens.consume(hashVerificationToken(second ?? ""), "EMAIL_VERIFICATION", now),
-    ).toEqual({ userId: s.user.id });
+    ).toEqual({ userId: s.user.id, newEmail: null });
   });
 
   it("does nothing for an account that is gone or already verified", async () => {

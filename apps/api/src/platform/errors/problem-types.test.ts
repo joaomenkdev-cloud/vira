@@ -7,6 +7,8 @@ describe("problem types", () => {
     expect(problemTypeForStatus(401)).toBe("unauthenticated");
     expect(problemTypeForStatus(403)).toBe("forbidden");
     expect(problemTypeForStatus(410)).toBe("token-expired");
+    expect(problemTypeForStatus(400)).toBe("validation-failed");
+    expect(problemTypeForStatus(409)).toBe("conflict");
   });
 
   it("documents each type with the status the API reference lists", () => {
