@@ -2,12 +2,14 @@ import "@fontsource-variable/inter";
 import "./globals.css";
 
 import type { Metadata, Viewport } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { CspNonce } from "@vira/ui";
 import type { ReactNode } from "react";
 
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { SESSION_HINT_COOKIE } from "@/lib/session/hint";
+import { SessionProvider } from "@/lib/session/session-provider";
 
 export const metadata: Metadata = {
   title: { default: "Vira — Encontre seu próximo evento", template: "%s · Vira" },
@@ -22,6 +24,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   // The Content Security Policy carries a per-request nonce (see proxy.ts), so pages
   // must be rendered on every request; reading the headers opts them into that.
   const nonce = (await headers()).get("x-nonce");
+  const hinted = (await cookies()).has(SESSION_HINT_COOKIE);
 
   return (
     <html lang="pt-BR">
@@ -34,11 +37,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         >
           Pular para o conteúdo
         </a>
-        <SiteHeader />
-        <main id="conteudo" tabIndex={-1} className="flex-1 focus:outline-none">
-          {children}
-        </main>
-        <SiteFooter />
+        <SessionProvider hinted={hinted}>
+          <SiteHeader />
+          <main id="conteudo" tabIndex={-1} className="flex-1 focus:outline-none">
+            {children}
+          </main>
+          <SiteFooter />
+        </SessionProvider>
       </body>
     </html>
   );

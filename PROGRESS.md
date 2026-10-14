@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 1 — Núcleo (o Marco 0 terminou com o merge da F7).
-- **Concluído (mergeado):** F1 a F7, N1 a N5 (PRs #1, #2, #8, #10–#17, #26) e Dependabot (#4–#7, #9 CodeQL v4).
-- **Entrega aberta:** N6 — Redefinição de senha e conta (`feat/users-account`), PR draft.
-- **Próximo passo:** N7 — Telas de autenticação (`feat/web-auth`), depois do merge da N6.
+- **Concluído (mergeado):** F1 a F7, N1 a N6 (PRs #1, #2, #8, #10–#17, #26, #27) e Dependabot (#4–#7, #9 CodeQL v4).
+- **Entrega aberta:** N7 — Telas de autenticação (`feat/web-auth`), PR draft.
+- **Próximo passo:** N8 — Eventos do organizador (API), depois do merge da N7.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,36 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-14 — N7: telas de autenticação
+
+Auditoria (antes de codar): o web tinha só a home, o 404 e `/dev/design-system`; o header só o logo; nenhum cliente da API. A API já tinha tudo o que as telas precisam (N3–N6) e o proxy `/api/v1/*` deixa os cookies first-party. Não existem ainda rotas de eventos, pedidos ou ingressos (N8 em diante), então a N7 ficou no que o ROADMAP pede: autenticação e conta.
+
+Feito (só `apps/web`, sem mudança na API):
+
+- **Cliente da API** (`src/lib/api`): `fetch` same-origin, Problem Details lidos para `ApiError` com o código do tipo e o `Retry-After`; refresh automático no `401` e **um refresh por vez** (as chamadas da aba dividem a mesma promessa, e as abas se revezam pela Web Locks API), como a detecção de reuso estrita da N4 exige; token CSRF buscado uma vez, enviado em `X-CSRF-Token` e buscado de novo uma vez quando a API recusa.
+- **Sessão no navegador** (`src/lib/session`): `SessionProvider` pergunta a `GET /me` quem está logado. Para não chamar a API (e levar `401`) em toda visita anônima, existe um cookie-dica `vira_session` legível pela página: o `proxy.ts` o grava quando a requisição traz o cookie de acesso (cobre o login social, que chega por redirect), a página o grava depois do login e o apaga quando a API diz que não há sessão. Ele só decide se vale perguntar; quem responde é a API.
+- **Páginas:** `/entrar` (e-mail e senha, botões de Google/GitHub, mensagens para `?erro=oauth-*`, `next` só com caminho do site), `/cadastro`, `/verificar-email`, `/esqueci-a-senha`, `/redefinir-senha`, `/confirmar-email` e `/conta` (nome, troca de e-mail, troca de senha, perfil de organizador, sessões com encerramento individual e "sair de todos" com confirmação). Header com "Entrar" ou avatar e menu ("Minha conta", "Sair").
+- **Formulários** (`src/components/forms`): validação no blur e no envio, resumo de erros no topo com links para os campos, foco no primeiro inválido, erros da API (`breached-password`, `incorrect-password`) no campo certo.
+- **Testes:** unitários (cliente: refresh único entre chamadas simultâneas, trava entre abas, CSRF e nova tentativa, sessão perdida, rotas de login sem refresh; erros e mensagens; validação; caminho de retorno seguro; token do fragmento usado uma vez; provedores sociais). E2E com Playwright + axe em desktop e mobile contra a API falsa ampliada (`e2e/fake-api.ts`, com cookies, CSRF e reuso estrito como a real): cadastro → confirmação → sair → entrar, volta ao `next`, sem redirecionamento aberto, erros de formulário, senha vazada, credenciais erradas, e-mail não confirmado, links expirados e incompletos, esqueci a senha completo, login social (sucesso e erro), **duas abas renovando a sessão ao mesmo tempo sem reuso detectado**, visita anônima sem nenhuma chamada à API, e toda a página de conta.
+- Prints novos em `docs/assets/screenshots` (`web-login-*`, `web-sign-up-*`, `web-forgot-password-*`, `web-email-verified-*`, `web-account-*`); `scripts/screenshots.mjs` tira os das páginas logadas com `FAKE_API_URL`.
+
+Decisões tomadas por conta própria:
+
+- **Escopo pelo ROADMAP:** o pedido falava em vitrine, checkout, ingressos e painel do organizador, mas a API dessas partes ainda não existe (N8, N10, V1–V8). A N7 entrega autenticação e conta; as outras telas ficam nas entregas delas (N11, N12, V6, V7, V8).
+- **Provedores sociais por variável do web** (`VIRA_OAUTH_PROVIDERS=google,github`): a API não tem rota que diga quais estão ligados, e um botão que leva a `404` seria pior do que nenhum. Sem a variável, não aparece botão.
+- **Token dos links lido uma vez e tirado da barra de endereço** (`history.replaceState`), e enviado uma única vez mesmo com o `StrictMode` rodando o efeito duas vezes.
+- **E-mail não confirmado no login:** a mensagem aponta "Esqueci minha senha", porque esse link também confirma o e-mail (N6) e o reenvio da verificação ainda exige sessão (pendência da N3).
+- **Erro some ao corrigir, não no blur:** um erro que sumisse no blur puxava o botão de baixo do cursor e o clique se perdia (o E2E pegou isso). O erro aparece no blur e no envio e some quando o valor fica válido.
+- **"Sair de todos"** usa modal de confirmação (ação destrutiva, DESIGN 3.5); encerrar uma sessão específica não pede.
+- **Perfil de organizador entrou na conta** (`POST /me/organizer` + refresh para o papel novo), com o aviso honesto de que o painel de eventos ainda está em construção.
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Configurar `VIRA_OAUTH_PROVIDERS`** no deploy do web (V11) junto com as credenciais da API.
+- **Reenvio da verificação sem sessão** continua pendente (N3); hoje o caminho é "Esqueci minha senha".
+- **Desvincular provedor social** e **excluir conta** (V9) ainda não têm tela.
+- **Páginas `/privacidade` e `/termos`** não existem; o cadastro não linka nada por enquanto.
 
 ### 2026-10-15 — N6: redefinição de senha, conta e senhas vazadas
 

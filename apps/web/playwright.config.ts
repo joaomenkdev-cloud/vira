@@ -23,7 +23,7 @@ export default defineConfig({
   webServer: [
     {
       // Stands in for the real API, so the /api/v1 proxy can be exercised in a browser.
-      command: "node e2e/fake-api.mjs",
+      command: "node e2e/fake-api.ts",
       env: { PORT: String(FAKE_API_PORT) },
       url: `http://127.0.0.1:${FAKE_API_PORT}/api/v1/health/live`,
       reuseExistingServer: !process.env["CI"],
@@ -31,8 +31,9 @@ export default defineConfig({
     {
       // Requires `next build` to have run (CI does; locally: pnpm --filter @vira/web build).
       command: `pnpm exec next start --port ${WEB_PORT}`,
-      // Serves /dev/design-system from the production build (src/config/design-system.ts).
-      env: { VIRA_DESIGN_SYSTEM: "true" },
+      // Serves /dev/design-system from the production build (src/config/design-system.ts),
+      // and offers both social logins (the stand-in API answers for them).
+      env: { VIRA_DESIGN_SYSTEM: "true", VIRA_OAUTH_PROVIDERS: "google,github" },
       url: `http://127.0.0.1:${WEB_PORT}`,
       reuseExistingServer: !process.env["CI"],
       timeout: 120_000,

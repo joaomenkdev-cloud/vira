@@ -21,6 +21,11 @@
       "dependsOn": ["^build", "db:generate"],
       "outputs": [],
       "env": ["API_ORIGIN", "VERCEL"]
+    },
+    "dev": {
+      "dependsOn": ["^build", "db:generate"],
+      "cache": false,
+      "persistent": true
     }
   },
   "globalPassThroughEnv": ["CI"]

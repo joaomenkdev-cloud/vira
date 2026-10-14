@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { Header, HeaderLogo } from "@vira/ui";
+import { Header, HeaderActions, HeaderLogo } from "@vira/ui";
+
+import { AccountMenu } from "./account-menu";
 
 /**
- * The header carries only what exists today: the logo. Navigation ("Explorar",
- * "Meus ingressos") and sign-in arrive with the pages and features they lead to; the
- * design system already has the slots for them (HeaderNav, HeaderActions).
+ * The logo and, on the right, "Entrar" or the account menu. The navigation ("Explorar",
+ * "Meus ingressos") arrives with the pages it leads to; the design system already has
+ * the slot for it (HeaderNav).
  */
 export function SiteHeader() {
   return (
@@ -12,6 +14,9 @@ export function SiteHeader() {
       <HeaderLogo asChild>
         <Link href="/" aria-label="Vira, página inicial" />
       </HeaderLogo>
+      <HeaderActions>
+        <AccountMenu />
+      </HeaderActions>
     </Header>
   );
 }
