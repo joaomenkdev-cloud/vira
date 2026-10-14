@@ -88,7 +88,7 @@ Ferramentas: pnpm workspaces + Turborepo ([ADR-0001](adr/0001-monorepo.md)). `pa
 
 | Módulo | Responsabilidade | Depende de |
 | --- | --- | --- |
-| `auth` | Cadastro, login com senha, OAuth (Google, GitHub), sessões, refresh rotativo, CSRF, verificação de e-mail, redefinição de senha. Até a N6 também é dono das tabelas `users` e `verification_tokens` (ver "Módulo `auth`" na seção 6). | `users` (a partir da N6), `audit`, `outbox` |
+| `auth` | Cadastro, login com senha, OAuth (Google, GitHub), sessões, refresh rotativo, CSRF, verificação de e-mail, redefinição de senha. Até a N6 também é dono das tabelas `users` e `verification_tokens` (e, de vez, de `oauth_accounts`) (ver "Módulo `auth`" na seção 6). | `users` (a partir da N6), `audit`, `outbox` |
 | `users` | Perfil, papéis (BUYER, ORGANIZER, ADMIN), perfil de organizador, exportação e anonimização de conta (LGPD). | `audit` |
 | `events` | Lado do organizador: rascunho, edição, publicação e cancelamento de eventos; tipos de ingresso; upload de imagem. | `users`, `audit` |
 | `catalog` | Lado público (somente leitura): listagem, busca e detalhe de eventos publicados, paginação por cursor. | — (lê projeções de `events`) |
@@ -320,7 +320,8 @@ sequenceDiagram
 - **Porta `Mailer`** (`platform/mail`): adaptador SMTP com nodemailer; qualquer falha vira `MailDeliveryError`, que não carrega destinatário, assunto nem resposta do servidor (vai para logs de job). Mensagens de texto puro, sem HTML.
 - **O token nunca está no payload da outbox**, só o `userId`: quem gera o token é o consumidor, na hora de enviar. A entrega é *pelo menos uma vez*: se o job for repetido depois de o e-mail sair, chega um segundo link e o primeiro deixa de valer.
 - **Anti-enumeração:** o cadastro responde igual e leva o mesmo tempo para e-mail novo e conhecido (o hash vem antes da consulta); no login, e-mail inexistente, senha errada, conta sem senha e conta bloqueada são o mesmo `401` e gastam uma verificação argon2id cada (contra um hash fictício quando não há hash real). A diferença mínima que sobra é o tempo de uma ou duas escritas no banco, muito menor que o do hash.
-- **Sessões (N4):** login e verificação de e-mail abrem uma família de refresh tokens (`sessions`) e emitem o JWT de acesso; o refresh rotaciona com detecção de reuso. Contrato completo em [API.md](API.md#sessões-e-csrf-n4).
+- **Login social (N5):** `BeginOAuthLogin` e `CompleteOAuthLogin` falam com os provedores por uma porta `OAuthProvider` (adaptadores `GoogleOAuthProvider`, que valida o ID token contra o JWKS do Google, e `GitHubOAuthProvider`, em `infra/oauth`); só entram os provedores com credenciais. `OAuthController` guarda os segredos da tentativa num cookie selado (`http/oauth-attempt-cookie.ts`) e abre a sessão como o login por senha. A tabela `oauth_accounts` é do `auth`. Regras de vínculo em [API.md](API.md#login-social-n5).
+- **Sessões (N4):** login, verificação de e-mail e login social abrem uma família de refresh tokens (`sessions`) e emitem o JWT de acesso; o refresh rotaciona com detecção de reuso. Contrato completo em [API.md](API.md#sessões-e-csrf-n4).
 - **`platform/security`:** `AccessTokens` (JWT HS256 com `node:crypto`, cabeçalho fixo), o middleware que preenche `request.user` a partir do `Authorization: Bearer` ou do cookie de acesso, o `AccessGuard` (papéis, nega por padrão) e o `CsrfGuard` (origem em todo método inseguro; token double-submit nas rotas com papel acessadas pelo cookie), nessa ordem.
 
 ## 7. Preocupações transversais (`platform/`)

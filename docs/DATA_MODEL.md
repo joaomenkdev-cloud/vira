@@ -45,8 +45,9 @@ erDiagram
     oauth_accounts {
         uuid id PK
         uuid user_id FK
-        provider provider
+        oauth_provider provider
         text provider_account_id "PII"
+        timestamptz created_at
     }
     sessions {
         uuid id PK
@@ -182,11 +183,12 @@ erDiagram
 
 | Campo | Tipo | Regras | Dado pessoal |
 | --- | --- | --- | --- |
-| `user_id` | uuid | FK → users, `ON DELETE CASCADE` | — |
-| `provider` | enum | `GOOGLE`, `GITHUB` | Não |
-| `provider_account_id` | text | `UNIQUE(provider, provider_account_id)` | **Sim** (identificador) |
+| `user_id` | uuid | FK → users, `ON DELETE CASCADE`; indexado | — |
+| `provider` | enum `oauth_provider` | `GOOGLE`, `GITHUB` | Não |
+| `provider_account_id` | text | `sub` do Google ou id numérico do GitHub; 1–255 caracteres (`CHECK`); `UNIQUE(provider, provider_account_id)` | **Sim** (identificador) |
+| `created_at` | timestamptz | Quando o vínculo foi feito | Não |
 
-Não guardamos tokens de acesso dos provedores: só usamos o perfil no login.
+Não guardamos tokens dos provedores (nem de acesso, nem de refresh, nem o ID token): só usamos o perfil no login. Uma conta pode ter um vínculo de cada provedor (e até mais de um do mesmo, se o e-mail coincidir). O vínculo é por id, não por e-mail: trocar o e-mail no provedor não muda a conta em que se entra.
 
 ### `sessions` (refresh tokens)
 

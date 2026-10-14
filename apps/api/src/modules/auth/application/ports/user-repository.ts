@@ -20,6 +20,14 @@ export interface UserRepository {
   /** Sets `email_verified_at` unless it is already set. */
   markEmailVerified(userId: string, at: Date, tx?: TransactionContext): Promise<void>;
 
+  /**
+   * The owner of the e-mail proved it through a social login. An account that was
+   * never verified is taken over by that owner: it becomes verified and loses the
+   * password, which whoever registered it chose without proving the e-mail was theirs.
+   * A verified account is left as it is.
+   */
+  confirmEmailThroughProvider(userId: string, at: Date, tx?: TransactionContext): Promise<void>;
+
   /** Adds one failed login atomically and returns the new count. */
   recordFailedLogin(userId: string): Promise<number>;
   /** Refuses password logins until `until` (never shortens an existing lock). */

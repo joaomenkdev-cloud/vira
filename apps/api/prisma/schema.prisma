@@ -89,6 +89,7 @@ model User {
 
   verificationTokens VerificationToken[]
   sessions           Session[]
+  oauthAccounts      OAuthAccount[]
 
   @@map("users")
 }
@@ -144,4 +145,28 @@ model Session {
   @@index([userId])
   @@index([familyId])
   @@map("sessions")
+}
+
+enum OAuthProvider {
+  GOOGLE
+  GITHUB
+
+  @@map("oauth_provider")
+}
+
+/// Social login links (docs/DATA_MODEL.md#oauth_accounts): which provider account
+/// belongs to which user. No provider token is ever stored, only the account id.
+model OAuthAccount {
+  id                String        @id @db.Uuid
+  userId            String        @map("user_id") @db.Uuid
+  provider          OAuthProvider
+  /// Google's `sub` or GitHub's numeric user id. Personal data (an identifier).
+  providerAccountId String        @map("provider_account_id")
+  createdAt         DateTime      @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
 }

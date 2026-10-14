@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 1 — Núcleo (o Marco 0 terminou com o merge da F7).
-- **Concluído (mergeado):** F1 a F7, N1, N2 e N3 (PRs #1, #2, #8, #10–#16) e Dependabot (#4–#7, #9 CodeQL v4).
-- **Entrega aberta:** N4 — Sessões e CSRF (`feat/auth-sessions`), PR draft.
-- **Próximo passo:** N5 — Login social (`feat/auth-oauth`), depois do merge da N4.
+- **Concluído (mergeado):** F1 a F7, N1 a N4 (PRs #1, #2, #8, #10–#17) e Dependabot (#4–#7, #9 CodeQL v4).
+- **Entrega aberta:** N5 — Login social (`feat/auth-oauth`), PR draft.
+- **Próximo passo:** N6 — Redefinição de senha e conta (`feat/users-account`), depois do merge da N5.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,42 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-14 — N5: login social (Google e GitHub)
+
+Auditoria (antes de codar): a tabela `oauth_accounts` estava no DATA_MODEL mas não no Prisma; o `audit-catalog` já previa `method: google|github` em `auth.login_succeeded`; a coluna `password_hash` já aceitava `NULL` ("contas só OAuth"); a API.md previa `302` nas duas rotas e o SECURITY_MODEL pedia validação do ID token do Google e vínculo só com e-mail verificado. O web faz proxy de `/api/v1/*` com rewrite do Next, que repassa o `302` e os `Set-Cookie` sem segui-los. Sem Docker, a integração rodou contra Postgres 16, Redis e Mailpit locais (ajuste local no `infrastructure.ts`, não commitado).
+
+Feito (API; a N5 não mexe no web):
+
+- Migration `oauth_accounts` (enum `oauth_provider`, `UNIQUE(provider, provider_account_id)`, `CHECK` de 1–255 caracteres, `ON DELETE CASCADE`), sem coluna nenhuma para tokens.
+- Config: `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` e `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`, opcionais e sempre em par; provedor sem credenciais fica desligado (`404`).
+- Módulo `auth`: domínio (`OAuthAttempt`, PKCE S256, `isSafeReturnPath`, `newSocialUser`), casos de uso `BeginOAuthLogin` e `CompleteOAuthLogin`, portas `OAuthProvider` e `OAuthAccountRepository`, adaptadores `GoogleOAuthProvider` (OpenID Connect, ID token verificado com o JWKS) e `GitHubOAuthProvider` (REST, e-mail primário verificado), `OAuthController` (`GET /auth/oauth/{provider}` e `/callback`) e o cookie selado da tentativa.
+- `@vira/shared`: `OAUTH_PROVIDERS` e `OAUTH_LOGIN_ERRORS` (os códigos de `?erro=` que a página `/entrar` vai explicar na N7).
+- Auditoria: nova `auth.oauth_linked` (`{ provider, tookOverUnverified }`); `auth.login_failed` ganhou o motivo `provider_email_not_verified`.
+- Testes: unitários (vetor do RFC 7636, caminhos de retorno, casos de uso com provedor roteirizado e repositórios em memória, inclusive a corrida pelo vínculo; cookie selado adulterado, de outra chave e expirado; adaptadores contra servidores HTTP falsos do Google e do GitHub: `alg: none`, HS256 com a chave pública, assinatura de outra chave, claims alterados, `kid` desconhecido, `iss`, `aud`, `azp`, `nonce`, `exp`, `iat`, código recusado, resposta grande demais ou ilegível), e2e sem infraestrutura (`404` sem credenciais, redirecionamento real para o Google, flags do cookie, callback sem cookie, `state` alheio, de outro provedor, adulterado ou expirado, `access_denied`, código recusado, `next` aberto, rate limit) e integração com um provedor falso que exige PKCE, `nonce` e código de uso único (conta nova, segundo login, conta existente verificada e não verificada, dois provedores numa conta, e-mail não garantido, dois primeiros logins simultâneos, código reapresentado, sessão anterior encerrada, nenhuma coluna de token).
+
+Decisões tomadas por conta própria:
+
+- **Branch `feat/auth-oauth`**, como no ROADMAP (o pedido falava em `feat/auth-social`).
+- **Segredos da tentativa num cookie selado, não no Redis:** `__Secure-vira_oauth` com `state`, verificador PKCE, `nonce` e `next`, cifrado e autenticado com AES-256-GCM (chave derivada do `CSRF_SECRET` por HKDF, com rótulo próprio: a chave é outra sem uma variável nova), 10 min e gasto em toda callback. O servidor não guarda estado e o login não depende do Redis. Começou só assinado com HMAC; o CodeQL apontou o verificador em claro no cookie e passou a ser cifrado, para que nada fora do servidor (extensão, log de proxy) leia o verificador ou o `nonce`. `SameSite=Lax` basta: a volta do provedor é navegação GET de nível superior.
+- **URL de retorno na origem do web** (`<WEB_ORIGIN>/api/v1/auth/oauth/{provider}/callback`), montada a partir do `WEB_ORIGIN`: o navegador só conhece o web, e os cookies da sessão saem first-party como no login por senha. Não precisou de variável nova.
+- **Conta nova também exige e-mail garantido pelo provedor**, não só o vínculo com conta existente: senão alguém criaria a conta de um e-mail alheio e o dono não conseguiria se cadastrar.
+- **Conta nunca verificada é assumida pelo dono do e-mail e perde a senha** (pré-cadastro: alguém cadastra o e-mail da vítima com senha própria e espera ela entrar pelo Google). O bloqueio e as falhas de login também zeram. Fica registrado em `auth.oauth_linked.tookOverUnverified` e em `auth.email_verified`.
+- **Vínculo pelo id da conta no provedor, nunca mais pelo e-mail:** quem trocou o e-mail no Google continua entrando na mesma conta; a conta do Vira não muda de e-mail com isso.
+- **GitHub: só o e-mail primário conta**, e só se verificado. Um secundário verificado é fácil de adicionar e diz menos sobre quem é dono da conta.
+- **ID token do Google verificado de fato**, não só lido: a OIDC permite confiar no TLS quando o token vem direto do endpoint, mas o SECURITY_MODEL pedia a validação. JWKS em cache por 1 h; `kid` desconhecido força nova busca no máximo uma vez por minuto.
+- **Sem retentativa nas chamadas aos provedores:** o código vale uma vez, então repetir a troca só falharia. Timeout de 5 s, resposta limitada a 64 kB, redirecionamentos recusados e toda resposta validada com Zod.
+- **Login social ignora o bloqueio por senha:** o bloqueio protege contra adivinhação de senha, que não existe aqui.
+- **`prompt=select_account` no Google**, para quem tem várias contas escolher em vez de entrar na última.
+- **Callback de provedor desligado responde `404`** (igual a provedor desconhecido), em vez de redirecionar com erro.
+- **Erros vão para `/entrar?erro=<código>`** (`oauth-denied`, `oauth-failed`, `oauth-email-not-verified`) e o motivo detalhado vai só para o log (sem código, `state` nem tokens).
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Criar os apps OAuth de verdade** (Google Cloud e GitHub) e configurar as quatro variáveis no deploy (V11); a URL de retorno é a do web publicado.
+- **A página `/entrar` (N7)** precisa dos botões "Entrar com Google/GitHub" (links para `/api/v1/auth/oauth/{provider}?next=...`) e de mensagens para os três códigos de erro.
+- **Desvincular um provedor** (e definir senha numa conta só social) fica para a N6, junto com `/me` e a troca de senha.
+- **`DELETE /me` com "reautenticação OAuth recente"** (API.md) vai precisar de um login social que marque a sessão como recente; hoje a sessão guarda `authenticated_at`, que serve para isso.
 
 ### 2026-10-13 — N4: sessões e CSRF
 

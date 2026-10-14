@@ -43,7 +43,11 @@ describe("loadConfig", () => {
       redis: { url: validEnv.REDIS_URL },
       mail: { smtpUrl: validEnv.SMTP_URL, from: "Vira <no-reply@vira.localhost>" },
       worker: { mode: "separate", outboxPollIntervalMs: 5_000 },
-      auth: { jwtSecret: validEnv.JWT_SECRET, csrfSecret: validEnv.CSRF_SECRET },
+      auth: {
+        jwtSecret: validEnv.JWT_SECRET,
+        csrfSecret: validEnv.CSRF_SECRET,
+        oauth: { google: undefined, github: undefined },
+      },
     });
   });
 
@@ -121,6 +125,30 @@ describe("loadConfig", () => {
     const shared = captureError({ ...validEnv, CSRF_SECRET: validEnv.JWT_SECRET });
     expect(shared.issues).toEqual([
       { variable: "CSRF_SECRET", message: "must differ from JWT_SECRET" },
+    ]);
+  });
+
+  it("turns on each social login provider that has both credentials", () => {
+    const config = loadConfig({
+      ...validEnv,
+      GOOGLE_CLIENT_ID: " google-id.apps.googleusercontent.com ",
+      GOOGLE_CLIENT_SECRET: "google-secret",
+    });
+    expect(config.auth.oauth).toEqual({
+      google: { clientId: "google-id.apps.googleusercontent.com", clientSecret: "google-secret" },
+      github: undefined,
+    });
+  });
+
+  it("refuses half of a provider's credentials", () => {
+    const error = captureError({
+      ...validEnv,
+      GOOGLE_CLIENT_ID: "google-id",
+      GITHUB_CLIENT_SECRET: "github-secret",
+    });
+    expect(error.issues).toEqual([
+      { variable: "GOOGLE_CLIENT_SECRET", message: "must be set together with GOOGLE_CLIENT_ID" },
+      { variable: "GITHUB_CLIENT_ID", message: "must be set together with GITHUB_CLIENT_SECRET" },
     ]);
   });
 

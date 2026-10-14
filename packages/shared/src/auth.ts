@@ -118,3 +118,22 @@ export const sessionListResponseSchema = z
 export type CsrfTokenResponse = z.infer<typeof csrfTokenResponseSchema>;
 export type SessionSummary = z.infer<typeof sessionSchema>;
 export type SessionListResponse = z.infer<typeof sessionListResponseSchema>;
+
+/** Social login (N5, docs/API.md#login-social-n5). */
+
+export const OAUTH_PROVIDERS = ["google", "github"] as const;
+export type OAuthProviderName = (typeof OAUTH_PROVIDERS)[number];
+
+/**
+ * Why a social login did not open a session. The API redirects to
+ * `<WEB_ORIGIN>/entrar?erro=<code>`, and the login page explains it.
+ */
+export const OAUTH_LOGIN_ERRORS = [
+  /** The person said no on the provider's consent screen. */
+  "oauth-denied",
+  /** Expired or forged attempt, or the provider failed to answer properly. */
+  "oauth-failed",
+  /** The provider does not vouch for the account's e-mail, so it cannot be used here. */
+  "oauth-email-not-verified",
+] as const;
+export type OAuthLoginError = (typeof OAUTH_LOGIN_ERRORS)[number];

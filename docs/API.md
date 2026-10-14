@@ -136,8 +136,8 @@ Legenda de papel: `PUBLIC`, `BUYER` (qualquer usuário autenticado), `ORGANIZER*
 | POST | `/auth/logout-all` | BUYER | — | `204`, revoga todas as sessões e limpa cookies | 401 | — |
 | GET | `/auth/sessions` | BUYER | — | `200 { data: [{ id, authenticatedAt, lastRefreshedAt, expiresAt, current }] }` | 401 | — |
 | DELETE | `/auth/sessions/{id}` | BUYER | — | `204`, revoga a sessão (e limpa os cookies se for a atual) | 400, 401, 404 (de outra conta, inexistente ou já encerrada) | — |
-| GET | `/auth/oauth/{provider}` | PUBLIC | `provider ∈ google, github` | `302` para o provedor (state + PKCE) | 404 | 20/min/ip |
-| GET | `/auth/oauth/{provider}/callback` | PUBLIC | `code`, `state` | `302` para o web + cookies | `302` para tela de erro | 20/min/ip |
+| GET | `/auth/oauth/{provider}` | PUBLIC | `provider ∈ google, github`; `next` opcional (caminho do web) | `302` para o provedor (state + PKCE) + cookie da tentativa | 404 (provedor desconhecido ou sem credenciais), 429 | 20/min/ip |
+| GET | `/auth/oauth/{provider}/callback` | PUBLIC | `code`, `state` (ou `error`) | `302` para o web (`next` ou `/`) + cookies da sessão | `302` para `/entrar?erro=<código>`; 404, 429 | 20/min/ip |
 | POST | `/auth/email/verify` | PUBLIC | `{ token }` | `200 { user }` + cookies da sessão (verificar o e-mail inicia a sessão) | 400, 410 `token-expired` (expirado/usado/desconhecido), 429 | 10/h/ip |
 | POST | `/auth/email/resend` | BUYER | — | `204` | 429 | 3/h/conta |
 | POST | `/auth/password/forgot` | PUBLIC | `{ email }` | `202` sempre (não revela se o e-mail existe) | 429 | 5/h/ip |
@@ -183,6 +183,26 @@ Um novo login apaga o cookie CSRF anterior (ele valia para a sessão antiga) e e
 **CSRF.** A página chama `GET /auth/csrf` depois do login (ou quando o cookie sumir) e manda o `csrfToken` no header `X-CSRF-Token`. Sem o header, com valor diferente do cookie ou com o token de outra sessão: `403 csrf-failed`. Rotas públicas (login, cadastro, verificação, refresh) não pedem o token, só a origem certa. `Authorization: Bearer` não pede token.
 
 **Logout.** `logout` revoga a sessão atual, `logout-all` todas (auditado com quantas estavam ativas), `DELETE /auth/sessions/{id}` uma específica (auditado como `auth.session_revoked`). O refresh para na hora; um token de acesso já emitido vale até expirar (no máximo 10 min).
+
+#### Login social (N5)
+
+Google (OpenID Connect) e GitHub (OAuth App), os dois com Authorization Code + PKCE (S256). Cada provedor só existe quando as duas variáveis dele estão configuradas (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`); sem elas, as rotas respondem `404`. A URL de retorno registrada no provedor fica na origem do web, que repassa `/api/v1/*` para a API: `<WEB_ORIGIN>/api/v1/auth/oauth/{provider}/callback`.
+
+**Ida.** `GET /auth/oauth/{provider}` sorteia `state`, verificador PKCE e `nonce` (256 bits cada) e os guarda no cookie `__Secure-vira_oauth` (`HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth/oauth`, 10 min), cifrado e autenticado com AES-256-GCM. O provedor recebe só o desafio (`SHA-256` do verificador). `next` é aceito apenas como caminho do próprio web (`/eventos/x`); `//outro.site`, URLs absolutas e barras invertidas são ignoradas (sem redirecionamento aberto).
+
+**Volta.** A callback gasta o cookie da tentativa sempre, dê certo ou não. O `state` precisa ser o do cookie, do mesmo provedor e dentro dos 10 min (senão é um login começado por outra pessoa); o código é trocado com o verificador e a mesma URL de retorno. No Google, o perfil sai do ID token, conferido por inteiro (assinatura RS256 com as chaves publicadas pelo Google, `iss`, `aud`, `exp`, `iat` e `nonce`); no GitHub, da API (`/user` e `/user/emails`). Os tokens do provedor ficam só na memória da requisição: nada é gravado.
+
+| Situação | Resultado |
+| --- | --- |
+| Conta do provedor já vinculada | Entra na conta vinculada (mesmo que o e-mail no provedor tenha mudado) |
+| E-mail verificado pelo provedor e sem conta no Vira | Cria conta BUYER, com e-mail verificado e sem senha, e a vincula |
+| E-mail verificado pelo provedor e conta existente verificada | Vincula e entra; a senha continua valendo |
+| E-mail verificado pelo provedor e conta existente **não** verificada | Vincula, marca o e-mail como verificado e **apaga a senha**: quem cadastrou nunca provou ser dono do endereço |
+| Provedor não garante o e-mail (Google `email_verified` falso; no GitHub, o e-mail **primário** não verificado) | Nada é criado nem vinculado: `302` para `/entrar?erro=oauth-email-not-verified` |
+| A pessoa recusou no provedor (`error=access_denied`) | `/entrar?erro=oauth-denied` |
+| `state` ausente, diferente, de outro provedor ou expirado; código recusado; resposta do provedor inválida | `/entrar?erro=oauth-failed` |
+
+Com sucesso, a sessão abre como no login por senha (mesmos cookies, o cookie CSRF antigo é apagado e a sessão anterior do navegador é encerrada). Auditoria: `auth.registered` (conta nova), `auth.email_verified` (conta não verificada assumida), `auth.oauth_linked` (`{ provider, tookOverUnverified }`), `auth.login_succeeded` (`method: google|github`) e, sem e-mail garantido, `auth.login_failed` com `reason: provider_email_not_verified`. Os códigos de erro estão em `OAUTH_LOGIN_ERRORS` (`@vira/shared`).
 
 ### Conta e privacidade (`users`)
 
