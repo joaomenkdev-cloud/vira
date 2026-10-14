@@ -5,7 +5,7 @@ import {
   isSafeReturnPath,
   OAUTH_ATTEMPT_TTL_MS,
   pkceChallenge,
-  startOAuthAttempt,
+  startLoginAttempt,
 } from "./oauth.js";
 import { newSocialUser, toPublicUser } from "./user.js";
 
@@ -19,15 +19,15 @@ describe("pkceChallenge", () => {
   });
 });
 
-describe("startOAuthAttempt", () => {
-  const attempt = startOAuthAttempt({ provider: "google", returnTo: "/eventos", now });
+describe("startLoginAttempt", () => {
+  const attempt = startLoginAttempt({ provider: "google", returnTo: "/eventos", now });
 
   it("draws state, verifier and nonce independently, 256 bits each", () => {
     for (const secret of [attempt.state, attempt.codeVerifier, attempt.nonce]) {
       expect(secret).toMatch(/^[A-Za-z0-9_-]{43}$/);
     }
     expect(new Set([attempt.state, attempt.codeVerifier, attempt.nonce]).size).toBe(3);
-    const other = startOAuthAttempt({ provider: "google", returnTo: null, now });
+    const other = startLoginAttempt({ provider: "google", returnTo: null, now });
     expect(other.state).not.toBe(attempt.state);
   });
 

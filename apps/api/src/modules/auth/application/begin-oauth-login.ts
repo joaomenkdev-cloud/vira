@@ -6,7 +6,7 @@ import {
   isSafeReturnPath,
   type OAuthAttempt,
   pkceChallenge,
-  startOAuthAttempt,
+  startLoginAttempt,
 } from "../domain/oauth.js";
 import { OAuthProviderUnavailableError } from "./errors.js";
 import { OAUTH_PROVIDERS, type OAuthProviders } from "./ports/oauth-provider.js";
@@ -35,7 +35,7 @@ export class BeginOAuthLogin {
     const provider = this.providers.get(input.provider);
     if (!provider) throw new OAuthProviderUnavailableError();
 
-    const attempt = startOAuthAttempt({
+    const attempt = startLoginAttempt({
       provider: input.provider,
       returnTo:
         input.returnTo !== undefined && isSafeReturnPath(input.returnTo) ? input.returnTo : null,

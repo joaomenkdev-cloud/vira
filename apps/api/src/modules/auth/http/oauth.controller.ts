@@ -41,6 +41,9 @@ import { clearCsrfCookie, REFRESH_COOKIE, writeSessionCookies } from "./session-
 /** Where the web app's login page lives; it explains `?erro=` (N7). */
 const LOGIN_PAGE = "/entrar";
 
+/** An error code without its `oauth-` prefix, which `refuse` adds. */
+type Refusal = OAuthLoginError extends `oauth-${infer Kind}` ? Kind : never;
+
 /**
  * What the provider appends to the callback. Not strict: providers add their own
  * parameters (`scope`, `authuser`, `prompt`, `iss`).
@@ -167,18 +170,18 @@ export class OAuthController {
     request: Request,
   ): Promise<{ user: PublicUser; returnTo: string | null } | OAuthLoginError> {
     const query = callbackQuerySchema.safeParse(rawQuery);
-    if (!query.success) return this.refuse("oauth-failed", "malformed callback");
+    if (!query.success) return this.refuse("failed", "malformed callback");
     const { code, state, error } = query.data;
     if (error !== undefined) {
       const denied = error === "access_denied";
-      return this.refuse(denied ? "oauth-denied" : "oauth-failed", `provider error ${error}`);
+      return this.refuse(denied ? "denied" : "failed", `provider error ${error}`);
     }
     // The state must be the one this browser was given: anything else is a callback
     // someone else started (login CSRF), an expired attempt or another provider's.
     if (attempt?.provider !== provider || state === undefined || !sameToken(state, attempt.state)) {
-      return this.refuse("oauth-failed", "state mismatch or expired attempt");
+      return this.refuse("failed", "state mismatch or expired attempt");
     }
-    if (code === undefined) return this.refuse("oauth-failed", "no code");
+    if (code === undefined) return this.refuse("failed", "no code");
 
     try {
       const user = await this.completeLogin.execute(
@@ -194,10 +197,9 @@ export class OAuthController {
       return { user, returnTo: attempt.returnTo };
     } catch (failure) {
       if (failure instanceof ProviderEmailNotVerifiedError) {
-        return this.refuse("oauth-email-not-verified", "provider e-mail not verified");
+        return this.refuse("email-not-verified", "provider e-mail not verified");
       }
-      if (failure instanceof OAuthProviderError)
-        return this.refuse("oauth-failed", failure.message);
+      if (failure instanceof OAuthProviderError) return this.refuse("failed", failure.message);
       throw failure;
     }
   }
@@ -214,7 +216,8 @@ export class OAuthController {
     return provider;
   }
 
-  private refuse(code: OAuthLoginError, reason: string): OAuthLoginError {
+  private refuse(refusal: Refusal, reason: string): OAuthLoginError {
+    const code: OAuthLoginError = `oauth-${refusal}`;
     this.logger.warn({ oauthError: code, reason }, "social login refused");
     return code;
   }

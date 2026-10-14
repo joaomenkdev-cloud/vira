@@ -61,7 +61,7 @@ export function pkceChallenge(codeVerifier: string): string {
   return createHash("sha256").update(codeVerifier, "ascii").digest("base64url");
 }
 
-export function startOAuthAttempt(input: {
+export function startLoginAttempt(input: {
   readonly provider: OAuthProviderName;
   readonly returnTo: string | null;
   readonly now: Date;

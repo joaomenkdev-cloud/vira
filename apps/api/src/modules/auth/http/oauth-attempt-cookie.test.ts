@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 
 import type { AppConfig } from "../../../platform/config/config.schema.js";
 import { FakeClock } from "../application/in-memory.fakes.js";
-import { startOAuthAttempt } from "../domain/oauth.js";
+import { startLoginAttempt } from "../domain/oauth.js";
 import { OAUTH_ATTEMPT_COOKIE, OAuthAttemptCookie } from "./oauth-attempt-cookie.js";
 
 const configWith = (csrfSecret: string) => ({ auth: { csrfSecret } }) as unknown as AppConfig;
 
 /** Captures what `write` puts in the response. */
 function written(cookies: OAuthAttemptCookie, clock: FakeClock, returnTo: string | null = "/x") {
-  const attempt = startOAuthAttempt({ provider: "github", returnTo, now: clock.now() });
+  const attempt = startLoginAttempt({ provider: "github", returnTo, now: clock.now() });
   let value = "";
   let options: Record<string, unknown> = {};
   const response = {
