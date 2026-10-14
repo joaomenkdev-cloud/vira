@@ -101,11 +101,12 @@ function sendLink(email: string, link: Link) {
   mailbox.set(email, { kind: link.kind, token });
 }
 
-function cookiesOf(request: IncomingMessage): Record<string, string | undefined> {
-  const cookies: Record<string, string> = {};
+/** A Map, not an object: a cookie named `__proto__` must not reach the prototype. */
+function cookiesOf(request: IncomingMessage): Map<string, string> {
+  const cookies = new Map<string, string>();
   for (const part of (request.headers.cookie ?? "").split(";")) {
     const index = part.indexOf("=");
-    if (index > 0) cookies[part.slice(0, index).trim()] = part.slice(index + 1).trim();
+    if (index > 0) cookies.set(part.slice(0, index).trim(), part.slice(index + 1).trim());
   }
   return cookies;
 }
@@ -158,7 +159,7 @@ function userById(id: string): User {
 
 /** The session of the access cookie, if it is valid. */
 function authenticate(request: IncomingMessage) {
-  const access = accessTokens.get(cookiesOf(request)[ACCESS_COOKIE] ?? "");
+  const access = accessTokens.get(cookiesOf(request).get(ACCESS_COOKIE) ?? "");
   if (!access || access.expired) return undefined;
   const session = sessions.get(access.sessionId);
   if (!session || session.revoked) return undefined;
@@ -166,7 +167,7 @@ function authenticate(request: IncomingMessage) {
 }
 
 function sessionOfRefreshCookie(request: IncomingMessage) {
-  const value = cookiesOf(request)[REFRESH_COOKIE];
+  const value = cookiesOf(request).get(REFRESH_COOKIE);
   for (const session of sessions.values()) {
     if (!session.revoked && session.refreshToken === value) return session;
   }
@@ -227,7 +228,7 @@ function guard(request: IncomingMessage, response: ServerResponse, { csrf }: { c
   if (csrf) {
     const header = request.headers["x-csrf-token"];
     const expected = `csrf-${auth.session.id}`;
-    if (header !== expected || cookiesOf(request)[CSRF_COOKIE] !== expected) {
+    if (header !== expected || cookiesOf(request).get(CSRF_COOKIE) !== expected) {
       problem(response, 403, "csrf-failed");
       return undefined;
     }
@@ -292,7 +293,7 @@ async function handle(
       const user = users.get(link.email);
       if (!user) return problem(response, 410, "token-expired");
       user.verified = true;
-      const cookies = startSession(user, cookiesOf(request)[REFRESH_COOKIE]);
+      const cookies = startSession(user, cookiesOf(request).get(REFRESH_COOKIE));
       return send(response, 200, { user: publicUser(user) }, { "set-cookie": cookies });
     }
 
@@ -302,12 +303,12 @@ async function handle(
         return problem(response, 401, "invalid-credentials");
       }
       if (!user.verified) return problem(response, 403, "email-not-verified");
-      const cookies = startSession(user, cookiesOf(request)[REFRESH_COOKIE]);
+      const cookies = startSession(user, cookiesOf(request).get(REFRESH_COOKIE));
       return send(response, 200, { user: publicUser(user) }, { "set-cookie": cookies });
     }
 
     case "POST /auth/refresh": {
-      const presented = cookiesOf(request)[REFRESH_COOKIE] ?? "";
+      const presented = cookiesOf(request).get(REFRESH_COOKIE) ?? "";
       await sleep(REFRESH_DELAY_MS);
       for (const session of sessions.values()) {
         if (session.revoked) continue;
@@ -487,7 +488,7 @@ async function handle(
     const next = url.searchParams.get("next") ?? "/";
     const user = users.get(email);
     if (!user) return problem(response, 500, "internal-error");
-    const cookies = startSession(user, cookiesOf(request)[REFRESH_COOKIE]);
+    const cookies = startSession(user, cookiesOf(request).get(REFRESH_COOKIE));
     return send(response, 302, undefined, {
       location: /^\/(?![/\\])/.test(next) ? next : "/",
       "set-cookie": cookies,
