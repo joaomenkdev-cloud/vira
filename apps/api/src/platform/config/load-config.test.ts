@@ -47,6 +47,7 @@ describe("loadConfig", () => {
         jwtSecret: validEnv.JWT_SECRET,
         csrfSecret: validEnv.CSRF_SECRET,
         oauth: { google: undefined, github: undefined },
+        pwnedPasswords: { enabled: true, baseUrl: "https://api.pwnedpasswords.com" },
       },
     });
   });
@@ -138,6 +139,21 @@ describe("loadConfig", () => {
       google: { clientId: "google-id.apps.googleusercontent.com", clientSecret: "google-secret" },
       github: undefined,
     });
+  });
+
+  it("checks leaked passwords by default, except in tests", () => {
+    expect(loadConfig(validEnv).auth.pwnedPasswords.enabled).toBe(true);
+    expect(loadConfig({ ...validEnv, NODE_ENV: "test" }).auth.pwnedPasswords.enabled).toBe(false);
+    const config = loadConfig({
+      ...validEnv,
+      NODE_ENV: "test",
+      PWNED_PASSWORDS_ENABLED: "true",
+      PWNED_PASSWORDS_URL: "http://127.0.0.1:9999/",
+    });
+    expect(config.auth.pwnedPasswords).toEqual({ enabled: true, baseUrl: "http://127.0.0.1:9999" });
+    expect(captureError({ ...validEnv, PWNED_PASSWORDS_URL: "ftp://x" }).issues).toEqual([
+      expect.objectContaining({ variable: "PWNED_PASSWORDS_URL" }),
+    ]);
   });
 
   it("refuses half of a provider's credentials", () => {
