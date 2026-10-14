@@ -74,6 +74,9 @@ describe("every application route declares an access policy", () => {
       "POST AuthController.verify": publicRoute,
       "POST AuthController.login": publicRoute,
       "POST AuthController.refresh": publicRoute,
+      "POST AuthController.forgotPassword": publicRoute,
+      "POST AuthController.reset": publicRoute,
+      "POST AuthController.confirmEmail": publicRoute,
       "GET AuthController.csrf": publicRoute,
       "POST AuthController.logout": buyer,
       "POST AuthController.logoutAll": buyer,
@@ -81,6 +84,20 @@ describe("every application route declares an access policy", () => {
       "DELETE AuthController.revokeSession": buyer,
       "GET OAuthController.start": publicRoute,
       "GET OAuthController.callback": publicRoute,
+    });
+  });
+
+  it("keeps every account route private", () => {
+    const accountRoutes = collectRoutes(testApp).filter((route) =>
+      /^\S+ (MeController|AccountSecurityController)\./.test(route.name),
+    );
+    const buyer = { kind: "role", role: "BUYER" };
+    expect(Object.fromEntries(accountRoutes.map((route) => [route.name, route.policy]))).toEqual({
+      "GET MeController.me": buyer,
+      "PATCH MeController.update": buyer,
+      "POST MeController.organizer": buyer,
+      "POST AccountSecurityController.password": buyer,
+      "POST AccountSecurityController.email": buyer,
     });
   });
 
