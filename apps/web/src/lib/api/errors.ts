@@ -18,8 +18,13 @@ export type ProblemCode =
   | "rate-limited"
   | "payload-too-large"
   | "internal-error"
-  /** The request never got an answer (offline, DNS, the API is down). */
+  /** The request never got an answer (offline, DNS). */
   | "network-error"
+  /**
+   * A 5xx without problem details: it came from the proxy, not from the API (the API
+   * is down or unreachable from the web server).
+   */
+  | "unavailable"
   /** Any other answer, including `about:blank`. */
   | "unknown";
 
@@ -107,9 +112,10 @@ export async function toApiError(response: Response): Promise<ApiError> {
   } catch {
     // Not JSON (a proxy error page, an empty body): the status is all there is.
   }
+  const fromProxy = problem === undefined && response.status >= 500;
   return new ApiError({
     status: response.status,
-    code: problemCodeOf(problem?.type, response.status),
+    code: fromProxy ? "unavailable" : problemCodeOf(problem?.type, response.status),
     problem,
     retryAfterSeconds: retryAfterOf(response),
   });

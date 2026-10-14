@@ -8,6 +8,7 @@ export function waitTime(seconds: number): string {
 
 const MESSAGES: Partial<Record<ProblemCode, string>> = {
   "network-error": "Não foi possível falar com o Vira. Confira sua conexão e tente de novo.",
+  unavailable: "O servidor do Vira não respondeu. Tente de novo em instantes.",
   unauthenticated: "Sua sessão terminou. Entre de novo para continuar.",
   "csrf-failed": "Não foi possível confirmar esta ação. Recarregue a página e tente de novo.",
   "validation-failed": "Confira os campos destacados.",

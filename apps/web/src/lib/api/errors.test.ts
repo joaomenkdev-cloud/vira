@@ -19,8 +19,19 @@ describe("problemCodeOf", () => {
 
 describe("toApiError", () => {
   it("survives a body that is not JSON", async () => {
-    const error = await toApiError(new Response("<html>bad gateway</html>", { status: 502 }));
-    expect(error).toMatchObject({ status: 502, code: "unknown", problem: undefined });
+    const error = await toApiError(new Response("<html>not found</html>", { status: 404 }));
+    expect(error).toMatchObject({ status: 404, code: "unknown", problem: undefined });
+  });
+
+  it("tells a proxy failure (the API is down) from an error of the API", async () => {
+    const proxy = await toApiError(new Response("Internal Server Error", { status: 500 }));
+    expect(proxy.code).toBe("unavailable");
+    expect(messageFor(proxy)).toBe("O servidor do Vira não respondeu. Tente de novo em instantes.");
+
+    const api = await toApiError(
+      Response.json({ type: "x#internal-error", title: "Erro", status: 500 }, { status: 500 }),
+    );
+    expect(api.code).toBe("internal-error");
   });
 
   it("keeps the field errors", async () => {
