@@ -40,6 +40,7 @@ erDiagram
         text password_hash "nullable"
         role role
         timestamptz email_verified_at
+        citext pending_email "PII, nullable"
         timestamptz anonymized_at
     }
     oauth_accounts {
@@ -64,12 +65,14 @@ erDiagram
         bytea token_hash UK
         timestamptz expires_at
         timestamptz used_at
+        citext new_email "PII, só EMAIL_CHANGE"
     }
     organizer_profiles {
         uuid id PK
         uuid user_id FK,UK
         text display_name "PII se pessoa física"
         text slug UK
+        timestamptz created_at
     }
     events {
         uuid id PK
@@ -173,11 +176,14 @@ erDiagram
 | `password_hash` | text | argon2id (PHC string, `CHECK ... LIKE '$argon2id$%'`); `NULL` para contas só OAuth | Sim (credencial) |
 | `role` | enum `Role` | `BUYER` (padrão), `ORGANIZER`, `ADMIN`. Papéis são cumulativos: ORGANIZER também compra; ADMIN também organiza. | Não |
 | `email_verified_at` | timestamptz | `NULL` até verificar | Não |
+| `pending_email` | citext | Endereço pedido em `POST /me/email`, à espera do link de confirmação; substitui `email` quando o link é usado e volta a `NULL`. Mesmas regras de normalização e tamanho do `email` (`CHECK`s `users_pending_email_*`) e nunca igual a ele. Não é único: o `UNIQUE(email)` decide na confirmação | **Sim** |
 | `failed_login_count`, `locked_until` | int, timestamptz | Bloqueio progressivo: a 5ª falha seguida bloqueia por 1 min e cada falha seguinte dobra (máximo 1 h); `failed_login_count >= 0` por `CHECK`; zerados no login com sucesso | Não |
 | `created_at`, `updated_at` | timestamptz | | Não |
 | `anonymized_at` | timestamptz | Preenchido na exclusão de conta | Não |
 
-Índices: `UNIQUE(email)`. Ao anonimizar: `email = 'deleted+<id>@invalid'`, `name = 'Conta excluída'`, `password_hash = NULL`, contas OAuth e sessões apagadas.
+Índices: `UNIQUE(email)`. Ao anonimizar: `email = 'deleted+<id>@invalid'`, `name = 'Conta excluída'`, `password_hash = NULL`, `pending_email = NULL`, contas OAuth e sessões apagadas.
+
+**Quem escreve o quê (N6):** o módulo `auth` escreve as colunas de credencial (`email`, `pending_email`, `password_hash`, `email_verified_at`, bloqueio); o módulo `users` escreve `name` e `role` (este só ao virar organizador) e é dono de `organizer_profiles`. Os dois leem a linha inteira.
 
 ### `oauth_accounts`
 
@@ -210,24 +216,26 @@ Uma linha por refresh token. Os tokens de um mesmo login formam uma **família**
 
 ### `verification_tokens`
 
-Tokens de uso único para verificação de e-mail e redefinição de senha.
+Tokens de uso único para verificação de e-mail, redefinição de senha e troca de e-mail.
 
 | Campo | Tipo | Regras |
 | --- | --- | --- |
-| `purpose` | enum | `EMAIL_VERIFICATION` (24 h), `PASSWORD_RESET` (30 min) |
+| `purpose` | enum | `EMAIL_VERIFICATION` (24 h), `PASSWORD_RESET` (30 min), `EMAIL_CHANGE` (24 h) |
+| `new_email` | citext | Só em `EMAIL_CHANGE` (e sempre nele, `CHECK`): o endereço para onde o link foi. A confirmação só troca o e-mail se ele ainda for o `pending_email` da conta, então um link de um pedido anterior não confirma o endereço de um pedido novo |
 | `token_hash` | bytea | SHA-256; `UNIQUE` |
 | `expires_at`, `used_at` | timestamptz | Uso único: o token é reivindicado por um `UPDATE ... WHERE token_hash = ? AND purpose = ? AND used_at IS NULL AND expires_at > agora`, então de dois pedidos simultâneos só um altera a linha |
 | `created_at` | timestamptz | `expires_at > created_at` e `used_at >= created_at` (`CHECK`) |
 
-`token_hash` tem exatamente 32 bytes (`CHECK`). Ao enviar um novo e-mail de verificação, os tokens não usados do mesmo usuário e finalidade são apagados: só o link do e-mail mais recente funciona. O token em si nunca é gravado (nem na outbox, cujo payload leva só o `userId`).
+`token_hash` tem exatamente 32 bytes (`CHECK`). Ao enviar um novo e-mail com link, os tokens não usados do mesmo usuário e finalidade são apagados: só o link do e-mail mais recente funciona. O token em si nunca é gravado (nem na outbox, cujo payload leva só o `userId`).
 
 ### `organizer_profiles`
 
 | Campo | Tipo | Regras | Dado pessoal |
 | --- | --- | --- | --- |
-| `user_id` | uuid | FK, `UNIQUE` | — |
-| `display_name` | text | Nome público do organizador (exibido na página do evento) | **Sim**, se for pessoa física |
-| `slug` | text | `UNIQUE` | Possivelmente |
+| `user_id` | uuid | FK → users, `UNIQUE` (no máximo um perfil por conta), `ON DELETE CASCADE` | — |
+| `display_name` | text | Nome público do organizador (exibido na página do evento); 1–80 caracteres sem espaços nas pontas (`CHECK`) | **Sim**, se for pessoa física |
+| `slug` | text | `UNIQUE`; gerado pela API a partir do nome (minúsculas ASCII e dígitos em palavras unidas por `-`, até 80 caracteres, `CHECK`); em colisão, `-2` a `-5` e depois um sufixo aleatório | Possivelmente |
+| `created_at`, `updated_at` | timestamptz | | Não |
 
 ### `events`
 

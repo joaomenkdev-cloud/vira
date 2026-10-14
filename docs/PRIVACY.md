@@ -23,6 +23,7 @@ A Lei Geral de Proteção de Dados (Lei nº 13.709/2018) é tratada como **requi
 | --- | --- | --- | --- | --- | --- | --- |
 | Nome | Usuário | `users.name` | Identificar a conta, saudação em e-mails | Execução de contrato (V) | Enquanto a conta existir; anonimizado na exclusão | Resend (no corpo de e-mails) |
 | E-mail | Usuário | `users.email` | Login, verificação, envio de ingressos e avisos transacionais | Execução de contrato (V) | Enquanto a conta existir; anonimizado na exclusão | Resend |
+| E-mail novo pendente de confirmação | Usuário | `users.pending_email`, `verification_tokens.new_email` | Confirmar que o titular controla o novo endereço antes de trocar o e-mail da conta | Execução de contrato (V) | Até a confirmação (o pendente vira o `email`); o token expira em 24 h; apagado na exclusão | Resend (destinatário do link) |
 | Hash de senha | Usuário | `users.password_hash` | Autenticação | Execução de contrato (V) | Enquanto a conta existir; apagado na exclusão | — |
 | ID da conta no Google/GitHub | Usuário | `oauth_accounts.provider_account_id` | Login social | Execução de contrato (V) | Enquanto o vínculo existir; apagado na exclusão | Google / GitHub (eles já o têm) |
 | Nome público do organizador | Organizador | `organizer_profiles.display_name` | Exibir quem organiza o evento | Execução de contrato (V) | Enquanto houver eventos publicados; anonimizado na exclusão | Público (página do evento) |
@@ -61,6 +62,7 @@ Testes automatizados verificam a redação dos logs e o conteúdo enviado ao Sen
 | Upstash | Redis (filas e rate limit) | IP e e-mail em hash, IDs | Região configurável |
 | Cloudflare R2 | Imagens dos eventos | Nenhum dado pessoal (imagens re-encodadas sem EXIF) | Global |
 | Sentry | Monitoramento de erros | Nenhum dado pessoal (sanitizado) | EUA/UE |
+| Have I Been Pwned (Pwned Passwords) | Checagem de senhas vazadas no cadastro e na troca de senha | Nenhum dado pessoal: só os 5 primeiros dígitos do SHA-1 da senha (k-anonymity), que não identificam a senha nem a pessoa | Global (Cloudflare) |
 | Google / GitHub | Login social | Já detêm a conta do titular; recebem o fato de que houve login no Vira | Global |
 
 Transferências internacionais (art. 33) se apoiam nas cláusulas contratuais padrão e nos termos de tratamento de dados (DPA) desses fornecedores. Em deploy real, o controlador deve formalizar isso.
@@ -70,7 +72,7 @@ Transferências internacionais (art. 33) se apoiam nas cláusulas contratuais pa
 | Direito | Como exercer | Implementação |
 | --- | --- | --- |
 | Confirmação e acesso | Conta → Privacidade → "Baixar meus dados" | `GET /me/export` (JSON com conta, perfil de organizador, pedidos, ingressos, sessões ativas). Auditado como `user.data_exported`. |
-| Correção | Conta → Perfil | `PATCH /me` |
+| Correção | Conta → Perfil | `PATCH /me` (nome); `POST /me/email` + link no novo endereço (e-mail) |
 | Portabilidade | Mesmo arquivo JSON do acesso, em formato estruturado e documentado | `GET /me/export` |
 | Eliminação / anonimização | Conta → Privacidade → "Excluir minha conta" | `DELETE /me` com reautenticação e confirmação |
 | Informação sobre compartilhamento | Política de privacidade (seção de operadores) | Página `/privacidade` |

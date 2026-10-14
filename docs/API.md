@@ -94,12 +94,17 @@ Todo erro é `application/problem+json`:
 | `type` (âncora) | Status | Quando |
 | --- | --- | --- |
 | <a id="validation-failed"></a>`validation-failed` | 400 | Corpo, query ou params inválidos |
+| <a id="breached-password"></a>`breached-password` | 400 | Senha nova encontrada em vazamentos conhecidos (Have I Been Pwned); `errors[0].path` aponta o campo |
+| <a id="incorrect-password"></a>`incorrect-password` | 400 | Senha atual errada numa troca de senha ou de e-mail (a sessão continua válida, por isso não é `401`) |
 | <a id="unauthenticated"></a>`unauthenticated` | 401 | Sem sessão ou token expirado |
 | <a id="invalid-credentials"></a>`invalid-credentials` | 401 | Login falhou. Mensagem genérica: vale para e-mail inexistente, senha errada, conta sem senha e **conta bloqueada** (nunca diz qual) |
 | <a id="csrf-failed"></a>`csrf-failed` | 403 | Token CSRF ausente/inválido ou origem não permitida |
 | <a id="email-not-verified"></a>`email-not-verified` | 403 | Senha correta, mas e-mail ainda não verificado (só revelado a quem acertou a senha) |
 | <a id="forbidden"></a>`forbidden` | 403 | Papel insuficiente para a **função** (ex.: BUYER chamando rota de organizador) |
 | <a id="not-found"></a>`not-found` | 404 | Recurso inexistente **ou de outra pessoa** |
+| <a id="conflict"></a>`conflict` | 409 | Genérico: a operação conflita com o estado atual do recurso |
+| <a id="password-not-set"></a>`password-not-set` | 409 | Conta só de login social, sem senha para confirmar ou trocar (crie uma por "esqueci a senha") |
+| <a id="already-organizer"></a>`already-organizer` | 409 | A conta já tem perfil de organizador |
 | <a id="token-expired"></a>`token-expired` | 410 | Link de uso único expirado, já usado ou desconhecido (não diz qual) |
 | <a id="insufficient-inventory"></a>`insufficient-inventory` | 409 | Estoque não comporta a quantidade |
 | <a id="pending-order-exists"></a>`pending-order-exists` | 409 | Já existe pedido PENDING do comprador para o evento |
@@ -129,7 +134,7 @@ Legenda de papel: `PUBLIC`, `BUYER` (qualquer usuário autenticado), `ORGANIZER*
 | Método | Rota | Papel | Corpo | Sucesso | Erros | Rate limit |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/auth/csrf` | sessão (cookie de acesso ou de refresh) | — | `200 { csrfToken }` + cookie `__Host-vira_csrf` | 401 | — |
-| POST | `/auth/register` | PUBLIC | `{ name, email, password }` | `202 { status: "accepted" }` sempre, com a mesma resposta para e-mail novo ou existente; envia link de verificação (ou aviso "você já tem conta") | 400, 429 | 5/h/ip |
+| POST | `/auth/register` | PUBLIC | `{ name, email, password }` | `202 { status: "accepted" }` sempre, com a mesma resposta para e-mail novo ou existente; envia link de verificação (ou aviso "você já tem conta") | 400 (inclusive `breached-password`), 429 | 5/h/ip |
 | POST | `/auth/login` | PUBLIC | `{ email, password }` | `200 { user }` + cookies da sessão | 400, 401 `invalid-credentials`, 403 `email-not-verified`, 429 | 10/15 min/ip e 5/15 min/conta |
 | POST | `/auth/refresh` | cookie de refresh | — | `204` + cookies rotacionados | 401 (inclusive reuso detectado → família revogada) | 30/min/ip |
 | POST | `/auth/logout` | BUYER | — | `204`, revoga a sessão e limpa cookies | 401 | — |
@@ -140,8 +145,9 @@ Legenda de papel: `PUBLIC`, `BUYER` (qualquer usuário autenticado), `ORGANIZER*
 | GET | `/auth/oauth/{provider}/callback` | PUBLIC | `code`, `state` (ou `error`) | `302` para o web (`next` ou `/`) + cookies da sessão | `302` para `/entrar?erro=<código>`; 404, 429 | 20/min/ip |
 | POST | `/auth/email/verify` | PUBLIC | `{ token }` | `200 { user }` + cookies da sessão (verificar o e-mail inicia a sessão) | 400, 410 `token-expired` (expirado/usado/desconhecido), 429 | 10/h/ip |
 | POST | `/auth/email/resend` | BUYER | — | `204` | 429 | 3/h/conta |
-| POST | `/auth/password/forgot` | PUBLIC | `{ email }` | `202` sempre (não revela se o e-mail existe) | 429 | 5/h/ip |
-| POST | `/auth/password/reset` | PUBLIC | `{ token, password }` | `204`; revoga todas as sessões | 400, 410 | 10/h/ip |
+| POST | `/auth/password/forgot` | PUBLIC | `{ email }` | `202 { status: "accepted" }` sempre (não revela se o e-mail existe) | 400, 429 | 5/h/ip; 3/h por e-mail, silencioso |
+| POST | `/auth/password/reset` | PUBLIC | `{ token, password }` | `204`; revoga todas as sessões e limpa os cookies | 400 (inclusive `breached-password`), 410, 429 | 10/h/ip |
+| POST | `/auth/email/change/confirm` | PUBLIC | `{ token }` | `204`; a conta passa ao novo e-mail | 400, 410, 429 | 10/h/ip |
 
 #### Cadastro, verificação e login (N3)
 
@@ -204,14 +210,40 @@ Google (OpenID Connect) e GitHub (OAuth App), os dois com Authorization Code + P
 
 Com sucesso, a sessão abre como no login por senha (mesmos cookies, o cookie CSRF antigo é apagado e a sessão anterior do navegador é encerrada). Auditoria: `auth.registered` (conta nova), `auth.email_verified` (conta não verificada assumida), `auth.oauth_linked` (`{ provider, tookOverUnverified }`), `auth.login_succeeded` (`method: google|github`) e, sem e-mail garantido, `auth.login_failed` com `reason: provider_email_not_verified`. Os códigos de erro estão em `OAUTH_LOGIN_ERRORS` (`@vira/shared`).
 
+#### Redefinição de senha e senhas vazadas (N6)
+
+**Esqueci a senha.** `POST /auth/password/forgot` responde `202 { "status": "accepted" }` para qualquer e-mail. Se houver conta, o worker envia o link `<WEB_ORIGIN>/redefinir-senha#token=<token>` (30 min, uso único, só o SHA-256 no banco, gerado na hora do envio como o da verificação; um link novo invalida o anterior). Além do limite por IP, cada endereço recebe no máximo 3 links por hora: passado isso, a resposta continua `202` e nada é enviado. Contas não verificadas e contas só de login social também recebem o link: usá-lo prova o e-mail, então a conta fica verificada (e a conta social ganha a primeira senha).
+
+**Redefinição.** `POST /auth/password/reset` grava a senha nova, zera o bloqueio, revoga **todas** as sessões (`PASSWORD_CHANGED`), limpa os cookies desta resposta e envia ao dono o aviso "sua senha foi alterada". O token é gasto na mesma transação da troca; de dois pedidos simultâneos com o mesmo token, um recebe `204` e o outro `410`. Senha vazada responde `400 breached-password` **sem gastar o token**.
+
+**Senhas vazadas.** Cadastro, redefinição e troca de senha consultam o Pwned Passwords (Have I Been Pwned) com k-anonymity: só os 5 primeiros dígitos hexadecimais do SHA-1 da senha saem do servidor, com `Add-Padding: true`, e a comparação com o resto é local. Senha encontrada: `400 breached-password` (no cadastro, para e-mail novo ou existente, então não revela nada). Se o serviço não responder em 3 s ou responder com erro, a senha é aceita e um aviso vai para o log (sem o prefixo). `PWNED_PASSWORDS_ENABLED=false` desliga a checagem; nos testes ela vem desligada por padrão.
+
+#### Conta (N6)
+
+Toda rota de `/me` age sobre a conta da sessão e não recebe id nenhum: não há conta alheia para alcançar. Os corpos são estritos (`role`, `email`, `emailVerified` ou qualquer outro campo além dos listados é `400`), e as rotas que alteram dados pedem o token CSRF com o cookie de sessão, como as demais.
+
+| Rota | Comportamento |
+| --- | --- |
+| `GET /me` | `hasPassword` falso indica conta só de login social; `organizer` aparece quando há perfil de organizador. |
+| `PATCH /me` | Só o nome. E-mail e senha têm rotas próprias; o papel nunca vem do corpo. |
+| `POST /me/password` | Pede a senha atual (5 tentativas a cada 15 min por conta; errada: `400 incorrect-password`). Revoga as **outras** sessões; a atual continua. Envia o aviso de senha alterada. |
+| `POST /me/email` | Pede a senha atual. O endereço novo fica pendente e recebe o link `<WEB_ORIGIN>/confirmar-email#token=<token>` (24 h, uso único); o atual recebe um aviso sem link. Endereço já usado por outra conta: a resposta é a mesma `202`, nada muda, e o dono do endereço recebe um aviso. Até 3 pedidos por hora por conta. |
+| `POST /auth/email/change/confirm` | Troca o e-mail pelo endereço que o link recebeu, já verificado. O token guarda o endereço: um link de um pedido anterior (para outro endereço) não confirma nada, e um endereço tomado por outra conta nesse meio-tempo responde `410`. As sessões continuam. |
+| `POST /me/organizer` | Cria o perfil (o `slug` sai do nome: "Coletivo São João" → `coletivo-sao-joao`, com sufixo se já existir) e passa BUYER a ORGANIZER (ADMIN continua ADMIN). O token de acesso atual ainda tem o papel antigo; o próximo `POST /auth/refresh` traz o novo. |
+
+Auditoria: `auth.password_reset_requested`, `auth.password_changed` (`via: reset|change`), `auth.email_change_requested`, `auth.email_changed` e `user.organizer_profile_created`.
+
+Páginas do web (N7) que os e-mails apontam: `/redefinir-senha` e `/confirmar-email`, que leem o token do fragmento como `/verificar-email`, e `/esqueci-a-senha`.
+
 ### Conta e privacidade (`users`)
 
 | Método | Rota | Papel | Corpo | Sucesso | Erros |
 | --- | --- | --- | --- | --- | --- |
-| GET | `/me` | BUYER | — | `200 { id, name, email, role, emailVerified, organizer? }` | 401 |
-| PATCH | `/me` | BUYER | `{ name }` | `200 { user }` | 400, 401 |
-| POST | `/me/password` | BUYER | `{ currentPassword, newPassword }` | `204`; revoga as outras sessões | 400, 401 |
-| POST | `/me/organizer` | BUYER | `{ displayName }` | `201 { organizerProfile }`; papel → ORGANIZER | 400, 409 |
+| GET | `/me` | BUYER | — | `200 { id, name, email, role, emailVerified, hasPassword, organizer?: { displayName, slug } }` | 401 |
+| PATCH | `/me` | BUYER | `{ name }` | `200 { user }` (mesmo formato do `GET /me`) | 400, 401 |
+| POST | `/me/password` | BUYER | `{ currentPassword, newPassword }` | `204`; revoga as outras sessões | 400 (`incorrect-password`, `breached-password`), 401, 409 `password-not-set`, 429 (5/15 min/conta) |
+| POST | `/me/email` | BUYER | `{ email, currentPassword }` | `202 { status: "accepted" }`; link de confirmação para o novo endereço | 400 (`incorrect-password`, mesmo e-mail), 401, 409 `password-not-set`, 429 (3/h/conta) |
+| POST | `/me/organizer` | BUYER | `{ displayName }` | `201 { organizerProfile: { displayName, slug } }`; papel → ORGANIZER | 400, 409 `already-organizer` |
 | GET | `/me/export` | BUYER | — | `200` JSON com todos os dados pessoais do titular (conta, pedidos, ingressos, perfil de organizador) — `Content-Disposition: attachment` | 401, 429 (3/dia) |
 | DELETE | `/me` | BUYER + reautenticação | `{ password }` ou reautenticação OAuth recente (< 5 min), `{ confirm: "EXCLUIR" }` | `202`; conta anonimizada, sessões revogadas, ingressos futuros cancelados | 400, 401, 409 (organizador com eventos futuros publicados) |
 

@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 1 — Núcleo (o Marco 0 terminou com o merge da F7).
-- **Concluído (mergeado):** F1 a F7, N1 a N4 (PRs #1, #2, #8, #10–#17) e Dependabot (#4–#7, #9 CodeQL v4).
-- **Entrega aberta:** N5 — Login social (`feat/auth-oauth`), PR draft.
-- **Próximo passo:** N6 — Redefinição de senha e conta (`feat/users-account`), depois do merge da N5.
+- **Concluído (mergeado):** F1 a F7, N1 a N5 (PRs #1, #2, #8, #10–#17, #26) e Dependabot (#4–#7, #9 CodeQL v4).
+- **Entrega aberta:** N6 — Redefinição de senha e conta (`feat/users-account`), PR draft.
+- **Próximo passo:** N7 — Telas de autenticação (`feat/web-auth`), depois do merge da N6.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,44 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-15 — N6: redefinição de senha, conta e senhas vazadas
+
+Auditoria (antes de codar): `verification_tokens` já tinha a finalidade `PASSWORD_RESET` (30 min) e `sessions` o motivo `PASSWORD_CHANGED`, ambos sem uso; o `audit-catalog` já previa `auth.password_changed` (`via: change|reset`); a API.md já descrevia `forgot`, `reset`, `GET/PATCH /me`, `POST /me/password` e `POST /me/organizer`; não existia `organizer_profiles` no Prisma nem módulo `users`; a redação do log já cobria `currentPassword` e `newPassword`. Sem Docker, a integração rodou contra Postgres 16, Redis e Mailpit locais (ajuste local no `infrastructure.ts`, não commitado).
+
+Feito (API; a N6 não mexe no web):
+
+- Migrations: `users.pending_email` e `verification_tokens.new_email` (finalidade nova `EMAIL_CHANGE`, `CHECK` de que só ela leva endereço) e a tabela `organizer_profiles` (`UNIQUE` por conta e por `slug`, `CHECK`s de nome e formato do `slug`).
+- Config: `PWNED_PASSWORDS_ENABLED` (ligada por padrão, desligada nos testes) e `PWNED_PASSWORDS_URL`.
+- Módulo `auth`: `RequestPasswordReset`, `ResetPassword`, `ChangePassword`, `RequestEmailChange`, `ConfirmEmailChange`, `CurrentPassword` (reautenticação com limite por conta), `NewPasswords` (HIBP antes do argon2id, também no cadastro), porta `BreachedPasswords` com o adaptador `PwnedPasswords`, e os envios do worker (`SendPasswordResetEmail`, `SendEmailChangeEmails`, `SendAccountNotices`). Rotas `POST /auth/password/forgot`, `/auth/password/reset`, `/auth/email/change/confirm`, `/me/password` e `/me/email`.
+- Módulo `users` (novo): `GET/PATCH /me` e `POST /me/organizer` (`GetAccount`, `UpdateProfile`, `BecomeOrganizer`, `slug` derivado do nome).
+- `@vira/shared`: contratos da conta (`account.ts`), todos estritos.
+- Problemas novos: `breached-password`, `incorrect-password` (400), `conflict` (genérico), `password-not-set` e `already-organizer` (409).
+- Auditoria: `auth.password_reset_requested`, `auth.email_change_requested`, `auth.email_changed`, `user.organizer_profile_created` (e `auth.password_changed` passou a ser usado).
+- Testes: unitários (redefinição, troca de senha e de e-mail com repositórios em memória, inclusive link antigo, link de outro tipo, corrida por um e-mail tomado, limites por conta; adaptador do HIBP contra um servidor HTTP falso: só o prefixo enviado, padding, contagem 0 ignorada, erro, resposta grande e timeout aceitando a senha; `slug`; perfil e organizador), e2e sem infraestrutura (401 sem sessão em toda rota de `/me`, mass assignment em todas as rotas novas, validação antes de qualquer hash ou consulta, `breached-password`, rate limits) e integração com Postgres, Redis, Mailpit e um Pwned Passwords falso (respostas iguais para e-mail conhecido e desconhecido, reset revogando sessões, dois resets simultâneos, link expirado, senha vazada sem gastar o link, primeira senha de conta social, `PATCH /me` com papel, CSRF, troca de senha mantendo só a sessão atual, 429 na senha atual, troca de e-mail completa, e-mail de outra conta, organizador com refresh trazendo o papel novo e três `slug`s simultâneos).
+
+Decisões tomadas por conta própria:
+
+- **Troca de e-mail entrou** (não estava na API.md): `POST /me/email` com a senha atual, link no novo endereço (`/confirmar-email#token=`, 24 h) e aviso sem link no atual. O token guarda o endereço para onde foi, e a confirmação só vale se ele ainda for o pendente: um link de um pedido anterior não confirma o endereço de um pedido novo, mesmo numa corrida com o worker.
+- **Troca para um e-mail de outra conta responde `202` igual** e avisa o dono do endereço, como no cadastro.
+- **"Esqueci a senha" serve também para contas sem senha e não verificadas:** usar o link prova o e-mail. A conta social ganha a primeira senha assim (resolve a pendência da N5 de "definir senha numa conta só social"), e a não verificada fica verificada.
+- **Senha vazada no reset não gasta o token**, para a pessoa tentar outra com o mesmo link.
+- **HIBP falha aberta** (3 s de timeout, aviso no log sem o prefixo): uma queda de terceiro não pode impedir cadastro e recuperação de conta.
+- **Senha atual errada é `400 incorrect-password`, não `401`**: a sessão continua válida, e um `401` faria o web achar que ela caiu.
+- **Conta sem senha recebe `409 password-not-set`** em `/me/password` e `/me/email`.
+- **Limites por conta:** 5 tentativas da senha atual a cada 15 min; 3 pedidos de troca de e-mail por hora; 3 links de redefinição por hora por endereço (silencioso, a resposta continua `202`).
+- **Avisos por e-mail** de senha alterada (troca e reset) e de pedido de troca de e-mail: alguém que tomou a sessão não age sem o dono saber.
+- **Reset limpa os cookies da resposta** (todas as sessões foram revogadas, inclusive a do navegador).
+- **Tabela `users` dividida por coluna entre os módulos:** `auth` escreve as credenciais, `users` escreve `name` e `role` e é dono de `organizer_profiles`. Nenhum dos dois importa o outro; a ARCHITECTURE.md foi ajustada (antes dizia que `auth` passaria a depender de `users`).
+- **`GET /me` ganhou `hasPassword`**, para o web saber se mostra "trocar senha" ou "criar senha".
+- **Papel novo depois de `POST /me/organizer` vale no próximo refresh:** a rota não reemite cookies (isso é do `auth`); o web chama `POST /auth/refresh` em seguida.
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Desvincular um provedor social** da conta não entrou (nenhuma rota pedia); fica para quando houver a tela de conta.
+- **Reenvio da verificação** (`POST /auth/email/resend`) continua sem caminho para quem não tem sessão (pendência da N3).
+- **Páginas do web (N7):** `/esqueci-a-senha`, `/redefinir-senha` e `/confirmar-email` (as duas últimas leem o token do fragmento) e a tela de conta; depois do organizador, chamar `POST /auth/refresh`.
+- **Deploy (V11):** nada a configurar para o HIBP (ligado por padrão); o host `api.pwnedpasswords.com` precisa estar liberado na saída da API.
 
 ### 2026-10-14 — N5: login social (Google e GitHub)
 
