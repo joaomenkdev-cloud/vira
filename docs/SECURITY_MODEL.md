@@ -141,7 +141,7 @@ Decisões tomadas e riscos aceitos, para o revisor não precisar redescobri-los:
 #### Limites conhecidos das sessões (N4)
 
 - **Revogação em até 10 min:** logout, `logout-all` e a revogação de uma sessão param o refresh na hora, mas um token de acesso já emitido vale até expirar (não há consulta ao banco a cada requisição, ADR-0005).
-- **Refreshes simultâneos derrubam a sessão:** se duas abas renovarem ao mesmo tempo com o mesmo cookie, a segunda apresenta um token já rotacionado e a família é revogada (a regra é estrita de propósito: não dá para distinguir esse caso de um roubo). O web (N7) precisa serializar o refresh, um por vez.
+- **Refreshes simultâneos derrubam a sessão:** se duas abas renovarem ao mesmo tempo com o mesmo cookie, a segunda apresenta um token já rotacionado e a família é revogada (a regra é estrita de propósito: não dá para distinguir esse caso de um roubo). O web (N7) serializa o refresh: chamadas simultâneas na mesma aba dividem um único `POST /auth/refresh`, e abas diferentes se revezam pela Web Locks API (a segunda renova com o cookie que a primeira acabou de receber).
 - **Rotas públicas não pedem token CSRF:** elas não agem com a sessão. Login, cadastro, verificação e refresh ficam protegidos pela checagem de `Origin`/`Sec-Fetch-Site` e pelo `SameSite=Lax`. O refresh só troca o cookie do próprio navegador.
 - **Clientes sem `Origin` nem `Sec-Fetch-Site`** (curl, apps) passam pela checagem de origem: um navegador sempre manda um dos dois em requisições que alteram dados.
 - **Sessões sem dispositivo:** a lista de sessões mostra só datas (login, última renovação, expiração). Guardar `User-Agent` ou IP seria dado pessoal a mais (LGPD, só nome e e-mail).
