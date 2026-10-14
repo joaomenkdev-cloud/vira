@@ -72,6 +72,8 @@ export const envSchema = z
     GOOGLE_CLIENT_SECRET: oauthCredentialSchema,
     GITHUB_CLIENT_ID: oauthCredentialSchema,
     GITHUB_CLIENT_SECRET: oauthCredentialSchema,
+    PWNED_PASSWORDS_ENABLED: z.stringbool().optional(),
+    PWNED_PASSWORDS_URL: z.url({ protocol: /^https?$/ }).default("https://api.pwnedpasswords.com"),
   })
   .superRefine((env, ctx) => {
     // One key per purpose: a CSRF token must never verify as a JWT signature, or vice versa.
@@ -155,6 +157,14 @@ export const envSchema = z
       oauth: {
         google: oauthClient(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET),
         github: oauthClient(env.GITHUB_CLIENT_ID, env.GITHUB_CLIENT_SECRET),
+      },
+      /**
+       * Leaked-password check (Have I Been Pwned, k-anonymity). On by default; tests turn
+       * it off unless they ask for it, so no suite depends on the real service.
+       */
+      pwnedPasswords: {
+        enabled: env.PWNED_PASSWORDS_ENABLED ?? env.NODE_ENV !== "test",
+        baseUrl: env.PWNED_PASSWORDS_URL.replace(/\/+$/, ""),
       },
     },
   }));

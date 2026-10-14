@@ -28,6 +28,8 @@ const SENSITIVE_KEYS = [
   "authorization",
   "cookie",
   "email",
+  "pendingEmail",
+  "newEmail",
   "buyerEmail",
   "name",
   "buyerName",

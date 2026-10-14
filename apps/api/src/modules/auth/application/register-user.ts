@@ -14,7 +14,7 @@ import {
 import { AuditLog } from "../../audit/application/public-api.js";
 import { Outbox } from "../../outbox/application/public-api.js";
 import { newUser, type User } from "../domain/user.js";
-import { PASSWORD_HASHER, type PasswordHasher } from "./ports/password-hasher.js";
+import { NewPasswords } from "./new-passwords.js";
 import { type RequestContext, withRequestId } from "./request-context.js";
 import {
   EmailAlreadyRegisteredError,
@@ -31,18 +31,20 @@ import {
 export class RegisterUser {
   constructor(
     @Inject(USER_REPOSITORY) private readonly users: UserRepository,
-    @Inject(PASSWORD_HASHER) private readonly hasher: PasswordHasher,
     @Inject(TRANSACTION_RUNNER) private readonly transactions: TransactionRunner,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(ID_GENERATOR) private readonly ids: IdGenerator,
+    private readonly newPasswords: NewPasswords,
     private readonly outbox: Outbox,
     private readonly audit: AuditLog,
   ) {}
 
+  /** @throws BreachedPasswordError when the password appears in known breaches. */
   async execute(request: RegisterRequest, context: RequestContext = {}): Promise<void> {
-    // Hashing comes first and runs for new and known e-mails alike: doing it only for
-    // new accounts would make the response time reveal which addresses are registered.
-    const passwordHash = await this.hasher.hash(request.password);
+    // The password check and hash come first and run for new and known e-mails alike:
+    // doing them only for new accounts would make the response (its status or its time)
+    // reveal which addresses are registered.
+    const passwordHash = await this.newPasswords.hash(request.password);
 
     let existing = await this.users.findByEmail(request.email);
     if (!existing) {

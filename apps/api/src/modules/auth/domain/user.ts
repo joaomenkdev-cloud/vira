@@ -10,6 +10,8 @@ export interface User {
   readonly passwordHash: string | null;
   readonly role: Role;
   readonly emailVerifiedAt: Date | null;
+  /** New address waiting for its confirmation link (e-mail change); normalized like `email`. */
+  readonly pendingEmail: string | null;
   /** Consecutive failed password logins. */
   readonly failedLoginCount: number;
   /** Password logins are refused until this moment. */
@@ -35,6 +37,7 @@ export function newUser(input: {
     passwordHash: input.passwordHash,
     role: "BUYER",
     emailVerifiedAt: null,
+    pendingEmail: null,
     failedLoginCount: 0,
     lockedUntil: null,
     createdAt: input.now,
@@ -43,7 +46,8 @@ export function newUser(input: {
 
 /**
  * An account opened through a social login. The provider vouched for the e-mail, so it
- * starts verified; there is no password until the person sets one (N6).
+ * starts verified; there is no password until the person creates one through
+ * "forgot password" (the reset link proves the e-mail just as well).
  */
 export function newSocialUser(input: {
   readonly id: string;
@@ -58,6 +62,7 @@ export function newSocialUser(input: {
     passwordHash: null,
     role: "BUYER",
     emailVerifiedAt: input.now,
+    pendingEmail: null,
     failedLoginCount: 0,
     lockedUntil: null,
     createdAt: input.now,

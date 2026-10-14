@@ -28,6 +28,27 @@ export interface UserRepository {
    */
   confirmEmailThroughProvider(userId: string, at: Date, tx?: TransactionContext): Promise<void>;
 
+  /**
+   * Replaces the password (creates one, for an account that only used social login).
+   * Also ends any lockout: the failures were guesses at a password that no longer exists.
+   */
+  setPassword(userId: string, passwordHash: string, tx?: TransactionContext): Promise<void>;
+
+  /** Records the address the account asked to move to, replacing any earlier request. */
+  setPendingEmail(userId: string, pendingEmail: string, tx?: TransactionContext): Promise<void>;
+
+  /**
+   * Moves the account to `newEmail`, now verified, provided it is still the pending
+   * address (a later request replaces it, and so voids older links). Answers whether it did.
+   * @throws EmailAlreadyRegisteredError when another account took the address meanwhile.
+   */
+  confirmEmailChange(
+    userId: string,
+    newEmail: string,
+    at: Date,
+    tx?: TransactionContext,
+  ): Promise<boolean>;
+
   /** Adds one failed login atomically and returns the new count. */
   recordFailedLogin(userId: string): Promise<number>;
   /** Refuses password logins until `until` (never shortens an existing lock). */

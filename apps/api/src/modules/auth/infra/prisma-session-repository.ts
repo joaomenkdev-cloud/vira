@@ -82,15 +82,21 @@ export class PrismaSessionRepository implements SessionRepository {
     });
   }
 
-  async revokeAllOf(userId: string, reason: SessionRevokeReason, now: Date): Promise<number> {
+  async revokeAllOf(
+    userId: string,
+    reason: SessionRevokeReason,
+    now: Date,
+    except?: string,
+  ): Promise<number> {
+    const others = except === undefined ? {} : { familyId: { not: except } };
     return this.prisma.$transaction(async (client) => {
       const active = await client.session.findMany({
-        where: { userId, ...usable(now) },
+        where: { userId, ...others, ...usable(now) },
         select: { familyId: true },
         distinct: ["familyId"],
       });
       await client.session.updateMany({
-        where: { userId, revokedAt: null },
+        where: { userId, ...others, revokedAt: null },
         data: { revokedAt: now, revokeReason: reason },
       });
       return active.length;

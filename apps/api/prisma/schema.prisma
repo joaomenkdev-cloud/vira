@@ -64,6 +64,7 @@ enum Role {
 enum TokenPurpose {
   EMAIL_VERIFICATION
   PASSWORD_RESET
+  EMAIL_CHANGE
 
   @@map("token_purpose")
 }
@@ -86,15 +87,18 @@ model User {
   createdAt        DateTime  @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   anonymizedAt     DateTime? @map("anonymized_at") @db.Timestamptz(3)
+  /// New address waiting for the link sent to it (e-mail change); replaces `email` once used.
+  pendingEmail     String?   @map("pending_email") @db.Citext
 
   verificationTokens VerificationToken[]
   sessions           Session[]
   oauthAccounts      OAuthAccount[]
+  organizerProfile   OrganizerProfile?
 
   @@map("users")
 }
 
-/// Single-use tokens for e-mail verification and password reset
+/// Single-use tokens for e-mail verification, password reset and e-mail change
 /// (docs/DATA_MODEL.md#verification_tokens). Only the SHA-256 hash is stored:
 /// the token itself exists only in the e-mail that carries it.
 model VerificationToken {
@@ -105,6 +109,8 @@ model VerificationToken {
   expiresAt DateTime     @map("expires_at") @db.Timestamptz(3)
   usedAt    DateTime?    @map("used_at") @db.Timestamptz(3)
   createdAt DateTime     @map("created_at") @db.Timestamptz(3)
+  /// EMAIL_CHANGE only: the address the link was sent to, the only one it can confirm.
+  newEmail  String?      @map("new_email") @db.Citext
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -169,4 +175,20 @@ model OAuthAccount {
   @@unique([provider, providerAccountId])
   @@index([userId])
   @@map("oauth_accounts")
+}
+
+/// Public identity of an organizer (docs/DATA_MODEL.md#organizer_profiles): at most one
+/// per user. Personal data when the organizer is a person (`displayName`).
+model OrganizerProfile {
+  id          String   @id @db.Uuid
+  userId      String   @unique @map("user_id") @db.Uuid
+  displayName String   @map("display_name")
+  /// Derived from the display name; unique, used in public URLs.
+  slug        String   @unique
+  createdAt   DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("organizer_profiles")
 }

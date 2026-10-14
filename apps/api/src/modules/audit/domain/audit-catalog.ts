@@ -53,6 +53,9 @@ export const AUDIT_CATALOG = {
     entityType: "user",
     metadata: z.strictObject({ via: z.enum(["change", "reset"]) }),
   },
+  "auth.password_reset_requested": { entityType: "user", metadata: z.strictObject({}) },
+  "auth.email_change_requested": { entityType: "user", metadata: z.strictObject({}) },
+  "auth.email_changed": { entityType: "user", metadata: z.strictObject({}) },
   "auth.logout_all": {
     entityType: "user",
     metadata: z.strictObject({ revokedSessions: z.number().int().nonnegative() }),
@@ -95,6 +98,7 @@ export const AUDIT_CATALOG = {
     entityType: "ticket",
     metadata: z.strictObject({ eventId: id, method: z.enum(["qr", "code"]) }),
   },
+  "user.organizer_profile_created": { entityType: "user", metadata: z.strictObject({}) },
   "user.data_exported": { entityType: "user", metadata: z.strictObject({}) },
   "user.anonymized": { entityType: "user", metadata: z.strictObject({}) },
   "admin.role_changed": {

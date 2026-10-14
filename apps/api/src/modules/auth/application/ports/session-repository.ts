@@ -36,8 +36,16 @@ export interface SessionRepository {
     now: Date,
   ): Promise<boolean>;
 
-  /** Revokes every family of the user; answers how many logins were still active. */
-  revokeAllOf(userId: string, reason: SessionRevokeReason, now: Date): Promise<number>;
+  /**
+   * Revokes every family of the user (but `except`, when given: the session the change
+   * was made from); answers how many logins were still active.
+   */
+  revokeAllOf(
+    userId: string,
+    reason: SessionRevokeReason,
+    now: Date,
+    except?: string,
+  ): Promise<number>;
 
   /** The user's logins that can still be refreshed, most recent first. */
   listActive(userId: string, now: Date): Promise<ActiveSession[]>;

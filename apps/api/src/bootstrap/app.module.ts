@@ -5,6 +5,7 @@ import { AuditModule } from "../modules/audit/audit.module.js";
 import { AuthJobsModule, AuthModule } from "../modules/auth/auth.module.js";
 import { HealthModule } from "../modules/health/health.module.js";
 import { OutboxModule, OutboxPollerModule } from "../modules/outbox/outbox.module.js";
+import { UsersModule } from "../modules/users/users.module.js";
 import type { AppConfig } from "../platform/config/config.schema.js";
 import { ConfigModule } from "../platform/config/config.module.js";
 import { DatabaseModule } from "../platform/database/database.module.js";
@@ -42,6 +43,7 @@ export class AppModule {
         AuditModule,
         OutboxModule,
         AuthModule,
+        UsersModule,
         HealthModule,
         // Embedded mode runs the background work inside the API process (ADR-0011).
         ...(config.worker.mode === "embedded"

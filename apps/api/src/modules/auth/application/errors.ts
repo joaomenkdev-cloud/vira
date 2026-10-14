@@ -53,3 +53,43 @@ export class ProviderEmailNotVerifiedError extends Error {
     this.name = "ProviderEmailNotVerifiedError";
   }
 }
+
+/** The new password appears in known data breaches (Have I Been Pwned). */
+export class BreachedPasswordError extends Error {
+  constructor() {
+    super("Password found in data breaches");
+    this.name = "BreachedPasswordError";
+  }
+}
+
+/** The current password sent to confirm a sensitive change is wrong. */
+export class IncorrectPasswordError extends Error {
+  constructor() {
+    super("Incorrect current password");
+    this.name = "IncorrectPasswordError";
+  }
+}
+
+/** The account has no password (social login only), so there is none to confirm or change. */
+export class PasswordNotSetError extends Error {
+  constructor() {
+    super("Account has no password");
+    this.name = "PasswordNotSetError";
+  }
+}
+
+/** The account behind the session no longer exists. */
+export class AccountNotFoundError extends Error {
+  constructor() {
+    super("Account not found");
+    this.name = "AccountNotFoundError";
+  }
+}
+
+/** The requested new e-mail is the account's current one. */
+export class SameEmailError extends Error {
+  constructor() {
+    super("Already the account's e-mail");
+    this.name = "SameEmailError";
+  }
+}

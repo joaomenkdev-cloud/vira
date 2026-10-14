@@ -1,6 +1,12 @@
 import type { TransactionContext } from "../../../../platform/database/transaction.js";
 import type { TokenPurpose, VerificationToken } from "../../domain/verification-token.js";
 
+export interface ConsumedToken {
+  readonly userId: string;
+  /** Set for EMAIL_CHANGE tokens: the address the link was sent to. */
+  readonly newEmail: string | null;
+}
+
 export interface VerificationTokenRepository {
   /**
    * Stores `token` and discards every other unused token of the same user and purpose,
@@ -18,7 +24,7 @@ export interface VerificationTokenRepository {
     purpose: TokenPurpose,
     now: Date,
     tx?: TransactionContext,
-  ): Promise<{ readonly userId: string } | null>;
+  ): Promise<ConsumedToken | null>;
 }
 
 export const VERIFICATION_TOKEN_REPOSITORY = Symbol("VERIFICATION_TOKEN_REPOSITORY");

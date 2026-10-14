@@ -28,7 +28,7 @@ import {
   type OAuthProviders,
 } from "../application/ports/oauth-provider.js";
 import { AUTH_RATE_LIMITS } from "../application/rate-limits.js";
-import type { RequestContext } from "../application/request-context.js";
+import { contextOf } from "./problems.js";
 import { StartSession } from "../application/start-session.js";
 import type { OAuthAttempt } from "../domain/oauth.js";
 import {
@@ -58,10 +58,6 @@ function providerOf(value: string): OAuthProviderName | undefined {
   return (OAUTH_PROVIDERS as readonly string[]).includes(value)
     ? (value as OAuthProviderName)
     : undefined;
-}
-
-function contextOf(request: Request): RequestContext {
-  return typeof request.id === "string" ? { requestId: request.id } : {};
 }
 
 /**

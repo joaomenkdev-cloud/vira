@@ -4,12 +4,17 @@
  */
 export const PROBLEM_TYPES = {
   "validation-failed": { status: 400, title: "Requisição inválida" },
+  "breached-password": { status: 400, title: "Senha encontrada em vazamentos" },
+  "incorrect-password": { status: 400, title: "Senha atual incorreta" },
   unauthenticated: { status: 401, title: "Autenticação necessária" },
   "invalid-credentials": { status: 401, title: "E-mail ou senha inválidos" },
   forbidden: { status: 403, title: "Acesso negado" },
   "email-not-verified": { status: 403, title: "E-mail ainda não verificado" },
   "csrf-failed": { status: 403, title: "Requisição de origem não confirmada" },
   "not-found": { status: 404, title: "Recurso não encontrado" },
+  conflict: { status: 409, title: "Conflito com o estado atual do recurso" },
+  "password-not-set": { status: 409, title: "A conta não tem senha" },
+  "already-organizer": { status: 409, title: "A conta já tem perfil de organizador" },
   "token-expired": { status: 410, title: "Link expirado ou já utilizado" },
   "payload-too-large": { status: 413, title: "Corpo da requisição muito grande" },
   "unsupported-media-type": { status: 415, title: "Tipo de conteúdo não suportado" },

@@ -16,11 +16,15 @@ import type { OAuthAccount } from "../domain/oauth.js";
 import { isUsable, type Session, type SessionRevokeReason } from "../domain/session.js";
 import { isLocked, type User } from "../domain/user.js";
 import type { TokenPurpose, VerificationToken } from "../domain/verification-token.js";
+import type { BreachedPasswords } from "./ports/breached-passwords.js";
 import type { OAuthAccountRepository } from "./ports/oauth-account-repository.js";
 import type { PasswordHasher } from "./ports/password-hasher.js";
 import type { ActiveSession, SessionRepository } from "./ports/session-repository.js";
 import { EmailAlreadyRegisteredError, type UserRepository } from "./ports/user-repository.js";
-import type { VerificationTokenRepository } from "./ports/verification-token-repository.js";
+import type {
+  ConsumedToken,
+  VerificationTokenRepository,
+} from "./ports/verification-token-repository.js";
 
 /** Test doubles for the auth use cases: in-memory ports that behave like the real ones. */
 
@@ -103,6 +107,38 @@ export class InMemoryUserRepository implements UserRepository {
     });
     undoLogOf(tx)?.push(() => this.users.set(userId, user));
     return Promise.resolve();
+  }
+
+  setPassword(userId: string, passwordHash: string, tx?: TransactionContext): Promise<void> {
+    const user = this.users.get(userId);
+    if (!user) return Promise.reject(new Error("no such user"));
+    this.users.set(userId, { ...user, passwordHash, failedLoginCount: 0, lockedUntil: null });
+    undoLogOf(tx)?.push(() => this.users.set(userId, user));
+    return Promise.resolve();
+  }
+
+  setPendingEmail(userId: string, pendingEmail: string, tx?: TransactionContext): Promise<void> {
+    const user = this.users.get(userId);
+    if (!user) return Promise.reject(new Error("no such user"));
+    this.users.set(userId, { ...user, pendingEmail });
+    undoLogOf(tx)?.push(() => this.users.set(userId, user));
+    return Promise.resolve();
+  }
+
+  confirmEmailChange(
+    userId: string,
+    newEmail: string,
+    at: Date,
+    tx?: TransactionContext,
+  ): Promise<boolean> {
+    const user = this.users.get(userId);
+    if (user?.pendingEmail !== newEmail) return Promise.resolve(false);
+    if ([...this.users.values()].some((u) => u.id !== userId && u.email === newEmail)) {
+      return Promise.reject(new EmailAlreadyRegisteredError());
+    }
+    this.users.set(userId, { ...user, email: newEmail, pendingEmail: null, emailVerifiedAt: at });
+    undoLogOf(tx)?.push(() => this.users.set(userId, user));
+    return Promise.resolve(true);
   }
 
   recordFailedLogin(userId: string): Promise<number> {
@@ -188,7 +224,7 @@ export class InMemoryVerificationTokenRepository implements VerificationTokenRep
     purpose: TokenPurpose,
     now: Date,
     tx?: TransactionContext,
-  ): Promise<{ userId: string } | null> {
+  ): Promise<ConsumedToken | null> {
     const token = this.tokens.find(
       (t) =>
         t.tokenHash.equals(tokenHash) &&
@@ -201,7 +237,7 @@ export class InMemoryVerificationTokenRepository implements VerificationTokenRep
     undoLogOf(tx)?.push(() => {
       token.usedAt = null;
     });
-    return Promise.resolve({ userId: token.userId });
+    return Promise.resolve({ userId: token.userId, newEmail: token.newEmail });
   }
 }
 
@@ -257,11 +293,17 @@ export class InMemorySessionRepository implements SessionRepository {
     return Promise.resolve(true);
   }
 
-  revokeAllOf(userId: string, reason: SessionRevokeReason, now: Date): Promise<number> {
+  revokeAllOf(
+    userId: string,
+    reason: SessionRevokeReason,
+    now: Date,
+    except?: string,
+  ): Promise<number> {
+    const target = (row: StoredSession) => row.userId === userId && row.familyId !== except;
     const active = new Set(
-      this.rows.filter((r) => r.userId === userId && isUsable(r, now)).map((r) => r.familyId),
+      this.rows.filter((r) => target(r) && isUsable(r, now)).map((r) => r.familyId),
     );
-    this.revokeWhere((row) => row.userId === userId, reason, now);
+    this.revokeWhere(target, reason, now);
     return Promise.resolve(active.size);
   }
 
@@ -314,6 +356,17 @@ export class FakePasswordHasher implements PasswordHasher {
   verify(hash: string | null, password: string): Promise<boolean> {
     this.verifyTargets.push(hash);
     return Promise.resolve(hash !== null && hash === `$argon2id$fake$${password}`);
+  }
+}
+
+/** Answers from a fixed list of leaked passwords, and records what it was asked. */
+export class FakeBreachedPasswords implements BreachedPasswords {
+  readonly leaked = new Set<string>(["password123", "senha12345"]);
+  readonly checked: string[] = [];
+
+  includes(password: string): Promise<boolean> {
+    this.checked.push(password);
+    return Promise.resolve(this.leaked.has(password));
   }
 }
 

@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { newUser } from "../domain/user.js";
+import { BreachedPasswordError } from "./errors.js";
 import {
   createRecorders,
+  FakeBreachedPasswords,
   FakeClock,
   FakeIds,
   FakePasswordHasher,
   FakeTransactions,
   InMemoryUserRepository,
 } from "./in-memory.fakes.js";
+import { NewPasswords } from "./new-passwords.js";
 import { RegisterUser } from "./register-user.js";
 
 const request = { name: "Ana Souza", email: "ana@exemplo.com", password: "correct horse battery" };
@@ -18,17 +21,18 @@ function setup() {
   const ids = new FakeIds();
   const users = new InMemoryUserRepository();
   const hasher = new FakePasswordHasher();
+  const breached = new FakeBreachedPasswords();
   const recorders = createRecorders(clock, ids);
   const register = new RegisterUser(
     users,
-    hasher,
     new FakeTransactions(),
     clock,
     ids,
+    new NewPasswords(breached, hasher),
     recorders.outbox,
     recorders.audit,
   );
-  return { clock, ids, users, hasher, register, ...recorders };
+  return { clock, ids, users, hasher, breached, register, ...recorders };
 }
 
 describe("RegisterUser", () => {
@@ -153,5 +157,31 @@ describe("RegisterUser", () => {
   it("answers the same for a new and for a known address", async () => {
     await expect(s.register.execute(request)).resolves.toBeUndefined();
     await expect(s.register.execute(request)).resolves.toBeUndefined();
+  });
+  describe("leaked passwords", () => {
+    it("refuses one before hashing or creating anything", async () => {
+      await expect(s.register.execute({ ...request, password: "password123" })).rejects.toThrow(
+        BreachedPasswordError,
+      );
+      expect(s.hasher.hashCalls).toBe(0);
+      expect(s.users.users.size).toBe(0);
+      expect(s.outboxMessages).toEqual([]);
+    });
+
+    it("refuses one for an already registered e-mail too, so the answer reveals nothing", async () => {
+      await s.register.execute(request);
+      s.outboxMessages.length = 0;
+
+      await expect(s.register.execute({ ...request, password: "password123" })).rejects.toThrow(
+        BreachedPasswordError,
+      );
+      expect(s.outboxMessages).toEqual([]);
+    });
+
+    it("checks every password, new e-mail or not", async () => {
+      await s.register.execute(request);
+      await s.register.execute(request);
+      expect(s.breached.checked).toEqual([request.password, request.password]);
+    });
   });
 });

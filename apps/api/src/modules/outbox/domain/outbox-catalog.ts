@@ -18,6 +18,14 @@ export const OUTBOX_CATALOG = {
   "auth.verification_email_requested": { queue: "email", payload: z.strictObject({ userId: id }) },
   /** Someone tried to register an address that already has an account. */
   "auth.account_exists_notice": { queue: "email", payload: z.strictObject({ userId: id }) },
+  /** Someone asked for a password reset link for this account; the consumer creates the token. */
+  "auth.password_reset_requested": { queue: "email", payload: z.strictObject({ userId: id }) },
+  /** The password was changed or reset: its owner is told, in case it was not them. */
+  "auth.password_changed_notice": { queue: "email", payload: z.strictObject({ userId: id }) },
+  /** The account asked to move to its pending e-mail: link to the new address, notice to the old. */
+  "auth.email_change_requested": { queue: "email", payload: z.strictObject({ userId: id }) },
+  /** Another account tried to move to this account's address. */
+  "auth.email_in_use_notice": { queue: "email", payload: z.strictObject({ userId: id }) },
   /** A paid order needs its tickets issued. */
   "orders.paid": { queue: "tickets", payload: z.strictObject({ orderId: id }) },
   /** Tickets exist; the buyer gets them by e-mail. */
