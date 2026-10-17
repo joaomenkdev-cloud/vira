@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 1 — Núcleo (o Marco 0 terminou com o merge da F7).
-- **Concluído (mergeado):** F1 a F7, N1 a N5 (PRs #1, #2, #8, #10–#17, #26) e Dependabot (#4–#7, #9 CodeQL v4).
-- **Entrega aberta:** N6 — Redefinição de senha e conta (`feat/users-account`), PR draft.
-- **Próximo passo:** N7 — Telas de autenticação (`feat/web-auth`), depois do merge da N6.
+- **Concluído (mergeado):** F1 a F7, N1 a N6 (PRs #1, #2, #8, #10–#17, #26, #27) e Dependabot (#4–#7, #9 CodeQL v4).
+- **Entregas abertas:** N7 — Telas de autenticação (`feat/web-auth`, PR #28) e N8 — Eventos do organizador (`feat/events-management`), PRs draft independentes (a N8 só mexe na API).
+- **Próximo passo:** N9 — Upload de imagem, depois do merge da N8 (sem ela nenhum evento pode ser publicado pela API).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,35 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-17 — N8: eventos do organizador (API)
+
+Auditoria (antes de codar): a API tinha só `auth`, `users`, `audit`, `outbox` e `health`; nenhuma tabela de eventos no Prisma. O DATA_MODEL já descrevia `events` e `ticket_types` (com a invariante de estoque), a API.md as rotas `/organizer/*`, o SECURITY_MODEL a dupla `markdown-it` + `sanitize-html` e o `audit-catalog` já tinha `event.published` e `event.canceled`. O pedido que chegou à thread falava em telas de vitrine, checkout e ingressos; como nada disso existe na API, a N8 seguiu o ROADMAP. Sem Docker, a integração rodou contra Postgres 16, Redis e Mailpit locais (ajuste local no `infrastructure.ts`, não commitado).
+
+Feito (API e `@vira/shared`; não mexe no web):
+
+- Migration `events` e `ticket_types` (enum `event_status`), com os `CHECK`s: estoque (`sold + reserved <= capacity`), preço de R$ 1,00 a R$ 100.000,00, `max_per_order` 1–20, janela de vendas ordenada, fim depois do início, local completo ou ausente, `image_alt` só com imagem, crédito obrigatório em foto de demonstração, evento publicado com local e imagem com `alt`, e datas que seguem o status. Índices da vitrine (N10) já criados, inclusive o trigram do título.
+- `@vira/shared`: contratos dos eventos (`createEventRequestSchema`, `updateEventRequestSchema`, tipos de ingresso, listagem, `OrganizerEvent`, `Money`, UFs, `isKnownTimeZone`) e `slugify`, agora usado também pelo slug do organizador.
+- Módulo `events`: domínio (`missingForPublication`, `editRefusal`, `eventSlug`), dez casos de uso, `SanitizedMarkdownRenderer`, `PrismaEventRepository` e dois controllers (`/organizer/events`, `/organizer/ticket-types`). O módulo `users` ganhou `public-api.ts` com `OrganizerProfiles`, por onde `events` descobre o perfil do chamador.
+- Plataforma: `CursorCodec` (cursor opaco com HMAC, chave derivada do `CSRF_SECRET` por HKDF com rótulo próprio, preso a um escopo) e o tipo de problema `invalid-state-transition`.
+- Testes: domínio; sanitização com 23 payloads XSS (o teste confere que só sobram as tags e atributos da allowlist, com `href` `https:`/`mailto:`); casos de uso com repositório em memória (todas as operações num evento alheio dão "não encontrado" e não mudam nada, completude, transições, capacidade, janela de vendas, paginação); contratos; e2e sem banco (`401`, `403` para BUYER em todas as rotas, mass assignment, ids e limites); access policy das rotas novas; integração contra Postgres (fluxo rascunho → publicar → cancelar com auditoria, `404` idêntico ao de id inexistente em todas as rotas de outro organizador, organizador sem perfil, HTML salvo sanitizado, capacidade e exclusão com vendas, rascunho excluído com os tipos, paginação estável com evento criado no meio, cursor adulterado ou de outra lista, e cada `CHECK` recusando o que a API nunca escreve).
+
+Decisões tomadas por conta própria:
+
+- **Conta sem perfil de organizador recebe `403`**, mesmo ADMIN: o papel deixa entrar na rota, mas não há eventos de quem gerenciar.
+- **Rascunho pode ficar sem local**, e a descrição é opcional; o que falta só pesa ao publicar, e a resposta `409` lista os campos em `errors`.
+- **Evento publicado continua obrigado a estar completo:** a mesma checagem da publicação roda em toda edição dele e na exclusão de tipos de ingresso.
+- **Cancelar só evento publicado e não encerrado;** rascunho se exclui. **Motivo do cancelamento** ganhou coluna (`cancel_reason`), porque a API.md pedia `{ reason }` e não havia onde guardar; não vai para a auditoria (texto livre).
+- **Slug refeito ao publicar**, a partir do título final, e fixo dali em diante.
+- **Trava pessimista** (`SELECT ... FOR UPDATE` na linha do evento) em publicar, editar e mexer em tipos de ingresso, para a checagem e a escrita não se cruzarem com outra requisição.
+- **Até 20 tipos de ingresso por evento** e janela de vendas terminando até o fim do evento.
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Publicar depende da imagem**, que só chega com a N9: até lá, só testes (e o seed da N13) conseguem publicar.
+- **`GET /organizer/events/{id}/sales`** fica para quando houver pedidos (todos os números seriam zero).
+- **Ocultar tipo de ingresso com vendas** (o DATA_MODEL citava) fica para quando houver vendas.
+- **Avisar compradores** de cancelamento ou mudança de data entra com os pedidos e o reembolso (Marco 2).
 
 ### 2026-10-15 — N6: redefinição de senha, conta e senhas vazadas
 
