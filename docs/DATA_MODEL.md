@@ -241,39 +241,40 @@ Tokens de uso único para verificação de e-mail, redefinição de senha e troc
 
 | Campo | Tipo | Regras |
 | --- | --- | --- |
-| `organizer_id` | uuid | FK → organizer_profiles |
-| `slug` | text | `UNIQUE`; gerado do título + sufixo aleatório curto |
-| `title` | text | 3–120 caracteres |
-| `description_md` | text | Markdown do organizador, até 20 000 caracteres |
+| `organizer_id` | uuid | FK → organizer_profiles, `ON DELETE RESTRICT` |
+| `slug` | text | `UNIQUE`; gerado do título + sufixo aleatório de 6 caracteres (mesmo formato do slug do organizador, até 80, `CHECK`); refeito ao publicar, porque rascunhos mudam de título, e fixo daí em diante |
+| `title` | text | 3–120 caracteres sem espaços nas pontas (`CHECK`) |
+| `description_md` | text | Markdown do organizador, até 20 000 caracteres (`CHECK`); vazio por padrão |
 | `description_html` | text | HTML **sanitizado** gerado no servidor a partir do markdown (allowlist de tags); nunca recebido do cliente |
 | `status` | enum `EventStatus` | `DRAFT`, `PUBLISHED`, `CANCELED` (encerrado é derivado de `ends_at < now()`) |
 | `starts_at`, `ends_at` | timestamptz | `CHECK (ends_at > starts_at)` |
 | `timezone` | text | IANA, validado contra a lista do runtime |
-| `venue_name`, `venue_address`, `venue_city`, `venue_state` | text | Endereço do local (não é dado pessoal) |
+| `venue_name`, `venue_address`, `venue_city`, `venue_state` | text, char(2) | Endereço do local (não é dado pessoal). Os quatro ou nenhum (`CHECK`); `venue_state` é a UF. Rascunho pode ficar sem local |
 | `image_key` | text | Chave no bucket privado; servida via URL assinada/otimizada |
 | `image_alt` | text | Obrigatório para publicar |
 | `image_credit_author`, `image_credit_url`, `image_license` | text | Obrigatórios quando `is_demo = true` |
 | `is_demo` | boolean | `true` só para eventos criados pelo seed |
-| `published_at`, `canceled_at` | timestamptz | |
+| `published_at`, `canceled_at` | timestamptz | Seguem o status (`CHECK`): rascunho sem nenhum dos dois; publicado com `published_at`; cancelado com os dois e o motivo (só se cancela o que foi publicado) |
+| `cancel_reason` | text | 3–500 caracteres, mostrado a quem comprou; só em `CANCELED`. Fica fora da auditoria por ser texto livre |
 
 Índices: `UNIQUE(slug)`; `(status, starts_at)` para a vitrine; `(organizer_id, created_at)` para o painel; `GIN (title gin_trgm_ops)` (extensão `pg_trgm`) para busca; `(venue_city, starts_at) WHERE status = 'PUBLISHED'`.
 
-Publicar exige: título, data futura, local, imagem com `alt`, ao menos um tipo de ingresso.
+Publicar exige: título, data futura, local, imagem com `alt`, ao menos um tipo de ingresso. O `CHECK` `events_published_complete` garante no banco o que a linha mostra (local e imagem com `alt`); a data futura e os tipos de ingresso são conferidos pela API com a linha do evento travada. Um evento publicado continua obrigado a isso: edições que tirariam o local ou levariam a data para o passado são recusadas. Cancelado ou encerrado não muda mais. `image_alt` só existe com `image_key` (`CHECK`), e evento de demonstração com imagem tem os três campos de crédito (`CHECK`).
 
 ### `ticket_types`
 
 | Campo | Tipo | Regras |
 | --- | --- | --- |
 | `event_id` | uuid | FK → events |
-| `name`, `description` | text | Ex.: "Pista – Lote 1" |
-| `price_cents` | int | `CHECK (price_cents >= 100)` — no MVP só ingressos pagos, mínimo R$ 1,00 (gratuitos no marco Evolução) |
-| `currency` | char(3) | `BRL` |
+| `name`, `description` | text | Ex.: "Pista – Lote 1". Nome 1–80 sem espaços nas pontas; descrição opcional, 1–500 (`CHECK`) |
+| `price_cents` | int | `CHECK (price_cents >= 100)` — no MVP só ingressos pagos, mínimo R$ 1,00 (gratuitos no marco Evolução); máximo R$ 100.000,00 (`CHECK`) |
+| `currency` | char(3) | `BRL` (`CHECK`) |
 | `capacity` | int | `CHECK (capacity > 0)` |
 | `sold` | int | `CHECK (sold >= 0)` |
 | `reserved` | int | `CHECK (reserved >= 0)` |
 | `max_per_order` | int | Padrão 10, `CHECK (max_per_order BETWEEN 1 AND 20)` |
-| `sales_start_at`, `sales_end_at` | timestamptz | Janela de vendas (opcional) |
-| `sort_order` | int | |
+| `sales_start_at`, `sales_end_at` | timestamptz | Janela de vendas (opcional); fim depois do início (`CHECK`) e até o fim do evento (API) |
+| `sort_order` | int | `>= 0`; um tipo novo entra no fim |
 
 **Invariante de estoque:** `CHECK (sold + reserved <= capacity)`. É a última linha de defesa: mesmo com um bug na aplicação, o banco recusa overbooking. A reserva usa um `UPDATE` condicional atômico ([ADR-0007](adr/0007-controle-de-estoque.md)):
 
@@ -285,7 +286,7 @@ UPDATE ticket_types
 RETURNING id;
 ```
 
-`capacity` não pode ser reduzida abaixo de `sold + reserved`; um tipo com vendas não pode ser excluído (só ocultado).
+`capacity` não pode ser reduzida abaixo de `sold + reserved` (o `UPDATE` da capacidade compara no mesmo comando); um tipo com vendas ou reservas não pode ser excluído (ocultar fica para quando houver vendas). Excluir um rascunho leva os tipos junto (`ON DELETE CASCADE`); um evento publicado nunca é excluído. Índice: `(event_id, sort_order)`.
 
 ### `orders`
 

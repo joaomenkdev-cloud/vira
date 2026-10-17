@@ -15,6 +15,7 @@ export const PROBLEM_TYPES = {
   conflict: { status: 409, title: "Conflito com o estado atual do recurso" },
   "password-not-set": { status: 409, title: "A conta não tem senha" },
   "already-organizer": { status: 409, title: "A conta já tem perfil de organizador" },
+  "invalid-state-transition": { status: 409, title: "Operação incompatível com o estado atual" },
   "token-expired": { status: 410, title: "Link expirado ou já utilizado" },
   "payload-too-large": { status: 413, title: "Corpo da requisição muito grande" },
   "unsupported-media-type": { status: 415, title: "Tipo de conteúdo não suportado" },
