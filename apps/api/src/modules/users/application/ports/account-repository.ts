@@ -7,6 +7,9 @@ export type CreateProfileOutcome = "created" | "account-has-profile" | "slug-tak
 export interface AccountRepository {
   findById(id: string): Promise<Account | null>;
 
+  /** The id of the user's organizer profile, or `null` when there is none. */
+  findOrganizerProfileId(userId: string): Promise<string | null>;
+
   /** Answers whether the account exists (and was renamed). */
   rename(id: string, name: string): Promise<boolean>;
 
