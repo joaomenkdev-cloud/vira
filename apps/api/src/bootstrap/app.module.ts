@@ -3,7 +3,7 @@ import { APP_FILTER, APP_GUARD, APP_PIPE } from "@nestjs/core";
 
 import { AuditModule } from "../modules/audit/audit.module.js";
 import { AuthJobsModule, AuthModule } from "../modules/auth/auth.module.js";
-import { EventsModule } from "../modules/events/events.module.js";
+import { EventsJobsModule, EventsModule } from "../modules/events/events.module.js";
 import { HealthModule } from "../modules/health/health.module.js";
 import { OutboxModule, OutboxPollerModule } from "../modules/outbox/outbox.module.js";
 import { UsersModule } from "../modules/users/users.module.js";
@@ -22,6 +22,7 @@ import { RuntimeModule } from "../platform/runtime/runtime.module.js";
 import { AccessGuard } from "../platform/security/access.guard.js";
 import { CsrfGuard } from "../platform/security/csrf.guard.js";
 import { SecurityModule } from "../platform/security/security.module.js";
+import { StorageModule } from "../platform/storage/storage.module.js";
 
 export interface AppModuleOptions {
   readonly config: AppConfig;
@@ -42,6 +43,7 @@ export class AppModule {
         MailModule,
         RuntimeModule,
         PaginationModule,
+        StorageModule,
         SecurityModule,
         AuditModule,
         OutboxModule,
@@ -51,7 +53,7 @@ export class AppModule {
         HealthModule,
         // Embedded mode runs the background work inside the API process (ADR-0011).
         ...(config.worker.mode === "embedded"
-          ? [QueueModule, OutboxPollerModule, AuthJobsModule]
+          ? [QueueModule, OutboxPollerModule, AuthJobsModule, EventsJobsModule]
           : []),
       ],
       providers: [

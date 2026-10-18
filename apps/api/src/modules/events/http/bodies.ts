@@ -39,13 +39,25 @@ function commonFields(event: EventSummary | Event) {
   };
 }
 
-/** The organizer's view of an event. The bucket key of the image is never shown. */
-export function eventBody(event: Event): OrganizerEvent {
+/**
+ * The organizer's view of an event. The bucket key of the image is never shown, only a
+ * signed address of it (`imageUrl`).
+ */
+export function eventBody(event: Event, imageUrl: string | null): OrganizerEvent {
   return {
     ...commonFields(event),
     descriptionMd: event.descriptionMd,
     descriptionHtml: event.descriptionHtml,
-    image: event.image ? { alt: event.image.alt ?? "" } : null,
+    image:
+      event.image && imageUrl
+        ? {
+            url: imageUrl,
+            alt: event.image.alt ?? "",
+            width: event.image.width,
+            height: event.image.height,
+            blurDataUrl: event.image.blurDataUrl,
+          }
+        : null,
     publishedAt: isoOrNull(event.publishedAt),
     canceledAt: isoOrNull(event.canceledAt),
     cancelReason: event.cancelReason,

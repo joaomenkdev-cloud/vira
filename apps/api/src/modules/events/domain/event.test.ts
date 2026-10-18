@@ -5,6 +5,14 @@ import { eventSlug } from "./event-slug.js";
 
 const now = new Date("2026-10-17T12:00:00Z");
 
+const picture = {
+  key: "events/x/y.webp",
+  alt: "Pista cheia sob a lona",
+  width: 2400,
+  height: 1350,
+  blurDataUrl: "data:image/webp;base64,AA==",
+};
+
 const complete: Event = {
   id: "0192a0e4-0000-7000-8000-0000000000e1",
   organizerId: "0192a0e4-0000-7000-8000-0000000000b1",
@@ -22,7 +30,7 @@ const complete: Event = {
     city: "Rio de Janeiro",
     state: "RJ",
   },
-  image: { key: "events/x/y.webp", alt: "Pista cheia sob a lona" },
+  image: picture,
   isDemo: false,
   publishedAt: null,
   canceledAt: null,
@@ -70,7 +78,7 @@ describe("missingForPublication", () => {
   });
 
   it("asks for the text alternative of an image that has none", () => {
-    const noAlt = { ...complete, image: { key: "events/x/y.webp", alt: null } };
+    const noAlt = { ...complete, image: { ...picture, alt: null } };
     expect(missingForPublication(noAlt, now).map((m) => m.path)).toEqual(["image.alt"]);
   });
 

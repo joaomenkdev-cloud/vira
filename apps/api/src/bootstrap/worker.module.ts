@@ -1,6 +1,7 @@
 import { type DynamicModule, Module } from "@nestjs/common";
 
 import { AuthJobsModule } from "../modules/auth/auth.module.js";
+import { EventsJobsModule } from "../modules/events/events.module.js";
 import { OutboxPollerModule } from "../modules/outbox/outbox.module.js";
 import { ConfigModule } from "../platform/config/config.module.js";
 import type { AppConfig } from "../platform/config/config.schema.js";
@@ -9,6 +10,7 @@ import { LoggingModule, type LoggingOptions } from "../platform/logging/logging.
 import { MailModule } from "../platform/mail/mail.module.js";
 import { QueueModule } from "../platform/queue/queue.module.js";
 import { RuntimeModule } from "../platform/runtime/runtime.module.js";
+import { StorageModule } from "../platform/storage/storage.module.js";
 
 export interface WorkerModuleOptions {
   readonly config: AppConfig;
@@ -30,9 +32,11 @@ export class WorkerModule {
         DatabaseModule,
         RuntimeModule,
         MailModule,
+        StorageModule,
         QueueModule,
         OutboxPollerModule,
         AuthJobsModule,
+        EventsJobsModule,
       ],
     };
   }

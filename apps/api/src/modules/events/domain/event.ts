@@ -34,10 +34,16 @@ export interface Venue {
   readonly state: BrazilianState;
 }
 
-/** The uploaded picture (N9). `alt` is required to publish. */
+/**
+ * The event's picture: re-encoded WebP in the private bucket (N9). `alt` is required to
+ * publish; the size and the blurred preview let pages reserve its space before it loads.
+ */
 export interface EventImage {
   readonly key: string;
   readonly alt: string | null;
+  readonly width: number;
+  readonly height: number;
+  readonly blurDataUrl: string;
 }
 
 export interface TicketType {

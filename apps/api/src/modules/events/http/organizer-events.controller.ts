@@ -46,7 +46,8 @@ import { ListOrganizerEvents } from "../application/list-organizer-events.js";
 import type { RequestContext } from "../application/organizer-scope.js";
 import { PublishEvent } from "../application/publish-event.js";
 import { UpdateEvent } from "../application/update-event.js";
-import { eventBody, summaryBody, ticketTypeBody } from "./bodies.js";
+import { summaryBody, ticketTypeBody } from "./bodies.js";
+import { EventPresenter } from "./event-presenter.js";
 import { asProblem } from "./problems.js";
 
 export function callerOf(request: Request): AuthenticatedUser {
@@ -81,6 +82,7 @@ export class OrganizerEventsController {
     private readonly cancelEvent: CancelEvent,
     private readonly createTicketType: CreateTicketType,
     private readonly cursors: CursorCodec,
+    private readonly presenter: EventPresenter,
   ) {}
 
   @Get()
@@ -143,7 +145,9 @@ export class OrganizerEventsController {
     @Body({ schema: createEventRequestSchema }) body: CreateEventRequest,
     @Req() request: Request,
   ): Promise<OrganizerEvent> {
-    return eventBody(await asProblem(() => this.createEvent.execute(callerOf(request), body)));
+    return this.presenter.event(
+      await asProblem(() => this.createEvent.execute(callerOf(request), body)),
+    );
   }
 
   @Get(":id")
@@ -156,7 +160,9 @@ export class OrganizerEventsController {
     @Param("id", { schema: resourceIdSchema }) id: string,
     @Req() request: Request,
   ): Promise<OrganizerEvent> {
-    return eventBody(await asProblem(() => this.getEvent.execute(callerOf(request), id)));
+    return this.presenter.event(
+      await asProblem(() => this.getEvent.execute(callerOf(request), id)),
+    );
   }
 
   @Patch(":id")
@@ -177,7 +183,9 @@ export class OrganizerEventsController {
     @Body({ schema: updateEventRequestSchema }) body: UpdateEventRequest,
     @Req() request: Request,
   ): Promise<OrganizerEvent> {
-    return eventBody(await asProblem(() => this.updateEvent.execute(callerOf(request), id, body)));
+    return this.presenter.event(
+      await asProblem(() => this.updateEvent.execute(callerOf(request), id, body)),
+    );
   }
 
   @Delete(":id")
@@ -212,7 +220,7 @@ export class OrganizerEventsController {
     @Param("id", { schema: resourceIdSchema }) id: string,
     @Req() request: Request,
   ): Promise<OrganizerEvent> {
-    return eventBody(
+    return this.presenter.event(
       await asProblem(() => this.publishEvent.execute(callerOf(request), id, contextOf(request))),
     );
   }
@@ -234,7 +242,7 @@ export class OrganizerEventsController {
     @Body({ schema: cancelEventRequestSchema }) body: CancelEventRequest,
     @Req() request: Request,
   ): Promise<OrganizerEvent> {
-    return eventBody(
+    return this.presenter.event(
       await asProblem(() =>
         this.cancelEvent.execute(callerOf(request), id, body, contextOf(request)),
       ),
