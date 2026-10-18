@@ -53,6 +53,12 @@ jobs:
         run: pnpm --filter @vira/api db:deploy
         env:
           DATABASE_URL: postgresql://vira:vira_local@127.0.0.1:5432/vira
+      # The same step a developer runs after `pnpm infra:up` (apps/api/.env.example).
+      - name: Create the storage bucket and its CORS rule
+        run: |
+          cp apps/api/.env.example apps/api/.env
+          pnpm --filter @vira/shared build
+          pnpm --filter @vira/api storage:setup
       - name: Show service logs on failure
         if: failure()
         run: docker compose logs

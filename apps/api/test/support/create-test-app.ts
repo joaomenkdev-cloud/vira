@@ -18,6 +18,10 @@ export const UNREACHABLE_INFRASTRUCTURE = {
   DATABASE_URL: "postgresql://vira:unused@127.0.0.1:1/vira",
   REDIS_URL: "redis://127.0.0.1:1",
   SMTP_URL: "smtp://127.0.0.1:1",
+  S3_ENDPOINT: "http://127.0.0.1:1",
+  S3_BUCKET: "vira-test",
+  S3_ACCESS_KEY_ID: "vira-test",
+  S3_SECRET_ACCESS_KEY: "vira-test-secret",
 };
 
 /** Signing keys for tests only; production keys come from the environment. */

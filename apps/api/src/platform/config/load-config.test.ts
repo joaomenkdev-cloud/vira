@@ -7,6 +7,10 @@ const validEnv = {
   DATABASE_URL: "postgresql://vira:vira_local@127.0.0.1:5432/vira",
   REDIS_URL: "redis://127.0.0.1:6379",
   SMTP_URL: "smtp://127.0.0.1:1025",
+  S3_ENDPOINT: "http://127.0.0.1:8333/",
+  S3_BUCKET: "vira-events",
+  S3_ACCESS_KEY_ID: "vira-local",
+  S3_SECRET_ACCESS_KEY: "vira-local-secret",
   JWT_SECRET: "a".repeat(43),
   CSRF_SECRET: "b".repeat(43),
 };
@@ -18,6 +22,10 @@ const productionEnv = {
   REDIS_URL: "rediss://default:pw@cache.example:6379",
   SMTP_URL: "smtps://resend:pw@smtp.example:465",
   MAIL_FROM: "Vira <no-reply@vira.example>",
+  S3_ENDPOINT: "https://account.r2.cloudflarestorage.com",
+  S3_BUCKET: "vira-events",
+  S3_ACCESS_KEY_ID: "key-id",
+  S3_SECRET_ACCESS_KEY: "key-secret",
   JWT_SECRET: "c".repeat(44),
   CSRF_SECRET: "d".repeat(44),
 };
@@ -42,6 +50,13 @@ describe("loadConfig", () => {
       database: { url: validEnv.DATABASE_URL },
       redis: { url: validEnv.REDIS_URL },
       mail: { smtpUrl: validEnv.SMTP_URL, from: "Vira <no-reply@vira.localhost>" },
+      storage: {
+        endpoint: "http://127.0.0.1:8333",
+        region: "auto",
+        bucket: "vira-events",
+        accessKeyId: "vira-local",
+        secretAccessKey: "vira-local-secret",
+      },
       worker: { mode: "separate", outboxPollIntervalMs: 5_000 },
       auth: {
         jwtSecret: validEnv.JWT_SECRET,
@@ -105,6 +120,19 @@ describe("loadConfig", () => {
       "REDIS_URL",
       "SMTP_URL",
     ]);
+  });
+
+  it("requires the object storage and checks the bucket name", () => {
+    const { S3_ENDPOINT: _endpoint, ...withoutEndpoint } = validEnv;
+    expect(captureError(withoutEndpoint).issues.map((i) => i.variable)).toEqual(["S3_ENDPOINT"]);
+    expect(
+      captureError({ ...validEnv, S3_BUCKET: "Vira_Events" }).issues.map((i) => i.variable),
+    ).toEqual(["S3_BUCKET"]);
+    expect(
+      captureError({ ...validEnv, S3_ENDPOINT: "ftp://storage.example" }).issues.map(
+        (i) => i.variable,
+      ),
+    ).toEqual(["S3_ENDPOINT"]);
   });
 
   it("reads the mail settings", () => {
@@ -190,6 +218,12 @@ describe("loadConfig", () => {
       }
     });
 
+    it("requires TLS to the object storage", () => {
+      expect(
+        captureError({ ...productionEnv, S3_ENDPOINT: "http://storage.example" }).issues,
+      ).toEqual([{ variable: "S3_ENDPOINT", message: "must use https in production" }]);
+    });
+
     it("requires TLS to the mail server and an explicit sender", () => {
       const insecure = captureError({ ...productionEnv, SMTP_URL: "smtp://mail.example:587" });
       expect(insecure.issues).toEqual([
@@ -222,6 +256,10 @@ describe("loadConfig", () => {
       "LOG_LEVEL",
       "PORT",
       "REDIS_URL",
+      "S3_ACCESS_KEY_ID",
+      "S3_BUCKET",
+      "S3_ENDPOINT",
+      "S3_SECRET_ACCESS_KEY",
       "SMTP_URL",
       "WEB_ORIGIN",
     ]);

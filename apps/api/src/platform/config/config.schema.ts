@@ -42,6 +42,9 @@ function oauthClient(
   return clientId && clientSecret ? { clientId, clientSecret } : undefined;
 }
 
+/** S3 credentials: opaque strings issued by the storage provider (R2 API token, SeaweedFS). */
+const storageCredentialSchema = z.string().trim().min(1).max(512);
+
 function usesTls(databaseUrl: string): boolean {
   const sslMode = new URL(databaseUrl).searchParams.get("sslmode");
   return sslMode !== null && ENCRYPTED_SSL_MODES.has(sslMode);
@@ -74,6 +77,12 @@ export const envSchema = z
     GITHUB_CLIENT_SECRET: oauthCredentialSchema,
     PWNED_PASSWORDS_ENABLED: z.stringbool().optional(),
     PWNED_PASSWORDS_URL: z.url({ protocol: /^https?$/ }).default("https://api.pwnedpasswords.com"),
+    S3_ENDPOINT: z.url({ protocol: /^https?$/ }),
+    S3_REGION: z.string().trim().min(1).max(64).default("auto"),
+    // Bucket naming rules shared by S3, R2 and SeaweedFS.
+    S3_BUCKET: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/),
+    S3_ACCESS_KEY_ID: storageCredentialSchema,
+    S3_SECRET_ACCESS_KEY: storageCredentialSchema,
   })
   .superRefine((env, ctx) => {
     // One key per purpose: a CSRF token must never verify as a JWT signature, or vice versa.
@@ -130,6 +139,13 @@ export const envSchema = z
         message: "must use rediss:// in production",
       });
     }
+    if (!env.S3_ENDPOINT.startsWith("https://")) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["S3_ENDPOINT"],
+        message: "must use https in production",
+      });
+    }
   })
   .transform((env) => ({
     env: env.NODE_ENV,
@@ -149,6 +165,18 @@ export const envSchema = z
     database: { url: env.DATABASE_URL },
     redis: { url: env.REDIS_URL },
     mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM ?? DEFAULT_MAIL_FROM },
+    /**
+     * Private bucket of the event pictures (ADR-0011, ADR-0012): Cloudflare R2 in
+     * production, SeaweedFS locally. Browsers reach the endpoint too, through the
+     * pre-signed URLs, so it must be an address they can open.
+     */
+    storage: {
+      endpoint: env.S3_ENDPOINT.replace(/\/+$/, ""),
+      region: env.S3_REGION,
+      bucket: env.S3_BUCKET,
+      accessKeyId: env.S3_ACCESS_KEY_ID,
+      secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+    },
     worker: { mode: env.WORKER_MODE, outboxPollIntervalMs: env.OUTBOX_POLL_INTERVAL_MS },
     auth: {
       jwtSecret: env.JWT_SECRET,
