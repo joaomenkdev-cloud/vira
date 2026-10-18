@@ -160,6 +160,7 @@ erDiagram
         uuid owner_id FK
         uuid event_id FK "nullable"
         text object_key UK
+        text image_key UK "nullable"
         upload_status status
     }
 ```
@@ -250,8 +251,9 @@ Tokens de uso único para verificação de e-mail, redefinição de senha e troc
 | `starts_at`, `ends_at` | timestamptz | `CHECK (ends_at > starts_at)` |
 | `timezone` | text | IANA, validado contra a lista do runtime |
 | `venue_name`, `venue_address`, `venue_city`, `venue_state` | text, char(2) | Endereço do local (não é dado pessoal). Os quatro ou nenhum (`CHECK`); `venue_state` é a UF. Rascunho pode ficar sem local |
-| `image_key` | text | Chave no bucket privado; servida via URL assinada/otimizada |
-| `image_alt` | text | Obrigatório para publicar |
+| `image_key` | text | Chave da imagem re-encodada (`events/<eventId>/<uuid>.webp`) no bucket privado; servida por URL assinada. Escrita só pela confirmação do upload (N9) e pelo seed |
+| `image_alt` | text | Obrigatório para publicar; 3–300 caracteres (`CHECK`) |
+| `image_width`, `image_height`, `image_blur_data_url` | int, int, text | Tamanho da imagem servida e prévia borrada (`data:image/webp;base64,…`, até 2000 caracteres) para o `next/image`. Os três existem junto com `image_key` ou nenhum (`CHECK` `events_image_details`) |
 | `image_credit_author`, `image_credit_url`, `image_license` | text | Obrigatórios quando `is_demo = true` |
 | `is_demo` | boolean | `true` só para eventos criados pelo seed |
 | `published_at`, `canceled_at` | timestamptz | Seguem o status (`CHECK`): rascunho sem nenhum dos dois; publicado com `published_at`; cancelado com os dois e o motivo (só se cancela o que foi publicado) |
@@ -393,17 +395,23 @@ Garantias: triggers `BEFORE UPDATE OR DELETE` (por linha) e `BEFORE TRUNCATE` le
 
 ### `media_uploads`
 
+Uma linha por envio de imagem de evento (N9). Guarda as duas chaves do envio, para que a varredura apague do bucket o que nada usa.
+
 | Campo | Tipo | Regras |
 | --- | --- | --- |
-| `owner_id` | uuid | Organizador que pediu a URL |
-| `event_id` | uuid | Preenchido ao confirmar |
-| `object_key` | text | `events/<eventId>/<uuid>.<ext>` gerado pelo servidor, `UNIQUE` |
-| `content_type` | text | `image/jpeg`, `image/png`, `image/webp` |
-| `max_bytes` | int | 5 MB |
+| `owner_id` | uuid | Perfil de organizador que pediu a URL (FK, `ON DELETE CASCADE`) |
+| `event_id` | uuid | Evento para o qual a URL foi pedida; vira `NULL` quando o rascunho é excluído (`ON DELETE SET NULL`) e a varredura apaga os objetos |
+| `object_key` | text | Original enviado pelo navegador: `uploads/<eventId>/<uuid>.<jpg\|png\|webp>`, gerado pelo servidor, `UNIQUE`, formato conferido por `CHECK` |
+| `content_type` | text | `image/jpeg`, `image/png`, `image/webp` (`CHECK`) |
+| `size_bytes` | int | Tamanho exato declarado e assinado na URL; 1 byte a 5 MB (`CHECK`) |
 | `status` | enum | `PENDING`, `CONFIRMED`, `REJECTED` |
-| `expires_at` | timestamptz | URL válida por 5 min |
+| `image_key` | text | Imagem re-encodada (`events/<eventId>/<uuid>.webp`), `UNIQUE`. Existe se e só se `CONFIRMED`, junto com `confirmed_at` (`CHECK`) |
+| `expires_at` | timestamptz | Fim da validade da URL (5 min). A confirmação ainda é aceita até 15 min depois |
+| `created_at`, `confirmed_at` | timestamptz | — |
 
-Na confirmação o servidor faz `HEAD` no objeto, confere tamanho e tipo real (magic bytes), gera variantes e o `blurDataURL`. Uploads `PENDING` vencidos são apagados por job.
+Na confirmação o servidor confere o tamanho do objeto (`HEAD`), lê no máximo 5 MB, confere o tipo real pelos magic bytes, decodifica com limite de 40 megapixels, exige ao menos 1200 × 600, re-encoda para WebP sem metadados (EXIF/GPS) e gera o `blurDataURL`; o original é apagado. Um arquivo recusado leva o envio a `REJECTED` e é apagado. Não há variantes de tamanho: o `next/image` faz os recortes (3:2, 16:9, 4:3) e os tamanhos na entrega.
+
+A varredura (job do worker, a cada 10 min) apaga objetos e linhas de envios `PENDING` ou `REJECTED` vencidos há mais de 15 min e de envios `CONFIRMED` cuja imagem não é mais a do evento (trocada, ou de rascunho excluído). Índices: `(status, expires_at)`, `(event_id)` e, em `events`, `(image_key) WHERE image_key IS NOT NULL`.
 
 ## Máquinas de estado
 

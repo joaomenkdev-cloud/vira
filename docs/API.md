@@ -112,6 +112,7 @@ Todo erro é `application/problem+json`:
 | <a id="request-in-progress"></a>`request-in-progress` | 409 | Mesma `Idempotency-Key` em processamento |
 | <a id="idempotency-key-reused"></a>`idempotency-key-reused` | 422 | Mesma chave com outro corpo |
 | <a id="sales-closed"></a>`sales-closed` | 422 | Fora da janela de vendas ou evento não publicado/encerrado |
+| <a id="invalid-image"></a>`invalid-image` | 422 | O arquivo enviado para a imagem do evento não chegou, não é uma imagem JPEG/PNG/WebP, não confere com o tipo informado ou é pequeno ou grande demais; `detail` diz qual |
 | <a id="payload-too-large"></a>`payload-too-large` | 413 | Corpo acima de 100 kB |
 | <a id="unsupported-media-type"></a>`unsupported-media-type` | 415 | `Content-Type` não aceito pela rota |
 | <a id="rate-limited"></a>`rate-limited` | 429 | Limite excedido |
@@ -270,8 +271,8 @@ Páginas do web (N7) que os e-mails apontam: `/redefinir-senha` e `/confirmar-em
 | DELETE | `/organizer/events/{id}` | ORGANIZER* | — | `204` (só DRAFT) | 404, 409 |
 | POST | `/organizer/events/{id}/publish` | ORGANIZER* | — | `200 Event` | 404, 409 `invalid-state-transition` (com a lista do que falta) |
 | POST | `/organizer/events/{id}/cancel` | ORGANIZER* | `{ reason }` | `200 Event` | 404, 409 |
-| POST | `/organizer/events/{id}/image/upload-url` | ORGANIZER* | `{ contentType, sizeBytes }` | `201 { uploadId, url, headers, expiresAt }` (PUT pré-assinado, 5 min) | 400 (tipo/tamanho), 404, 429 |
-| POST | `/organizer/events/{id}/image` | ORGANIZER* | `{ uploadId, alt }` | `200 Event` (após validar o objeto) | 400, 404, 422 (arquivo não confere) |
+| POST | `/organizer/events/{id}/image/upload-url` | ORGANIZER* | `{ contentType, sizeBytes }` | `201 { uploadId, url, headers, expiresAt }` (PUT pré-assinado, 5 min) | 400 (tipo/tamanho), 404, 409, 429 |
+| POST | `/organizer/events/{id}/image` | ORGANIZER* | `{ uploadId, alt }` | `200 Event` (após validar o objeto) | 400, 404, 409, 422 `invalid-image` |
 | POST | `/organizer/events/{id}/ticket-types` | ORGANIZER* | `{ name, description?, priceCents, capacity, maxPerOrder?, salesStartAt?, salesEndAt? }` | `201 TicketType` | 400, 404 |
 | PATCH | `/organizer/ticket-types/{id}` | ORGANIZER* | campos parciais | `200 TicketType` | 400, 404, 409 (capacidade < vendidos + reservados) |
 | DELETE | `/organizer/ticket-types/{id}` | ORGANIZER* | — | `204` (só sem vendas e reservas) | 404, 409 |
@@ -279,7 +280,7 @@ Páginas do web (N7) que os e-mails apontam: `/redefinir-senha` e `/confirmar-em
 
 #### Como funcionam (N8)
 
-Implementadas na N8 todas as rotas acima menos as de imagem (N9) e `/sales` (chega com os pedidos, no Marco 2). Todas pedem ORGANIZER **e** perfil de organizador: uma conta sem perfil (inclusive ADMIN) recebe `403 forbidden`. Evento ou tipo de ingresso de outro organizador responde `404`, idêntico a um id que não existe; ids fora do formato UUID são `400`. Os corpos são estritos: `status`, `slug`, `organizerId`, `descriptionHtml`, `isDemo`, `sold`, `reserved` ou qualquer campo não listado é `400`.
+Implementadas na N8 todas as rotas acima menos as de imagem (N9, abaixo) e `/sales` (chega com os pedidos, no Marco 2). Todas pedem ORGANIZER **e** perfil de organizador: uma conta sem perfil (inclusive ADMIN) recebe `403 forbidden`. Evento ou tipo de ingresso de outro organizador responde `404`, idêntico a um id que não existe; ids fora do formato UUID são `400`. Os corpos são estritos: `status`, `slug`, `organizerId`, `descriptionHtml`, `isDemo`, `sold`, `reserved` ou qualquer campo não listado é `400`.
 
 | Rota | Comportamento |
 | --- | --- |
@@ -293,7 +294,25 @@ Implementadas na N8 todas as rotas acima menos as de imagem (N9) e `/sales` (che
 | `PATCH /organizer/ticket-types/{id}` | Campos parciais e `sortOrder`. Capacidade abaixo de vendidos + reservados: `409 conflict` (comparado no mesmo `UPDATE`). |
 | `DELETE /organizer/ticket-types/{id}` | Só sem vendas nem reservas (`409`); o último tipo de um evento publicado fica (`409`). |
 
-`Event` (visão do organizador): `{ id, slug, title, status, startsAt, endsAt, timezone, venue, isDemo, descriptionMd, descriptionHtml, image: { alt } | null, publishedAt, canceledAt, cancelReason, ticketTypes, createdAt, updatedAt }`. `TicketType`: `{ id, name, description, price: Money, capacity, sold, reserved, maxPerOrder, salesStartAt, salesEndAt, sortOrder }`. A chave da imagem no bucket nunca aparece.
+`Event` (visão do organizador): `{ id, slug, title, status, startsAt, endsAt, timezone, venue, isDemo, descriptionMd, descriptionHtml, image: { url, alt, width, height, blurDataUrl } | null, publishedAt, canceledAt, cancelReason, ticketTypes, createdAt, updatedAt }`. `TicketType`: `{ id, name, description, price: Money, capacity, sold, reserved, maxPerOrder, salesStartAt, salesEndAt, sortOrder }`. A imagem aparece só por um endereço assinado (`url`, `GET` válido por 1 hora; o bucket é privado), nunca como campo de chave.
+
+#### Imagem do evento (N9)
+
+O arquivo vai do navegador direto para o bucket privado (R2 em produção, SeaweedFS local), sem passar pela API, e só vira a imagem do evento depois de conferido:
+
+1. `POST /organizer/events/{id}/image/upload-url` com `{ contentType, sizeBytes }`: `image/jpeg`, `image/png` ou `image/webp` (SVG e GIF não), de 1 byte a 5 MB. A resposta traz uma URL de `PUT` pré-assinada por 5 minutos para uma chave gerada pelo servidor; o tipo e o tamanho exato estão na assinatura, então o armazenamento recusa (`403`) outro tipo ou outro tamanho. Até 20 URLs por hora por conta (`429`). Evento cancelado ou encerrado: `409`.
+2. O navegador envia o arquivo: `fetch(url, { method: "PUT", body: file, headers })`, com os `headers` da resposta (o `Content-Type`). O bucket aceita esse `PUT` vindo do `WEB_ORIGIN` (CORS configurado por `pnpm --filter @vira/api storage:setup`).
+3. `POST /organizer/events/{id}/image` com `{ uploadId, alt }` (texto alternativo de 3 a 300 caracteres). O servidor lê o objeto (nunca uma URL do cliente), confere o tamanho e o formato real pelos primeiros bytes, decodifica com limite de 40 megapixels, exige ao menos 1200 × 600, gira conforme o EXIF, reduz a no máximo 2400 px no maior lado, converte para WebP sem metadados (EXIF, GPS, XMP) e gera o `blurDataUrl` (16 px). Responde o `Event` com a imagem nova.
+
+| Situação | Resposta |
+| --- | --- |
+| Confirmar antes do arquivo chegar | `422 invalid-image`; o envio continua valendo: mande o arquivo e confirme de novo |
+| Arquivo que não é imagem, de outro formato, pequeno demais, corrompido ou com pixels demais | `422 invalid-image` com o motivo em `detail`; o arquivo é apagado e é preciso pedir outra URL |
+| `uploadId` de outro evento, de outro organizador, já usado, recusado ou vencido | `404` |
+| Confirmação até 15 min depois de a URL vencer | Aceita (um envio lento pode ter começado no fim do prazo) |
+| Evento já com imagem, inclusive publicado | A imagem é trocada; a anterior sai do bucket na próxima varredura |
+
+Um job no worker (a cada 10 min) apaga do bucket o que nada usa: envios não confirmados depois do prazo, envios recusados, imagens trocadas e imagens de rascunhos excluídos.
 
 Publicar, editar e mexer em tipos de ingresso travam a linha do evento (`SELECT ... FOR UPDATE`) durante a checagem, então excluir o último tipo enquanto o evento é publicado não deixa um evento publicado sem ingresso.
 

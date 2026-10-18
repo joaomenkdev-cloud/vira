@@ -61,6 +61,14 @@ pnpm --filter @vira/api db:migrate   # cria uma migration nova a partir do schem
 
 O client do Prisma é gerado em `apps/api/src/generated` (ignorado pelo Git) pela tarefa `db:generate`, que o Turborepo roda antes de `lint`, `typecheck`, `test` e `build`. Invariantes que o Prisma não expressa (`CHECK`, índices parciais, triggers) são escritos em SQL nas migrations.
 
+### Armazenamento de imagens
+
+```bash
+pnpm --filter @vira/api storage:setup   # cria o bucket (se faltar) e a regra de CORS para o WEB_ORIGIN
+```
+
+Rode uma vez depois do `pnpm infra:up` (e de novo se o `WEB_ORIGIN` mudar). Os arquivos ficam no SeaweedFS (`S3_*` no `.env`); o navegador envia as imagens direto para lá por URL pré-assinada. No R2 o bucket é criado no painel da Cloudflare, e o mesmo comando, com as variáveis de produção, aplica o CORS.
+
 ### Testes de integração
 
 Os testes em `apps/api/test/integration` sobem Postgres, Redis e, nos testes de e-mail, o Mailpit reais com Testcontainers. Sem Docker, eles são pulados com aviso; no CI (`CI=true`) a falta de Docker é erro.
