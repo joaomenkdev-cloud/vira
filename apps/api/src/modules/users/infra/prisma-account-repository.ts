@@ -50,6 +50,14 @@ export class PrismaAccountRepository implements AccountRepository {
     };
   }
 
+  async findOrganizerProfileId(userId: string): Promise<string | null> {
+    const row = await this.prisma.organizerProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    return row?.id ?? null;
+  }
+
   async rename(id: string, name: string): Promise<boolean> {
     const { count } = await this.prisma.user.updateMany({ where: { id }, data: { name } });
     return count === 1;

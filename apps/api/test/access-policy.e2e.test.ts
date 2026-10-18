@@ -101,6 +101,25 @@ describe("every application route declares an access policy", () => {
     });
   });
 
+  it("keeps every organizer route to organizers", () => {
+    const organizerRoutes = collectRoutes(testApp).filter((route) =>
+      /^\S+ (OrganizerEventsController|OrganizerTicketTypesController)\./.test(route.name),
+    );
+    const organizer = { kind: "role", role: "ORGANIZER" };
+    expect(Object.fromEntries(organizerRoutes.map((route) => [route.name, route.policy]))).toEqual({
+      "GET OrganizerEventsController.list": organizer,
+      "POST OrganizerEventsController.create": organizer,
+      "GET OrganizerEventsController.get": organizer,
+      "PATCH OrganizerEventsController.update": organizer,
+      "DELETE OrganizerEventsController.remove": organizer,
+      "POST OrganizerEventsController.publish": organizer,
+      "POST OrganizerEventsController.cancel": organizer,
+      "POST OrganizerEventsController.addTicketType": organizer,
+      "PATCH OrganizerTicketTypesController.update": organizer,
+      "DELETE OrganizerTicketTypesController.remove": organizer,
+    });
+  });
+
   it("has no route without @Public() or @RequireRole()", () => {
     const undeclared = collectRoutes(testApp).filter((route) => route.policy === undefined);
     expect(undeclared.map((route) => route.name)).toEqual([]);

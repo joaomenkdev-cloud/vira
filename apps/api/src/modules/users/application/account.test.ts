@@ -24,6 +24,10 @@ class InMemoryAccounts implements AccountRepository {
     return Promise.resolve({ ...account, organizer });
   }
 
+  findOrganizerProfileId(userId: string): Promise<string | null> {
+    return Promise.resolve(this.profiles.find((p) => p.userId === userId)?.id ?? null);
+  }
+
   rename(id: string, name: string): Promise<boolean> {
     const account = this.accounts.get(id);
     if (!account) return Promise.resolve(false);

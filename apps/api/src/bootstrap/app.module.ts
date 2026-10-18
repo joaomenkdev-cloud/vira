@@ -3,6 +3,7 @@ import { APP_FILTER, APP_GUARD, APP_PIPE } from "@nestjs/core";
 
 import { AuditModule } from "../modules/audit/audit.module.js";
 import { AuthJobsModule, AuthModule } from "../modules/auth/auth.module.js";
+import { EventsModule } from "../modules/events/events.module.js";
 import { HealthModule } from "../modules/health/health.module.js";
 import { OutboxModule, OutboxPollerModule } from "../modules/outbox/outbox.module.js";
 import { UsersModule } from "../modules/users/users.module.js";
@@ -13,6 +14,7 @@ import { ProblemDetailsFilter } from "../platform/errors/problem-details.filter.
 import { createValidationPipe } from "../platform/errors/validation.js";
 import { LoggingModule, type LoggingOptions } from "../platform/logging/logging.module.js";
 import { MailModule } from "../platform/mail/mail.module.js";
+import { PaginationModule } from "../platform/pagination/pagination.module.js";
 import { QueueModule } from "../platform/queue/queue.module.js";
 import { RateLimitModule } from "../platform/rate-limit/rate-limit.module.js";
 import { RedisModule } from "../platform/redis/redis.module.js";
@@ -39,11 +41,13 @@ export class AppModule {
         RateLimitModule,
         MailModule,
         RuntimeModule,
+        PaginationModule,
         SecurityModule,
         AuditModule,
         OutboxModule,
         AuthModule,
         UsersModule,
+        EventsModule,
         HealthModule,
         // Embedded mode runs the background work inside the API process (ADR-0011).
         ...(config.worker.mode === "embedded"

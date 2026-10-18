@@ -1,3 +1,5 @@
+import { slugify } from "@vira/shared";
+
 /** Longest slug kept from a display name, leaving room for a `-<suffix>`. */
 const BASE_MAX_LENGTH = 60;
 
@@ -10,13 +12,7 @@ const FALLBACK = "organizador";
  * "coletivo-sao-joao"). Matches the `organizer_profiles_slug_format` CHECK.
  */
 export function slugFrom(displayName: string): string {
-  const slug = displayName
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "") // accents split off by NFKD
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .slice(0, BASE_MAX_LENGTH)
-    .replace(/^-+|-+$/g, "");
+  const slug = slugify(displayName, BASE_MAX_LENGTH);
   return slug === "" ? FALLBACK : slug;
 }
 

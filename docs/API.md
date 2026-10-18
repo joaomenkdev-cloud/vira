@@ -108,7 +108,7 @@ Todo erro é `application/problem+json`:
 | <a id="token-expired"></a>`token-expired` | 410 | Link de uso único expirado, já usado ou desconhecido (não diz qual) |
 | <a id="insufficient-inventory"></a>`insufficient-inventory` | 409 | Estoque não comporta a quantidade |
 | <a id="pending-order-exists"></a>`pending-order-exists` | 409 | Já existe pedido PENDING do comprador para o evento |
-| <a id="invalid-state-transition"></a>`invalid-state-transition` | 409 | Ex.: pagar pedido expirado, publicar evento incompleto |
+| <a id="invalid-state-transition"></a>`invalid-state-transition` | 409 | Ex.: pagar pedido expirado, publicar evento incompleto (o que falta vem em `errors`), editar evento cancelado |
 | <a id="request-in-progress"></a>`request-in-progress` | 409 | Mesma `Idempotency-Key` em processamento |
 | <a id="idempotency-key-reused"></a>`idempotency-key-reused` | 422 | Mesma chave com outro corpo |
 | <a id="sales-closed"></a>`sales-closed` | 422 | Fora da janela de vendas ou evento não publicado/encerrado |
@@ -276,6 +276,26 @@ Páginas do web (N7) que os e-mails apontam: `/redefinir-senha` e `/confirmar-em
 | PATCH | `/organizer/ticket-types/{id}` | ORGANIZER* | campos parciais | `200 TicketType` | 400, 404, 409 (capacidade < vendidos + reservados) |
 | DELETE | `/organizer/ticket-types/{id}` | ORGANIZER* | — | `204` (só sem vendas e reservas) | 404, 409 |
 | GET | `/organizer/events/{id}/sales` | ORGANIZER* | — | `200 { byTicketType: [{ sold, reserved, capacity, grossCents }], checkedIn }` — agregados, sem dados pessoais | 404 |
+
+#### Como funcionam (N8)
+
+Implementadas na N8 todas as rotas acima menos as de imagem (N9) e `/sales` (chega com os pedidos, no Marco 2). Todas pedem ORGANIZER **e** perfil de organizador: uma conta sem perfil (inclusive ADMIN) recebe `403 forbidden`. Evento ou tipo de ingresso de outro organizador responde `404`, idêntico a um id que não existe; ids fora do formato UUID são `400`. Os corpos são estritos: `status`, `slug`, `organizerId`, `descriptionHtml`, `isDemo`, `sold`, `reserved` ou qualquer campo não listado é `400`.
+
+| Rota | Comportamento |
+| --- | --- |
+| `GET /organizer/events` | Mais novos primeiro (`createdAt`, `id` desempata); `status` filtra. O cursor é assinado e preso à conta e ao filtro: adulterado ou levado para outra lista é `400`. Cada item traz `ticketTypeCount`. |
+| `POST /organizer/events` | Cria `DRAFT`. Exige `title` (3–120), `startsAt`, `endsAt` (depois do início) e `timezone` IANA; `descriptionMd` (até 20 000) e `venue` (`{ name, address, city, state }`, UF) são opcionais no rascunho. O `slug` sai do título com sufixo aleatório e é refeito ao publicar. |
+| `PATCH /organizer/events/{id}` | Campos parciais, ao menos um; `venue: null` remove o local. O fim é comparado com o início já salvo. Evento publicado precisa continuar completo: tirar o local ou levar a data para o passado é `409` com o que faltaria em `errors`. Cancelado ou encerrado: `409`. |
+| `DELETE /organizer/events/{id}` | Só `DRAFT`, levando os tipos de ingresso; publicado é `409` (cancele). |
+| `POST /organizer/events/{id}/publish` | Só `DRAFT`. Exige data de início futura, local, imagem com texto alternativo e ao menos um tipo de ingresso; o que faltar volta em `errors` (`[{ path: "venue", message }]`). Audita `event.published`. |
+| `POST /organizer/events/{id}/cancel` | Só `PUBLISHED` que não terminou; `reason` de 3 a 500 caracteres, mostrado a quem comprou. Definitivo. Audita `event.canceled` (sem o motivo, que é texto livre). |
+| `POST /organizer/events/{id}/ticket-types` | Entra no fim da lista (`sortOrder`). Preço de R$ 1,00 a R$ 100.000,00 em centavos inteiros, capacidade 1–100 000, `maxPerOrder` 1–20 (padrão 10), janela de vendas que termina até o fim do evento. No máximo 20 tipos por evento (`409`). |
+| `PATCH /organizer/ticket-types/{id}` | Campos parciais e `sortOrder`. Capacidade abaixo de vendidos + reservados: `409 conflict` (comparado no mesmo `UPDATE`). |
+| `DELETE /organizer/ticket-types/{id}` | Só sem vendas nem reservas (`409`); o último tipo de um evento publicado fica (`409`). |
+
+`Event` (visão do organizador): `{ id, slug, title, status, startsAt, endsAt, timezone, venue, isDemo, descriptionMd, descriptionHtml, image: { alt } | null, publishedAt, canceledAt, cancelReason, ticketTypes, createdAt, updatedAt }`. `TicketType`: `{ id, name, description, price: Money, capacity, sold, reserved, maxPerOrder, salesStartAt, salesEndAt, sortOrder }`. A chave da imagem no bucket nunca aparece.
+
+Publicar, editar e mexer em tipos de ingresso travam a linha do evento (`SELECT ... FOR UPDATE`) durante a checagem, então excluir o último tipo enquanto o evento é publicado não deixa um evento publicado sem ingresso.
 
 ### Pedidos (`orders`)
 
