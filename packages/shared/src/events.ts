@@ -26,6 +26,16 @@ export const MAX_PER_ORDER_DEFAULT = 10;
 export const PAGE_LIMIT_MAX = 50;
 export const PAGE_LIMIT_DEFAULT = 20;
 
+/** Picture formats the upload takes; the server re-encodes every one of them to WebP. */
+export const EVENT_IMAGE_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export type EventImageContentType = (typeof EVENT_IMAGE_CONTENT_TYPES)[number];
+/** 5 MB (docs/DATA_MODEL.md#media_uploads). */
+export const EVENT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+/** Smallest picture that still fills the event banner on a wide screen. */
+export const EVENT_IMAGE_MIN_WIDTH = 1200;
+export const EVENT_IMAGE_MIN_HEIGHT = 600;
+export const EVENT_IMAGE_ALT_MAX_LENGTH = 300;
+
 /** The 26 states and the Distrito Federal. */
 export const BRAZILIAN_STATES = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA",
@@ -173,6 +183,41 @@ export const listOrganizerEventsQuerySchema = z
   })
   .meta({ id: "ListOrganizerEventsQuery" });
 
+export const requestImageUploadSchema = z
+  .strictObject({
+    contentType: z.enum(EVENT_IMAGE_CONTENT_TYPES).meta({
+      description: "Tipo do arquivo, igual ao `Content-Type` do envio",
+    }),
+    sizeBytes: z
+      .number()
+      .int()
+      .min(1)
+      .max(EVENT_IMAGE_MAX_BYTES)
+      .meta({ description: "Tamanho exato do arquivo em bytes (até 5 MB)", example: 734_003 }),
+  })
+  .meta({ id: "RequestImageUpload" });
+
+export const imageUploadSchema = z
+  .strictObject({
+    uploadId: z.uuid(),
+    url: z.string().meta({ description: "URL pré-assinada: envie o arquivo com `PUT`" }),
+    headers: z.record(z.string(), z.string()).meta({
+      description: "Cabeçalhos que o `PUT` precisa levar, exatamente como estão",
+    }),
+    expiresAt: z.string().meta({ description: "Até quando a URL aceita o envio" }),
+  })
+  .meta({ id: "ImageUpload" });
+
+export const attachEventImageRequestSchema = z
+  .strictObject({
+    uploadId: z.uuid(),
+    alt: z.string().trim().min(3).max(EVENT_IMAGE_ALT_MAX_LENGTH).meta({
+      description: "Descrição da imagem para quem não a vê (texto alternativo)",
+      example: "Pista cheia sob a lona do Circo Voador",
+    }),
+  })
+  .meta({ id: "AttachEventImageRequest" });
+
 /** Ids in paths are UUIDs: anything else is a `400` before any lookup. */
 export const resourceIdSchema = z.uuid();
 
@@ -213,16 +258,23 @@ const eventFields = {
   updatedAt: z.string(),
 };
 
+export const eventImageSchema = z
+  .strictObject({
+    url: z.string().meta({ description: "Endereço assinado da imagem, válido por 1 hora" }),
+    alt: z.string(),
+    width: z.number().int(),
+    height: z.number().int(),
+    blurDataUrl: z.string().meta({ description: "Prévia borrada (data URL) para `next/image`" }),
+  })
+  .meta({ id: "EventImage" });
+
 /** An event as its organizer sees it, ticket types included. */
 export const organizerEventSchema = z
   .strictObject({
     ...eventFields,
     descriptionMd: z.string(),
     descriptionHtml: z.string().meta({ description: "HTML sanitizado gerado pelo servidor" }),
-    image: z
-      .strictObject({ alt: z.string() })
-      .nullable()
-      .meta({ description: "Imagem do evento (o upload chega na N9)" }),
+    image: eventImageSchema.nullable(),
     publishedAt: z.string().nullable(),
     canceledAt: z.string().nullable(),
     cancelReason: z.string().nullable(),
@@ -253,6 +305,10 @@ export type CancelEventRequest = z.infer<typeof cancelEventRequestSchema>;
 export type CreateTicketTypeRequest = z.infer<typeof createTicketTypeRequestSchema>;
 export type UpdateTicketTypeRequest = z.infer<typeof updateTicketTypeRequestSchema>;
 export type ListOrganizerEventsQuery = z.infer<typeof listOrganizerEventsQuerySchema>;
+export type RequestImageUpload = z.infer<typeof requestImageUploadSchema>;
+export type ImageUpload = z.infer<typeof imageUploadSchema>;
+export type AttachEventImageRequest = z.infer<typeof attachEventImageRequestSchema>;
+export type EventImageBody = z.infer<typeof eventImageSchema>;
 export type Money = z.infer<typeof moneySchema>;
 export type TicketTypeBody = z.infer<typeof ticketTypeSchema>;
 export type OrganizerEvent = z.infer<typeof organizerEventSchema>;
