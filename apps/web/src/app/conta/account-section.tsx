@@ -2,15 +2,17 @@ import { useId, type ReactNode } from "react";
 
 export interface AccountSectionProps {
   title: string;
+  /** Anchor of the section, for links that lead straight to it. */
+  id?: string;
   description?: ReactNode;
   children: ReactNode;
 }
 
 /** One block of the account page: a heading, a sentence and its form or list. */
-export function AccountSection({ title, description, children }: AccountSectionProps) {
+export function AccountSection({ title, id, description, children }: AccountSectionProps) {
   const titleId = useId();
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-6 py-10 first:pt-0">
+    <section id={id} aria-labelledby={titleId} className="flex flex-col gap-6 py-10 first:pt-0">
       <div className="flex flex-col gap-2">
         <h2 id={titleId} className="text-h2-sm md:text-h2">
           {title}

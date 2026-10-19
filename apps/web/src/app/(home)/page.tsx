@@ -7,6 +7,7 @@ import { CatalogEventCard, EventGrid } from "@/components/catalog/catalog-event-
 import { EventImage } from "@/components/catalog/event-image";
 import { HomeSearch } from "@/components/catalog/home-search";
 import { WeekendChip } from "@/components/catalog/weekend-chip";
+import { CreateEventLink } from "@/components/organizer/create-event-link";
 import { getFeaturedEvents } from "@/lib/catalog/api";
 import { formatShortDate } from "@/lib/format";
 
@@ -68,7 +69,7 @@ export default async function HomePage() {
             </EventGrid>
           </div>
         ) : (
-          <EmptyState title="Nenhum evento por aqui ainda">
+          <EmptyState title="Nenhum evento por aqui ainda" action={<CreateEventLink />}>
             Quando organizadores publicarem eventos, eles aparecem nesta página.
           </EmptyState>
         )}

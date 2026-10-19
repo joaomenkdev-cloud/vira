@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
   Skeleton,
 } from "@vira/ui";
-import { LogOut, UserRound } from "lucide-react";
+import { CalendarDays, LogOut, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -94,6 +94,16 @@ export function AccountMenu() {
         >
           Minha conta
         </DropdownMenuItem>
+        {account.organizer ? (
+          <DropdownMenuItem
+            icon={CalendarDays}
+            onSelect={() => {
+              router.push("/painel");
+            }}
+          >
+            Meus eventos
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           icon={LogOut}

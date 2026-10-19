@@ -2,6 +2,7 @@
 
 import type { Account } from "@vira/shared";
 import { Alert, Button, Input } from "@vira/ui";
+import Link from "next/link";
 import { useState, type SubmitEvent } from "react";
 
 import { ErrorSummary } from "@/components/forms/error-summary";
@@ -38,19 +39,21 @@ export function OrganizerSection({ account }: { account: Account }) {
 
   if (account.organizer) {
     return (
-      <AccountSection title="Organizador">
+      <AccountSection id="organizador" title="Organizador">
         <Alert
           variant="success"
           title={`Você organiza eventos como ${account.organizer.displayName}.`}
-        >
-          O painel para criar e publicar eventos ainda está em construção.
-        </Alert>
+        />
+        <Button asChild variant="secondary" className="self-start">
+          <Link href="/painel">Ir para meus eventos</Link>
+        </Button>
       </AccountSection>
     );
   }
 
   return (
     <AccountSection
+      id="organizador"
       title="Organizador"
       description="Quer vender ingressos para os seus eventos? Escolha o nome que o público vai ver."
     >
