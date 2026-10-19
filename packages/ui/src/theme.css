@@ -116,6 +116,12 @@
   --container-dialog: var(--vira-width-dialog);
   --container-dialog-wide: var(--vira-width-dialog-wide);
 
+  /* Photo proportions: aspect-card (3:2), aspect-banner (16:9), aspect-banner-sm (4:3), aspect-hero (4:5) */
+  --aspect-card: var(--vira-aspect-card);
+  --aspect-banner: var(--vira-aspect-banner);
+  --aspect-banner-sm: var(--vira-aspect-banner-sm);
+  --aspect-hero: var(--vira-aspect-hero);
+
   /*
    * Animations (docs/DESIGN.md, 2.6 and 3.8). Entrances use the standard easing and
    * exits the faster one. Radix waits for an exit animation to end before it unmounts a
