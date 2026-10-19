@@ -8,10 +8,14 @@ import type { ReactNode } from "react";
 
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { resolveSiteUrl } from "@/config/api-origin";
 
 export const metadata: Metadata = {
+  // Makes the canonical and Open Graph addresses absolute.
+  metadataBase: new URL(resolveSiteUrl(process.env)),
   title: { default: "Vira — Encontre seu próximo evento", template: "%s · Vira" },
   description: "Descubra eventos, compre seu ingresso e entre com o QR Code.",
+  openGraph: { type: "website", locale: "pt_BR", siteName: "Vira" },
 };
 
 export const viewport: Viewport = {
