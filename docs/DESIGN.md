@@ -332,6 +332,7 @@ Validação: no `blur` e no envio, nunca a cada tecla. No envio com erros, o foc
 - Sem imagem: placeholder tipográfico — fundo `surface-sunken`, iniciais do evento em `h1` `ink-muted`, sem ícone nem gradiente.
 - Grid: 1 coluna (< 640), 2 (640–1023), 3 (≥ 1024). Destaques na home: **no máximo 6** cards.
 - Variante `compact` (lista de "Meus ingressos" e painel): imagem 1:1 de 72px à esquerda, texto à direita.
+- **Como ficou implementado (N11):** `EventCard` em `@vira/ui`, que recebe o link vazio (`link={<Link href=… />}`) e desenha o título dentro dele; o pseudo-elemento do link cobre o card, e o anel de foco é do `<article>` (`has-[a:focus-visible]`). As proporções das fotos viraram tokens (`aspect-card` 3:2, `aspect-banner` 16:9, `aspect-banner-sm` 4:3, `aspect-hero` 4:5). A variante `compact` entra com "Meus ingressos" (V7).
 
 ### 3.4 Badges
 
@@ -580,6 +581,8 @@ O evento em destaque do hero não aparece no mobile (vira o primeiro card), para
 ```
 
 A barra fixa sempre mostra o total e o CTA; antes de selecionar um tipo, o CTA é "Ver ingressos" e rola até o seletor.
+
+**Como ficou implementado (N11).** Home, Explorar e a página do evento seguem estes wireframes, com quatro diferenças até o checkout (V6) existir: os tipos de ingresso aparecem como linhas só de leitura (nome, preço e estado em texto: "Últimos ingressos" abaixo de 10, "Esgotado", "Vendas a partir de…", "Vendas encerradas"), sem radio, stepper, total, CTA nem barra fixa no mobile, e um alert diz que a compra pelo site ainda não está aberta; o header do mobile continua o global (logo e "Buscar"), sem o "‹ Voltar ⤴" da página do evento; a busca da home não tem o seletor de cidade (não há lista de cidades na API) — a cidade é um campo de texto em Explorar; dos chips, só "Este fim de semana" existe, porque é o único que os dados sustentam. A seção "Informações" (classificação, acessibilidade) não aparece porque esses campos não existem no evento.
 
 ### 4.3 Checkout
 

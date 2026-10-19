@@ -103,7 +103,9 @@ pnpm --filter @vira/web screenshots  # prints para PRs de interface (servidor co
 ```
 
 - `API_ORIGIN` (veja `apps/web/.env.example`) define para onde `/api/v1` é encaminhado. É lido **no build**: rebuilde ao mudá-lo.
-- O E2E sobe uma API falsa na porta 3000 e o web na 3101. Rode `pnpm --filter @vira/web build` antes; no primeiro uso, `pnpm --filter @vira/web exec playwright install chromium`.
+- `STORAGE_ORIGIN` diz de onde vêm as fotos dos eventos (o SeaweedFS local por padrão); só essa origem passa pelo otimizador de imagens. Também é lido no build. `SITE_URL` é o endereço público usado no canonical e no Open Graph.
+- As páginas da vitrine leem a API a cada requisição; sem a API no ar, a home mostra o estado de erro. Para ver a vitrine sem a API real, rode a API falsa do E2E (`node apps/web/e2e/fake-api.ts`, eventos de teste marcados "Demonstração", fotos servidas na porta 8333).
+- O E2E sobe uma API falsa na porta 3000 (e o armazenamento falso na 8333) e o web na 3101, mais uma segunda dupla vazia (API 3002, web 3102) para os estados vazios. Rode `pnpm --filter @vira/web build` antes; no primeiro uso, `pnpm --filter @vira/web exec playwright install chromium`.
 - Toda página é renderizada a cada requisição (a CSP usa nonce, veja [ARCHITECTURE.md](docs/ARCHITECTURE.md#8-aplicação-web)). Não use estilos inline nem scripts inline sem nonce: a CSP os bloqueia.
 
 ### E-mails locais (Mailpit)

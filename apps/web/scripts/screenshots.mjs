@@ -1,6 +1,8 @@
 // Captures the screenshots that interface pull requests must include (desktop and mobile).
 // Needs the production server running:
-// `pnpm --filter @vira/web build && VIRA_DESIGN_SYSTEM=true pnpm --filter @vira/web start`.
+// `pnpm --filter @vira/web build && VIRA_DESIGN_SYSTEM=true pnpm --filter @vira/web start`,
+// and an API: the stand-in of the end-to-end tests (`node e2e/fake-api.ts`, whose events
+// are all test fixtures marked "Demonstração") or a real one with published events.
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -12,6 +14,9 @@ const outDir =
   join(import.meta.dirname, "..", "..", "..", "docs", "assets", "screenshots");
 const pages = [
   { name: "home", path: "/" },
+  { name: "explore", path: "/eventos" },
+  { name: "explore-empty-search", path: "/eventos?q=maracatu" },
+  { name: "event", path: "/eventos/forro-na-praca" },
   { name: "not-found", path: "/esta-pagina-nao-existe" },
   // Served by a production build only with VIRA_DESIGN_SYSTEM=true.
   { name: "design-system", path: "/dev/design-system" },
@@ -29,6 +34,15 @@ try {
     const page = await context.newPage();
     for (const { name, path } of pages) {
       await page.goto(`${baseUrl}${path}`);
+      await page.waitForLoadState("networkidle");
+      // Photos below the fold load lazily: scroll through the page so they are all there.
+      await page.evaluate(async () => {
+        for (let y = 0; y < document.body.scrollHeight; y += window.innerHeight / 2) {
+          window.scrollTo(0, y);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        window.scrollTo(0, 0);
+      });
       await page.waitForLoadState("networkidle");
       const file = join(outDir, `web-${name}-${viewport.name}.png`);
       await page.screenshot({ path: file, fullPage: true });

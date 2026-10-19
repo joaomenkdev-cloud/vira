@@ -7,8 +7,8 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - **Marco:** 1 — Núcleo (o Marco 0 terminou com o merge da F7).
 - **Concluído (mergeado):** F1 a F7, N1 a N6 (PRs #1, #2, #8, #10–#17, #26, #27) e Dependabot (#4–#7, #9 CodeQL v4).
 - **Concluído também:** N8 — Eventos do organizador (PR #29, mergeado em 2026-10-18).
-- **Entregas abertas:** N7 — Telas de autenticação (`feat/web-auth`, PR #28), N9 — Upload de imagem (`feat/events-image-upload`, PR #30) e N10 — Vitrine da API (`feat/catalog`, empilhada na N9: depois do merge da N9, mudar a base do PR da N10 para `main`).
-- **Próximo passo:** N11 — Home, card e página do evento (web), que depende da N7 e da N10.
+- **Entregas abertas:** N7 — Telas de autenticação (`feat/web-auth`, PR #28), N10 — Vitrine da API (`feat/catalog`, PR #32) e N11 — Home, card e página do evento (`feat/web-storefront`, empilhada na N10: depois do merge da N10, mudar a base do PR da N11 para `main`).
+- **Próximo passo:** N12 — Painel do organizador, depois dos merges da N7, N10 e N11.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -23,6 +23,35 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-19 — N11: home, card e página do evento
+
+Auditoria (antes de codar): a N10 (PR #32) ainda não estava mergeada e a N11 consome os contratos dela, então a branch saiu da N10. A N7 (PR #28) também não estava, e a N11 não depende dela: as duas mexem no header, no `fake-api` do E2E e nos prints, e quem for mergeada depois resolve o conflito (pequeno: o header ganha "Explorar" e "Buscar" ao lado do menu da conta; os fixtures da vitrine ficam em `e2e/fixtures/`, fora do `fake-api.ts` da N7). O web não tinha cliente para ler a API no servidor nem configuração de imagens.
+
+Feito (web e `@vira/ui`; não mexe na API):
+
+- `@vira/ui`: `EventCard` (seção 3.3: foto 3:2, data no accent, título em até duas linhas, local, preço, badge de status sobre a foto e "Demonstração"; card inteiro clicável com uma parada de tabulação; placeholder tipográfico sem foto) e tokens de proporção das fotos.
+- Home: título, busca (GET para `/eventos`), chip "Este fim de semana", o próximo evento em destaque grande ao lado do título no desktop (no mobile vira o primeiro card) e até 6 destaques; estado vazio sem nada inventado.
+- Explorar (`/eventos`): busca por texto e cidade, chip de fim de semana, paginação por cursor ("Mais eventos"), erro de busca curta no campo, "Nada encontrado" com "Limpar filtros" e recuperação de cursor adulterado. "Explorar" no header (e "Buscar" no mobile).
+- Página do evento: banner 16:9 (4:3 sangrado no mobile), crédito da foto, badge e alert de demonstração, data e horário no fuso do evento com o nome do fuso, local com link para o OpenStreetMap, organizador, descrição sanitizada pela API (dobra em 6 linhas com "Ler mais" no mobile), ingressos em linhas com o estado de venda, evento cancelado e encerrado.
+- Carregamento: skeletons nas três páginas; erro: a página de erro existente.
+- SEO: `metadataBase`, título, descrição, canonical, Open Graph e Twitter card por evento, JSON-LD `Event`, `/eventos/[slug]/imagem` (endereço estável da foto para prévias), `robots.txt`.
+- Config: `STORAGE_ORIGIN` e `SITE_URL` (lidas no build, mesmas regras do `API_ORIGIN`), `images.remotePatterns` só do armazenamento.
+- Testes: unitários de formatação (preço, datas e fusos, intervalo de datas, resumo), busca (parâmetros, fim de semana em Brasília), SEO (metadata, JSON-LD que não fecha a tag), origens e `next.config`, e do `EventCard` (ordem, um único link, só a data em vermelho, sem `style=` no HTML do servidor); E2E em desktop e mobile com uma API falsa (fixtures marcados "Demonstração", fotos PNG geradas em código) e uma segunda instância vazia: cards, destaque, fotos pelo otimizador sem violação de CSP, busca, filtros, paginação, cursor adulterado, página do evento (ordem de leitura, fuso, crédito, ingressos, "Ler mais", cancelado, encerrado, metadados e JSON-LD, foto do Open Graph, slug inexistente), axe em todas e reflow em 320 px.
+
+Decisões tomadas por conta própria:
+
+- **Sem botão de compra:** o checkout é a V6. A página mostra os tipos e preços e diz, num alert, que a compra pelo site ainda não está aberta, em vez de um CTA que não leva a lugar nenhum.
+- **Fotos pelo otimizador com `getImageProps`**, sem o `style` que o `<Image>` escreve (a CSP bloquearia) e com a prévia borrada como `<img>` separada.
+- **Explorar entrou na N11:** a busca do wireframe da home precisa de um destino, e "Ver todos" também.
+- **"Este fim de semana"** é sábado 00:00 a segunda 00:00 em Brasília (sem horário de verão desde 2019), para eventos de qualquer fuso.
+- **Streaming com `loading.tsx`**: slug inexistente responde com a página de não encontrado e `noindex`, não com status 404 (o Next.js fixa o status quando o streaming começa).
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Cache das fotos (V11):** o endereço assinado muda a cada resposta da API, então o otimizador do Next.js não reaproveita o cache entre visitas (cada visita reprocessa a foto). Na demo isso custa transformações da Vercel; dá para resolver na API (assinar com horário arredondado) ou servir as fotos publicadas por um domínio público do R2.
+- **Deploy (V11):** preencher `STORAGE_ORIGIN` (origem do R2) e `SITE_URL` na Vercel.
+- **Seletor de cidades:** o wireframe da home tem "Cidade ▾", mas a API não lista cidades; hoje a cidade é texto livre em Explorar.
 
 ### 2026-10-19 — N10: vitrine da API
 

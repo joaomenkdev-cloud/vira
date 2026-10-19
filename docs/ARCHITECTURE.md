@@ -355,6 +355,14 @@ sequenceDiagram
 - **CSP com nonce por requisição:** `src/proxy.ts` (o antigo `middleware`, renomeado no Next.js 16) gera o nonce, coloca a CSP na requisição (para o Next marcar os próprios scripts) e na resposta. Por isso as páginas são renderizadas a cada requisição (o layout lê `headers()`), o que descarta cache estático e Partial Prerendering; é o custo de uma CSP estrita sem `unsafe-inline`.
 - **Demais cabeçalhos** (HSTS, `nosniff`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, COOP) vêm de `next.config.ts`; `X-Powered-By` é desligado.
 
+### Vitrine no web (N11)
+
+- **Dados no servidor, direto da API:** a home (`/`), Explorar (`/eventos`) e a página do evento (`/eventos/[slug]`) são Server Components que chamam `API_ORIGIN` sem passar pelo proxy (não há sessão a repassar), com `no-store` e as respostas validadas pelos schemas de `@vira/shared` (`src/lib/catalog/api.ts`). Uma API fora do ar ou uma resposta fora do contrato leva à página de erro da rota.
+- **Busca no endereço:** Explorar guarda texto, cidade, "Este fim de semana" (sábado 00:00 a segunda 00:00, horário de Brasília) e o cursor na query string (`q`, `cidade`, `periodo`, `cursor`), então funciona sem JavaScript e pode ser compartilhada.
+- **Fotos pelo otimizador do Next.js:** os endereços assinados do bucket passam por `/_next/image`, que só aceita a origem `STORAGE_ORIGIN` (lida no build; loopback só quando o próprio armazenamento é local). O navegador nunca carrega o bucket, e a CSP mantém `img-src 'self' data:`. O `<img>` é montado com `getImageProps` e sem o atributo `style` que o `<Image>` escreveria; a prévia borrada é uma segunda `<img>` com a data URL, por baixo.
+- **SEO:** `metadataBase` vem de `SITE_URL` (ou do domínio de produção da Vercel); cada evento tem título, descrição, canonical, Open Graph e JSON-LD `Event`. A imagem do Open Graph é `/eventos/[slug]/imagem`, que redireciona para o otimizador com um endereço assinado novo, porque o da API vence em 1 hora e as prévias de link são buscadas depois.
+- **Carregamento:** `loading.tsx` com skeletons na home, em Explorar e na página do evento. Por isso a resposta começa em streaming com `200`; um slug inexistente mostra a página de não encontrado com `noindex` (comportamento documentado do Next.js), e uma rota inexistente continua em `404`.
+
 ## 9. Ambientes
 
 | Ambiente | Web | API + worker | Banco | Redis | Storage | E-mail | Stripe |
