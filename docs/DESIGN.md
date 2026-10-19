@@ -265,7 +265,7 @@ Estados obrigatórios para todo componente interativo: `default`, `hover`, `focu
 - **Stepper de quantidade:** nos limites os botões ficam `aria-disabled` em vez de `disabled`. Parecem e agem como desabilitados, mas o foco do teclado não cai para a página quando o usuário chega ao máximo.
 - **Modal:** o botão × é o último filho no DOM, então o primeiro foco cai no conteúdo, não na saída. A ordem das ações no DOM é secundária → primária; no celular ela se inverte visualmente (primária no topo).
 - **Botão em carregamento** mantém a largura: o rótulo normal e o de carregamento ocupam a mesma célula de uma grade e o que não está em uso fica `invisible`.
-- **Header:** `sticky`, borda inferior só depois de rolar (`data-scrolled`); logo, navegação e ações são encaixes separados. O header do web continua só com o logo e o footer só com o texto de hoje: as páginas de navegação e o login ainda não existem.
+- **Header:** `sticky`, borda inferior só depois de rolar (`data-scrolled`); logo, navegação e ações são encaixes separados. Desde a N7 o header do web traz, à direita, "Entrar" (`secondary sm`) ou o avatar com as iniciais e o menu da conta ("Minha conta", "Sair"); a navegação "Explorar"/"Meus ingressos" chega com as páginas a que leva. Enquanto a página pergunta à API quem está logado, o lugar do avatar mostra um skeleton.
 - **Ainda não feito:** menus com mais de 6 itens virarem bottom sheet no celular (3.6). Nenhum menu do MVP chega a isso (o do avatar tem uns 4 itens); entra junto com o primeiro que precisar.
 
 ### 3.1 Botões

@@ -96,7 +96,7 @@ Quem consome uma fila registra um handler por tipo de mensagem (`JobHandlerRegis
 ### Rodando o web
 
 ```bash
-pnpm --filter @vira/web dev        # http://localhost:3001 (proxy de /api/v1 para a API local)
+pnpm turbo run dev --filter=@vira/web  # http://localhost:3001; compila o @vira/shared antes (proxy de /api/v1 para a API local)
 pnpm --filter @vira/web build && pnpm --filter @vira/web start
 pnpm --filter @vira/web test:e2e   # Playwright + axe, em desktop e mobile
 pnpm --filter @vira/web screenshots  # prints para PRs de interface (servidor com VIRA_DESIGN_SYSTEM=true)
@@ -104,8 +104,10 @@ pnpm --filter @vira/web screenshots  # prints para PRs de interface (servidor co
 
 - `API_ORIGIN` (veja `apps/web/.env.example`) define para onde `/api/v1` é encaminhado. É lido **no build**: rebuilde ao mudá-lo.
 - `STORAGE_ORIGIN` diz de onde vêm as fotos dos eventos (o SeaweedFS local por padrão); só essa origem passa pelo otimizador de imagens. Também é lido no build. `SITE_URL` é o endereço público usado no canonical e no Open Graph.
-- As páginas da vitrine leem a API a cada requisição; sem a API no ar, a home mostra o estado de erro. Para ver a vitrine sem a API real, rode a API falsa do E2E (`node apps/web/e2e/fake-api.ts`, eventos de teste marcados "Demonstração", fotos servidas na porta 8333).
+- As páginas da vitrine leem a API a cada requisição; sem a API no ar, a home mostra o estado de erro.
 - O E2E sobe uma API falsa na porta 3000 (e o armazenamento falso na 8333) e o web na 3101, mais uma segunda dupla vazia (API 3002, web 3102) para os estados vazios. Rode `pnpm --filter @vira/web build` antes; no primeiro uso, `pnpm --filter @vira/web exec playwright install chromium`.
+- O web importa o `@vira/shared` compilado (`dist/`). `pnpm --filter @vira/web dev` direto usa o que estiver lá, que pode estar velho ("Export ... doesn't exist in target module"); o `turbo run dev` compila antes.
+- **Sem a API (e sem Docker):** suba a API falsa do E2E (`node e2e/fake-api.ts` em `apps/web`, Node 22.18+) e abra `http://localhost:3001`. Ela traz eventos de teste marcados "Demonstração" (fotos servidas na porta 8333) e não manda e-mail: os links ficam em `http://127.0.0.1:3000/__test/mail?to=<email>`. `VIRA_OAUTH_PROVIDERS=google,github` mostra os botões sociais (GitHub entra numa conta de teste, Google mostra o erro).
 - Toda página é renderizada a cada requisição (a CSP usa nonce, veja [ARCHITECTURE.md](docs/ARCHITECTURE.md#8-aplicação-web)). Não use estilos inline nem scripts inline sem nonce: a CSP os bloqueia.
 
 ### E-mails locais (Mailpit)
