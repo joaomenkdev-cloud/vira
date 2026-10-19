@@ -7,8 +7,8 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - **Marco:** 1 — Núcleo (o Marco 0 terminou com o merge da F7).
 - **Concluído (mergeado):** F1 a F7, N1 a N6 (PRs #1, #2, #8, #10–#17, #26, #27) e Dependabot (#4–#7, #9 CodeQL v4).
 - **Concluído também:** N8 — Eventos do organizador (PR #29, mergeado em 2026-10-18).
-- **Entregas abertas:** N7 — Telas de autenticação (`feat/web-auth`, PR #28) e N9 — Upload de imagem (`feat/events-image-upload`), PRs draft independentes (a N9 só mexe na API).
-- **Próximo passo:** N10 — Vitrine (API), depois do merge da N9.
+- **Entregas abertas:** N7 — Telas de autenticação (`feat/web-auth`, PR #28), N9 — Upload de imagem (`feat/events-image-upload`, PR #30) e N10 — Vitrine da API (`feat/catalog`, empilhada na N9: depois do merge da N9, mudar a base do PR da N10 para `main`).
+- **Próximo passo:** N11 — Home, card e página do evento (web), que depende da N7 e da N10.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -23,6 +23,35 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-19 — N10: vitrine da API
+
+Auditoria (antes de codar): a N8 já tinha deixado os índices da vitrine (`(status, starts_at)`, cidade e o trigram do título) e as colunas de crédito da foto; a API.md descrevia as três rotas e o `EventSummary`; o ARCHITECTURE previa o módulo `catalog` lendo as tabelas de `events`; nada disso tinha código. A N9 (PR #30) ainda não estava mergeada, e a vitrine precisa do endereço assinado da imagem, então a branch saiu da N9. Sem Docker, a integração rodou contra Postgres 16 e Redis locais (ajuste local no `infrastructure.ts`, não commitado).
+
+Feito (API e `@vira/shared`; não mexe no web):
+
+- `@vira/shared`: `listCatalogEventsQuerySchema` (`q` de 2 a 80 caracteres, `city`, `from`, `to`, `limit`, `cursor`, estrito), `eventSlugSchema`, `catalogEventSummarySchema`, `catalogEventListSchema`, `featuredEventsSchema`, `catalogEventDetailSchema`, `publicTicketTypeSchema`, `imageCreditSchema` e `SALES_STATUSES`.
+- Módulo `catalog` (público, só leitura): domínio (`available`, `salesStatus`, `priceFromCents`, `isSoldOut`), casos de uso `ListCatalogEvents`, `GetFeaturedEvents` e `GetPublicEvent`, `PrismaCatalogRepository` (lê `events` e `ticket_types` direto, sem passar pelo módulo `events`), `CatalogPresenter` (endereço assinado da imagem, 1 h) e `CatalogController` (`GET /events`, `/events/featured`, `/events/{slug}`, todas `@Public()`).
+- Testes: domínio (restantes, status de venda, preço a partir de, esgotado); casos de uso com repositório em memória (próxima página, página cheia no fim, destaques); e2e sem banco (busca curta, `limit` 51, data inválida, intervalo invertido, `status` e `organizerId` recusados, cursor forjado, de outra busca ou do painel do organizador, slug fora do formato); access policy das rotas novas; integração contra Postgres (só publicados e não encerrados, em andamento incluído, nenhum campo interno na resposta, **paginação estável com sete eventos no mesmo horário e um evento publicado no meio da leitura**, busca e cidade sem diferenciar maiúsculas e com `%`/`_` literais, `from`/`to`, cursor preso à busca, preço e esgotado, destaques excluindo esgotado, venda não aberta, venda encerrada, em andamento, rascunho e cancelado, página com restantes e status de cada tipo, crédito da foto e nome do organizador, cancelado sem o motivo, `404` para rascunho e slug desconhecido).
+
+Decisões tomadas por conta própria:
+
+- **A lista mostra só o que não terminou**, inclusive o que já começou; `from`/`to` filtram o início. Evento encerrado só pela página (o link continua valendo).
+- **Evento cancelado mantém a página** com `status: "CANCELED"` e nada à venda, sem o motivo (que é para quem comprou). Nunca aparece nas listas.
+- **Destaques = começam no futuro e têm algum tipo à venda agora** (janela aberta e ingresso restante). Em andamento não entra.
+- **`available` exato.** A API.md falava em faixas "a critério do organizador", mas não há onde o organizador escolher; fica para o painel.
+- **`priceFrom` só entre os tipos com ingresso restante**; sem nenhum, `null` e `soldOut: true`.
+- **Busca só no título e cidade por igualdade** (sem acento-insensível: o banco não tem `unaccent`). O Prisma usa `ILIKE` em `contains` e em `equals` sem maiúsculas e não escapa `%` e `_`; o repositório escapa (o teste de integração pegou isso).
+- **Imagem por endereço assinado (1 h)**, como no painel, em vez de um domínio público do R2: o bucket continua privado e nada muda no deploy.
+- **Sem rate limit e com `no-store`**: em produção quem chama é o servidor do Next.js (um limite por IP o pegaria), e o cache fica no web (N11).
+- **`venue.state` e `image.width`/`height` no resumo** (campos a mais, compatíveis): o card mostra "Cidade – UF" e o `next/image` precisa do tamanho.
+- **Slug fora do formato é `400`**, como os ids malformados nas rotas do organizador.
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Rate limit da vitrine:** se a API ficar exposta direto (sem o web na frente), um limite por IP generoso faz sentido; hoje não há.
+- **Busca sem acento** ("forro" achar "Forró") pede a extensão `unaccent` numa migration; dá para incluir quando a busca do web existir.
+- **Faixas de disponibilidade** ("últimos ingressos") a critério do organizador, junto com o painel (N12).
 
 ### 2026-10-18 — N9: upload da imagem do evento
 
