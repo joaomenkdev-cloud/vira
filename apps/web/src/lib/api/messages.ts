@@ -16,6 +16,16 @@ const MESSAGES: Partial<Record<ProblemCode, string>> = {
 };
 
 /**
+ * Problems whose `detail` the API writes for the person (in Portuguese): why an event
+ * cannot change, why a picture was refused, what stands in the way of a ticket type.
+ */
+const DETAILED: ReadonlySet<ProblemCode> = new Set([
+  "invalid-state-transition",
+  "invalid-image",
+  "conflict",
+]);
+
+/**
  * The sentence shown when a call fails for a reason the screen does not handle itself.
  * Errors explain what to do next; none of them reveals whether an e-mail has an account.
  */
@@ -23,6 +33,8 @@ export function messageFor(error: unknown): string {
   if (!(error instanceof ApiError)) {
     return "Algo deu errado. Tente de novo em instantes.";
   }
+  const detail = error.problem?.detail;
+  if (DETAILED.has(error.code) && detail !== undefined && detail !== "") return detail;
   if (error.code === "rate-limited") {
     return error.retryAfterSeconds === undefined
       ? "Muitas tentativas seguidas. Espere alguns minutos e tente de novo."

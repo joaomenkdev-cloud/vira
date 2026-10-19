@@ -68,3 +68,30 @@ describe("messages", () => {
     );
   });
 });
+
+describe("messageFor", () => {
+  it("shows the API's own sentence for the problems it writes for people", async () => {
+    const error = await toApiError(
+      Response.json(
+        {
+          type: "x#invalid-image",
+          title: "Imagem inválida",
+          status: 422,
+          detail: "A imagem precisa ter ao menos 1200 × 600 pixels.",
+        },
+        { status: 422 },
+      ),
+    );
+    expect(messageFor(error)).toBe("A imagem precisa ter ao menos 1200 × 600 pixels.");
+  });
+
+  it("never shows the detail of other problems", async () => {
+    const error = await toApiError(
+      Response.json(
+        { type: "x#internal-error", title: "Erro", status: 500, detail: "stack trace" },
+        { status: 500 },
+      ),
+    );
+    expect(messageFor(error)).not.toContain("stack");
+  });
+});

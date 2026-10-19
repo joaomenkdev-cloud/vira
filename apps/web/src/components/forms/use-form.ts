@@ -14,13 +14,15 @@ import type { Validator } from "./validation";
 
 export type FieldErrors<F extends string> = Partial<Record<F, string>>;
 
-/** What a field component needs: spread it on `Input` or `PasswordInput`. */
+type TextControl = HTMLInputElement | HTMLTextAreaElement;
+
+/** What a field component needs: spread it on `Input`, `PasswordInput` or `Textarea`. */
 export interface FieldBinding {
   id: string;
   name: string;
   error: string | undefined;
-  onBlur: (event: FocusEvent<HTMLInputElement>) => void;
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onBlur: (event: FocusEvent<TextControl>) => void;
+  onChange: (event: ChangeEvent<TextControl>) => void;
 }
 
 export interface FormController<F extends string> {
@@ -38,13 +40,23 @@ export interface FormController<F extends string> {
 }
 
 /** The focus is leaving for the form's submit button, which validates everything anyway. */
-function leavingForSubmit(event: FocusEvent<HTMLInputElement>): boolean {
+function leavingForSubmit(event: FocusEvent<TextControl>): boolean {
   const next = event.relatedTarget;
   return (
     next instanceof HTMLButtonElement &&
     next.type === "submit" &&
     next.form === event.currentTarget.form
   );
+}
+
+/** Every value of the form the control belongs to, for checks that compare fields. */
+function valuesOf(form: HTMLFormElement | null): Readonly<Record<string, string>> {
+  const values: Record<string, string> = {};
+  if (form === null) return values;
+  for (const [name, value] of new FormData(form)) {
+    if (typeof value === "string") values[name] = value;
+  }
+  return values;
 }
 
 /**
@@ -85,25 +97,25 @@ export function useForm<F extends string>(validators: Record<F, Validator>): For
         const { value } = event.currentTarget;
         // An empty field left behind is not an error yet, and the submit button checks all.
         if (value === "" || leavingForSubmit(event)) return;
-        const message = validatorsRef.current[field](value);
+        const message = validatorsRef.current[field](value, valuesOf(event.currentTarget.form));
         if (message !== undefined) setErrors((current) => ({ ...current, [field]: message }));
       },
       onChange: (event) => {
         if (errors[field] === undefined) return;
-        if (validatorsRef.current[field](event.currentTarget.value) === undefined) {
+        const { value, form } = event.currentTarget;
+        if (validatorsRef.current[field](value, valuesOf(form)) === undefined) {
           setErrors((current) => ({ ...current, [field]: undefined }));
         }
       },
     }),
     submit: (event) => {
       event.preventDefault();
-      const data = new FormData(event.currentTarget);
+      const all = valuesOf(event.currentTarget);
       const values = {} as Record<F, string>;
       const found: FieldErrors<F> = {};
+      for (const field of fields) values[field] = all[field] ?? "";
       for (const field of fields) {
-        const value = data.get(field);
-        values[field] = typeof value === "string" ? value : "";
-        const message = validatorsRef.current[field](values[field]);
+        const message = validatorsRef.current[field](values[field], all);
         if (message !== undefined) found[field] = message;
       }
       setErrors(found);

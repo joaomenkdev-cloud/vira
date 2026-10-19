@@ -15,6 +15,8 @@ export type ProblemCode =
   | "password-not-set"
   | "already-organizer"
   | "token-expired"
+  | "invalid-state-transition"
+  | "invalid-image"
   | "rate-limited"
   | "payload-too-large"
   | "internal-error"
@@ -42,6 +44,8 @@ const KNOWN_CODES = new Set<string>([
   "password-not-set",
   "already-organizer",
   "token-expired",
+  "invalid-state-transition",
+  "invalid-image",
   "rate-limited",
   "payload-too-large",
   "internal-error",
@@ -69,7 +73,10 @@ export class ApiError extends Error {
     this.retryAfterSeconds = options.retryAfterSeconds;
   }
 
-  /** Field-level errors of `validation-failed` and `breached-password`. */
+  /**
+   * Field-level errors of `validation-failed` and `breached-password`, and what an
+   * event still lacks in `invalid-state-transition`.
+   */
   get fieldErrors(): readonly FieldError[] {
     return this.problem?.errors ?? [];
   }

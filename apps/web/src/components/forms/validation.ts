@@ -12,7 +12,11 @@ import {
  * everything again: these only save a round trip.
  */
 
-export type Validator = (value: string) => string | undefined;
+/** Checks one field; `values` holds the whole form, for checks that compare fields. */
+export type Validator = (
+  value: string,
+  values?: Readonly<Record<string, string>>,
+) => string | undefined;
 
 export const validateEmail: Validator = (value) => {
   if (value.trim() === "") return "Informe seu e-mail.";
