@@ -254,11 +254,25 @@ Páginas do web (N7) que os e-mails apontam: `/redefinir-senha` e `/confirmar-em
 | --- | --- | --- | --- | --- | --- |
 | GET | `/events` | PUBLIC | `q`, `city`, `from`, `to`, `limit`, `cursor` | `200 { data: EventSummary[], page }` ordenado por `startsAt` | 400 |
 | GET | `/events/featured` | PUBLIC | — | `200 { data: EventSummary[] }` (até 6 próximos com vendas abertas) | — |
-| GET | `/events/{slug}` | PUBLIC | — | `200 EventDetail` (inclui `ticketTypes` com `available`, `priceFrom`, `isDemo`, crédito da imagem) | 404 |
+| GET | `/events/{slug}` | PUBLIC | — | `200 EventDetail` (inclui `ticketTypes` com `available`, `priceFrom`, `isDemo`, crédito da imagem) | 400, 404 |
 
-`EventSummary`: `{ id, slug, title, startsAt, endsAt, timezone, venue: { name, city }, image: { url, alt, blurDataUrl }, priceFrom: Money \| null, status, isDemo, soldOut }`.
+`EventSummary`: `{ id, slug, title, status, startsAt, endsAt, timezone, venue: { name, city, state }, image: { url, alt, width, height, blurDataUrl }, priceFrom: Money | null, soldOut, isDemo }`.
 
-`available` é calculado (`capacity − sold − reserved`) e pode ser arredondado para faixas ("últimos ingressos") para não expor números exatos, a critério do organizador.
+`EventDetail`: os campos do `EventSummary` com `venue` completo (`address` também), `descriptionHtml`, `image.credit` (`{ author, url, license }` nas fotos de demonstração, senão `null`), `organizer: { name }` (o nome público do perfil) e `ticketTypes: [{ id, name, description, price, maxPerOrder, available, salesStartAt, salesEndAt, salesStatus }]`.
+
+#### Como funciona (N10)
+
+| Rota | Comportamento |
+| --- | --- |
+| `GET /events` | Só eventos `PUBLISHED` que ainda não terminaram (um evento em andamento continua na lista), por `startsAt` e `id`. `q` (2–80 caracteres) busca no título; `city` compara a cidade inteira; as duas ignoram maiúsculas, e `%` e `_` valem como os próprios caracteres. `from` (inclusive) e `to` (exclusive) filtram o início. Qualquer outro parâmetro é `400`. O cursor é assinado e preso à busca: levado para outra busca, adulterado ou vindo do painel do organizador, é `400`. |
+| `GET /events/featured` | Até 6 eventos que ainda vão começar e têm algum tipo de ingresso à venda **agora** (dentro da janela de vendas e com ingresso restante), os mais próximos primeiro. |
+| `GET /events/{slug}` | Evento publicado, inclusive encerrado, ou cancelado (`status: "CANCELED"`, para o link de quem comprou continuar funcionando; o motivo do cancelamento vai só para quem comprou). Rascunho e slug desconhecido: `404`; slug fora do formato: `400`. |
+
+- `available` é `capacity − sold − reserved`, exato; vendidos e reservados nunca aparecem separados. A opção de mostrar faixas ("últimos ingressos") a critério do organizador fica para quando o painel tiver onde configurá-la.
+- `salesStatus`: `ON_SALE`; `NOT_STARTED` (antes de `salesStartAt`); `SOLD_OUT` (janela aberta, nada restante); `CLOSED` (depois de `salesEndAt` ou, sem ela, do fim do evento, e sempre num evento cancelado).
+- `priceFrom` é o menor preço entre os tipos com ingresso restante; `null` quando não resta nenhum, e aí `soldOut` é `true` (um evento sem tipos de ingresso não é "esgotado").
+- A imagem sai por endereço assinado de `GET` (1 hora), como na visão do organizador; o bucket continua privado.
+- Sem rate limit próprio: quem chama em produção é o servidor do web (renderização no servidor), e um limite por IP o atingiria. As respostas seguem com `Cache-Control: no-store`; o cache fica a cargo do web.
 
 ### Eventos do organizador (`events`)
 
