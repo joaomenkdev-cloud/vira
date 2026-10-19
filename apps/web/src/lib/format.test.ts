@@ -78,6 +78,10 @@ describe("summarize", () => {
     );
   });
 
+  it("decodes each entity once: escaped text stays escaped", () => {
+    expect(summarize("<p>&amp;lt;b&amp;gt; &lt;3 &quot;oi&quot;</p>")).toBe('&lt;b&gt; <3 "oi"');
+  });
+
   it("cuts long text at a word, with an ellipsis", () => {
     const text = `<p>${"palavra ".repeat(40)}</p>`;
     const summary = summarize(text, 50);

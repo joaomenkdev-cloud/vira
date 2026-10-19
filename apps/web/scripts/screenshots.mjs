@@ -3,6 +3,8 @@
 // `pnpm --filter @vira/web build && VIRA_DESIGN_SYSTEM=true pnpm --filter @vira/web start`,
 // and an API: the stand-in of the end-to-end tests (`node e2e/fake-api.ts`, whose events
 // are all test fixtures marked "Demonstração") or a real one with published events.
+// The page.evaluate callback below runs in the browser.
+/* global document, window */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 

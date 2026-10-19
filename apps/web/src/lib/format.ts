@@ -95,16 +95,21 @@ export function formatDayAndTime(iso: string, timeZone: string): string {
   return `${part("day")}/${part("month")} às ${formatTime(iso, timeZone)}`;
 }
 
+const ENTITIES: Readonly<Record<string, string>> = {
+  nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  "#39": "'",
+};
+
 /** The text of sanitized HTML, as one line, cut at a word for a meta description. */
 export function summarize(html: string, maxLength = 160): string {
   const text = html
     .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
+    // One pass, so "&amp;lt;" becomes "&lt;" and not "<".
+    .replace(/&(nbsp|amp|lt|gt|quot|#39);/g, (_, name: string) => ENTITIES[name] ?? "")
     .replace(/\s+/g, " ")
     .trim();
   if (text.length <= maxLength) return text;
