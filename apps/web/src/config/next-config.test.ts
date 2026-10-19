@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import config from "../../next.config";
-import { resolveApiOrigin } from "./api-origin";
+import { isLoopback, resolveApiOrigin, resolveStorageOrigin } from "./api-origin";
 import { securityHeaders } from "./security-headers";
 
 describe("next.config", () => {
@@ -46,5 +46,25 @@ describe("security headers", () => {
     for (const feature of ["camera", "microphone", "geolocation", "payment"]) {
       expect(policy).toContain(`${feature}=()`);
     }
+  });
+});
+
+describe("images", () => {
+  it("optimizes only the photos of the object storage", () => {
+    const storage = new URL(resolveStorageOrigin(process.env));
+    expect(config.images?.remotePatterns).toEqual([
+      {
+        protocol: storage.protocol.replace(":", ""),
+        hostname: storage.hostname,
+        port: storage.port,
+        pathname: "/**",
+      },
+    ]);
+  });
+
+  it("reaches a loopback address only when the storage itself is local", () => {
+    expect(config.images?.dangerouslyAllowLocalIP).toBe(
+      isLoopback(resolveStorageOrigin(process.env)),
+    );
   });
 });
