@@ -1,16 +1,20 @@
 // A stand-in for the Vira API, used only by the end-to-end tests. It keeps accounts,
-// sessions and e-mail links in memory, serves the storefront fixtures (./fixtures/) and follows the contract in docs/API.md closely
-// enough for the web to be exercised in a browser: the same cookies, problem types,
-// CSRF rule and strict refresh-token reuse detection.
+// sessions, e-mail links and the organizers' events in memory, serves the storefront
+// fixtures (./fixtures/) and follows the contract in docs/API.md closely enough for the
+// web to be exercised in a browser: the same cookies, problem types, CSRF rule and
+// strict refresh-token reuse detection.
 //
 // Test-only routes (never proxied: the web rewrites /api/v1/* only):
 //   GET  /__test/mail?to=<email>      last link sent to that address
 //   POST /__test/expire-access?email= makes the account's access tokens expire
 //   GET  /__test/stats?email=         refreshes and reuse detections of the account
+//   POST /__test/make-organizer?email= gives the account an organizer profile
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
-import { handleCatalog, startStorage } from "./fixtures/catalog.ts";
+import { catalogPhoto, handleCatalog } from "./fixtures/catalog.ts";
+import { handleOrganizer, publishedEventDetail } from "./fixtures/organizer.ts";
+import { startStorage } from "./fixtures/storage.ts";
 
 interface User {
   id: string;
@@ -45,7 +49,7 @@ const port = Number(process.env["PORT"] ?? 3000);
 // A second instance answers with an empty storefront (FAKE_CATALOG=empty), for the empty
 // states; only the first one also stands in for the object storage.
 const empty = process.env["FAKE_CATALOG"] === "empty";
-if (!empty) startStorage();
+if (!empty) startStorage(catalogPhoto);
 const PROBLEM_BASE = "https://github.com/joaomenkdev-cloud/vira/blob/main/docs/API.md#";
 /** The password the fake treats as found in a breach (Have I Been Pwned). */
 const BREACHED_PASSWORD = "senha-vazada-123";
@@ -267,12 +271,35 @@ async function handle(
     return send(response, 200, user ? statsOf(user.id) : null);
   }
 
+  if (path === "/__test/make-organizer" && method === "POST") {
+    const user = users.get(url.searchParams.get("email") ?? "");
+    if (!user) return send(response, 404, { error: "no user" });
+    user.organizer = { displayName: `Produtora ${user.name}`, slug: user.id.slice(0, 8) };
+    user.role = "ORGANIZER";
+    return send(response, 204);
+  }
+
   if (path === "/api/v1/health/live") {
     return send(response, 200, { status: "ok" }, { "x-fake-api": "1" });
   }
 
   const route = `${method} ${path.replace(/^\/api\/v1/, "")}`;
   const body = method === "GET" || method === "DELETE" ? {} : await readBody(request);
+
+  const organizerRoute = handleOrganizer(method, path.replace(/^\/api\/v1/, ""), url, body, {
+    organizer: ({ csrf }) => {
+      const auth = guard(request, response, { csrf });
+      if (!auth) return undefined;
+      if (!auth.user.organizer) {
+        problem(response, 403, "forbidden");
+        return undefined;
+      }
+      return { id: auth.user.id, displayName: auth.user.organizer.displayName };
+    },
+    send: (status, answer) => send(response, status, answer),
+    problem: (status, code, extra) => problem(response, status, code, extra),
+  });
+  if (organizerRoute) return "answered";
 
   switch (route) {
     case "POST /auth/register": {
@@ -505,6 +532,13 @@ async function handle(
 }
 
 createServer((request, response) => {
+  // An event published through the panel has its public page too.
+  const slug = /^\/api\/v1\/events\/([^/?]+)/.exec(request.url ?? "")?.[1];
+  const published = slug ? publishedEventDetail(decodeURIComponent(slug)) : undefined;
+  if (request.method === "GET" && published) {
+    send(response, 200, published);
+    return;
+  }
   if (handleCatalog(request, response, { empty })) return;
   handle(request, response).catch((error: unknown) => {
     process.stderr.write(

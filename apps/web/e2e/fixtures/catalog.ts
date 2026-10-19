@@ -2,13 +2,13 @@
 // contracts in @vira/shared (they are strict: an extra field fails the page). Every event
 // here is a test fixture and is marked "Demonstração", except one that checks the badge
 // stays away from the others.
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CatalogEventDetail, CatalogEventSummary, PublicTicketType } from "@vira/shared";
 
 import { encodePng, type Rgb } from "./png.ts";
+import { STORAGE_PORT } from "./storage.ts";
 
-export const STORAGE_PORT = 8333;
-const STORAGE = `http://127.0.0.1:${STORAGE_PORT}`;
+const STORAGE = `http://127.0.0.1:${String(STORAGE_PORT)}`;
 const DAY = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
 
@@ -332,12 +332,14 @@ export function handleCatalog(
   return true;
 }
 
-/** Stands in for the private bucket: any path is a photo, as the signed addresses lead. */
-export function startStorage(port = STORAGE_PORT) {
-  const photos = PALETTES.map((colours) => encodePng(1800, 1200, colours));
-  createServer((request, response) => {
-    const n = Number(/fake(\d+)/.exec(request.url ?? "")?.[1] ?? 0);
-    response.writeHead(200, { "content-type": "image/png", "cache-control": "no-store" });
-    response.end(photos[n % photos.length] ?? photos[0]);
-  }).listen(port, "127.0.0.1");
+/** A photo for any address of the catalog's pictures (`.../fake<n>...`), as the signed URLs lead. */
+const photos = new Map<number, Buffer>();
+export function catalogPhoto(path: string): Buffer {
+  const n = Number(/fake(\d+)/.exec(path)?.[1] ?? 0) % PALETTES.length;
+  let photo = photos.get(n);
+  if (!photo) {
+    photo = encodePng(1800, 1200, palette(n));
+    photos.set(n, photo);
+  }
+  return photo;
 }

@@ -80,6 +80,8 @@ test.describe("account", () => {
     await page.getByLabel("Nome de organizador").fill("Coletivo Vira");
     await page.getByRole("button", { name: "Quero organizar eventos" }).click();
     await expect(page.getByText("Você organiza eventos como Coletivo Vira.")).toBeVisible();
+    await page.getByRole("link", { name: "Ir para meus eventos" }).click();
+    await expect(page.getByRole("heading", { name: "Meus eventos", level: 1 })).toBeVisible();
   });
 
   test("ends another session, then every session", async ({ page }) => {
