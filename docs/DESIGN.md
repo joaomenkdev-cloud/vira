@@ -394,6 +394,15 @@ Composição única: **título `h3` + uma frase `body` em `ink-muted` + no máxi
 | Evento sem tipos à venda | Ingressos indisponíveis | As vendas deste evento não estão abertas no momento. | — |
 | Erro de carregamento | Não foi possível carregar | Verifique sua conexão e tente de novo. Código: `requestId` | Tentar novamente |
 
+**Como ficou implementado (N12).** O painel (`/painel`) não tem wireframe próprio; segue os componentes da seção 3 com estas escolhas:
+
+- **Lista ("Meus eventos"):** um único CTA primário ("Criar evento") no topo; chips de situação (Todos, Rascunhos, Publicados, Cancelados) que mudam o endereço (`?status=`); cada evento é uma linha com data no estilo do card, título, local, número de tipos de ingresso e o badge da situação. Sem a imagem 1:1 da variante `compact` do card: o resumo da API do organizador não traz a imagem (fica para quando trouxer). Estado vazio da tabela acima, e um por filtro ("Nenhum evento em …").
+- **Badges de situação:** Rascunho (`neutral`), Publicado (`success`), Encerrado (`neutral`, publicado que já terminou) e Cancelado (`danger`).
+- **Editor:** uma coluna de leitura (`max-w-reading`) com as seções Detalhes, Imagem, Ingressos e a zona de exclusão/cancelamento no fim. No rascunho, um painel "Publicação" no topo lista o que falta (✓/○ com texto para leitor de tela e link "Preencher" para a seção) e tem o único botão primário da tela; publicado, um alert de sucesso com o link para a página pública. Cancelado ou encerrado, tudo fica só de leitura e o alert explica por quê.
+- **Campos com 44px** (`fieldSize="md"`), como a tabela da seção 3.2 pede para o painel. As datas são digitadas no relógio do fuso do evento (o fuso fica logo abaixo), não no do navegador.
+- **Tipos de ingresso:** criados e editados num Modal (bottom sheet no mobile); excluir pede confirmação num Modal. A linha mostra "N vendidos de M · até X por pedido" e a janela de vendas quando houver.
+- **Imagem:** prévia local do arquivo escolhido antes do envio, checagem de tipo, tamanho e 1200 × 600 no navegador (a API confere de novo) e descrição obrigatória. Trocar só a descrição pede um novo envio, porque a API não tem rota para isso.
+
 ### 3.10 Ingresso digital
 
 O componente mais característico da marca. Inspirado em ingresso físico, com detalhes contidos.

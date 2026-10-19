@@ -5,10 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 1 — Núcleo (o Marco 0 terminou com o merge da F7).
-- **Concluído (mergeado):** F1 a F7, N1 a N6 (PRs #1, #2, #8, #10–#17, #26, #27) e Dependabot (#4–#7, #9 CodeQL v4).
-- **Concluído também:** N8 — Eventos do organizador (PR #29, mergeado em 2026-10-18).
-- **Entregas abertas:** N7 — Telas de autenticação (`feat/web-auth`, PR #28), N10 — Vitrine da API (`feat/catalog`, PR #32) e N11 — Home, card e página do evento (`feat/web-storefront`, empilhada na N10: depois do merge da N10, mudar a base do PR da N11 para `main`).
-- **Próximo passo:** N12 — Painel do organizador, depois dos merges da N7, N10 e N11.
+- **Concluído (mergeado):** F1 a F7, N1 a N6, N8, N9 e N10 (PRs #1, #2, #8, #10–#17, #26, #27, #29, #30, #32) e Dependabot (#4–#7, #9 CodeQL v4).
+- **Entregas abertas:** N7 — Telas de autenticação (`feat/web-auth`, PR #28), N11 — Home, card e página do evento (`feat/web-storefront`, PR #33) e N12 — Painel do organizador (`feat/web-organizer`, empilhada na N11 e com a N7 mergeada dentro: depois dos merges da N7 e da N11, mudar a base do PR da N12 para `main`).
+- **Próximo passo:** N13 — Seed de demonstração, depois dos merges da N7, N11 e N12.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -23,6 +22,36 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-19 — N12: painel do organizador
+
+Auditoria (antes de codar): a API do organizador (N8) e o upload da imagem (N9) estavam prontos e documentados na API.md; o web não tinha nenhuma tela de organizador, e "Quero organizar eventos" em `/conta` (N7) terminava num "em construção". O painel precisa da sessão e do cliente da API da N7 (PR #28) e do `EventImage` e da formatação de datas da N11 (PR #33), nenhum dos dois mergeado; a branch saiu da N11 com a N7 mergeada dentro (conflitos resolvidos no merge commit). A pendência da N9 sobre a CSP também foi resolvida aqui.
+
+Feito (web; não mexe na API):
+
+- Rotas `/painel` (lista com filtros por situação e "Mais eventos"), `/painel/eventos/novo` (cria o rascunho) e `/painel/eventos/[id]` (edição). Sem a dica de sessão, redireciona para `/entrar?next=…`; conta sem perfil de organizador vê um estado vazio que leva a `/conta#organizador`.
+- Editor: detalhes (título, início e fim no fuso do evento, fuso, local tudo-ou-nada, descrição em markdown com a prévia sanitizada que a API devolve), imagem (prévia local, checagem de tipo, tamanho e dimensões, `PUT` direto no bucket e confirmação com a descrição), tipos de ingresso (Modal de criação e edição, exclusão com confirmação), painel de publicação com o que falta, publicar, cancelar com motivo, excluir rascunho. Evento cancelado ou encerrado fica só de leitura.
+- Erros da API: `invalid-state-transition` lista os campos que faltam no checklist, `invalid-image` e `conflict` mostram o `detail` da API; erros de campo voltam para o campo certo.
+- `lib/organizer`: datas no relógio do fuso do evento, preço em reais (`R$ 1.250,50`) para centavos, fusos do Brasil, situação do evento (Encerrado é publicado que já terminou) e validações dos formulários; `lib/api/organizer.ts` com as rotas do organizador.
+- `useForm`: textarea e validadores que leem os outros campos (fim depois do início, local tudo-ou-nada, janela de vendas).
+- CSP: `connect-src` passa a liberar o `STORAGE_ORIGIN` (o `PUT` da imagem). "Meus eventos" no menu da conta e "Criar um evento" no estado vazio da home, só para organizadores. O chip "Este fim de semana" virou um `FilterChip` genérico, usado também pelos filtros do painel.
+- Testes: unitários (fuso, preço, situação e checklist, arquivo de imagem, validações, CSP e mensagens de erro); E2E em desktop e mobile com a API falsa ganhando as rotas do organizador (validadas com os schemas do `@vira/shared`) e o armazenamento falso aceitando o `PUT`: redirecionamento do login, conta sem perfil, fluxo completo do rascunho vazio até a página pública (com axe em cada tela e a publicação recusada antes de completar), edição de detalhes e de tipo de ingresso, exclusão de tipo e de rascunho, cancelamento, evento inexistente.
+- Prints: `web-organizer-{empty,new-event,draft,ticket-type,published,list}-{desktop,mobile}.png` (o `screenshots.mjs` os gera com `FAKE_API_URL`).
+
+Decisões tomadas por conta própria:
+
+- **Datas digitadas no relógio do fuso do evento**, não no do navegador: um organizador em Manaus criando um show em São Paulo digita o horário que está no cartaz.
+- **Lista sem imagem:** o resumo da API do organizador não traz a imagem, e buscar o detalhe de cada evento só para isso não vale.
+- **Trocar só a descrição da imagem pede um novo envio**, porque não há rota para isso (pendência da N9).
+- **Validação no navegador espelha a da API** (preço de R$ 1,00 a R$ 100.000,00, até 20 por pedido, janela até o fim do evento, imagem de 1200 × 600 e 5 MB), mas a API continua decidindo: os erros dela voltam para os campos.
+- **Rascunho criado só com os detalhes;** imagem e ingressos entram na tela de edição, que é para onde a criação leva.
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Imagem na lista do painel:** incluir a imagem no resumo de `GET /organizer/events` permitiria a variante `compact` do card.
+- **Faixas de disponibilidade** ("últimos ingressos") a critério do organizador: ainda sem campo na API (pendência da N10).
+- **Vendas por evento** (`/sales`) entram com os pedidos (Marco 2).
+- **Deploy (V11):** o `STORAGE_ORIGIN` de produção também vale para o `connect-src`; o CORS do bucket precisa do `WEB_ORIGIN` de produção (`storage:setup`).
 
 ### 2026-10-19 — N11: home, card e página do evento
 
