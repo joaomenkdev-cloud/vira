@@ -120,6 +120,18 @@ describe("every application route declares an access policy", () => {
     });
   });
 
+  it("keeps the storefront public", () => {
+    const catalogRoutes = collectRoutes(testApp).filter((route) =>
+      route.name.includes("CatalogController"),
+    );
+    const publicRoute = { kind: "public" };
+    expect(Object.fromEntries(catalogRoutes.map((route) => [route.name, route.policy]))).toEqual({
+      "GET CatalogController.list": publicRoute,
+      "GET CatalogController.featured": publicRoute,
+      "GET CatalogController.get": publicRoute,
+    });
+  });
+
   it("has no route without @Public() or @RequireRole()", () => {
     const undeclared = collectRoutes(testApp).filter((route) => route.policy === undefined);
     expect(undeclared.map((route) => route.name)).toEqual([]);
