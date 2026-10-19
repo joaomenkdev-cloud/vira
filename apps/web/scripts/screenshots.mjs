@@ -12,6 +12,8 @@ import { join } from "node:path";
 
 import { chromium, devices } from "@playwright/test";
 
+import { encodePng } from "../e2e/fixtures/png.ts";
+
 const baseUrl = process.env["WEB_URL"] ?? "http://127.0.0.1:3001";
 const outDir =
   process.env["SCREENSHOT_DIR"] ??
@@ -36,6 +38,8 @@ const viewports = [
 
 async function shoot(page, file, fullPage = true) {
   const path = join(outDir, file);
+  // A page scrolled by a form (errors, notices) would show its sticky header mid-capture.
+  if (fullPage) await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path, fullPage });
   process.stdout.write(`${path}\n`);
 }
@@ -91,6 +95,59 @@ try {
       await page.waitForTimeout(500);
       await shoot(page, `web-account-menu-${viewport.name}.png`, false);
       await page.keyboard.press("Escape");
+
+      // The organizer panel: empty, the new event form, a draft, a published event.
+      await fetch(`${fakeApiUrl}/__test/make-organizer?email=${email}`, { method: "POST" });
+      await page.goto(`${baseUrl}/painel`);
+      await page.getByText("Seu primeiro evento começa aqui").waitFor();
+      await shoot(page, `web-organizer-empty-${viewport.name}.png`);
+
+      await page.goto(`${baseUrl}/painel/eventos/novo`);
+      await page.getByRole("button", { name: "Criar rascunho" }).click();
+      await page.getByText("Confira 3 campos").waitFor();
+      await shoot(page, `web-organizer-new-event-${viewport.name}.png`);
+
+      await page.getByLabel("Nome do evento").fill("Noite de forró no Circo");
+      await page.getByLabel("Começa em").fill("2030-12-07T22:00");
+      await page.getByLabel("Termina em").fill("2030-12-08T03:00");
+      await page.getByLabel("Nome do local").fill("Circo Voador");
+      await page.getByLabel("Endereço").fill("Rua dos Arcos, s/n – Lapa");
+      await page.getByLabel("Cidade").fill("Rio de Janeiro");
+      await page.getByRole("combobox", { name: "UF" }).click();
+      await page.getByRole("option", { name: "RJ" }).click();
+      await page.getByLabel("Sobre o evento").fill("Forró pé de serra a noite toda.");
+      await page.getByRole("button", { name: "Criar rascunho" }).click();
+      await page.getByRole("button", { name: "Publicar evento" }).waitFor();
+      await shoot(page, `web-organizer-draft-${viewport.name}.png`);
+
+      await page.getByLabel("Arquivo da imagem").setInputFiles({
+        name: "foto.png",
+        mimeType: "image/png",
+        buffer: encodePng(1800, 1200, [
+          [217, 45, 58],
+          [242, 242, 239],
+        ]),
+      });
+      await page.getByLabel("Descrição da imagem").fill("Faixas em vermelho e branco");
+      await page.getByRole("button", { name: "Enviar imagem" }).click();
+      await page.getByText("Imagem atualizada.").waitFor();
+      await page.getByRole("button", { name: "Adicionar tipo de ingresso" }).click();
+      const dialog = page.getByRole("dialog");
+      await dialog.getByLabel("Nome").fill("Pista – Lote 1");
+      await dialog.getByLabel("Preço (R$)").fill("80,00");
+      await dialog.getByLabel("Quantidade").fill("200");
+      await page.waitForTimeout(500);
+      await shoot(page, `web-organizer-ticket-type-${viewport.name}.png`, false);
+      await dialog.getByRole("button", { name: "Adicionar tipo de ingresso" }).click();
+      await dialog.waitFor({ state: "hidden" });
+      await page.getByRole("button", { name: "Publicar evento" }).click();
+      await page.getByText("Evento publicado.").waitFor();
+      await page.waitForLoadState("networkidle");
+      await shoot(page, `web-organizer-published-${viewport.name}.png`);
+
+      await page.goto(`${baseUrl}/painel`);
+      await page.getByRole("article").first().waitFor();
+      await shoot(page, `web-organizer-list-${viewport.name}.png`);
     }
 
     // Open layers cannot show in a full-page capture of the closed page: photograph them
