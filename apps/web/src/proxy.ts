@@ -1,7 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import { resolveStorageOrigin } from "./config/api-origin";
 import { buildCsp, generateNonce } from "./config/csp";
 import { ACCESS_COOKIE, SESSION_HINT_COOKIE, SESSION_HINT_MAX_AGE } from "./lib/session/hint";
+
+const STORAGE_ORIGIN = resolveStorageOrigin(process.env);
 
 /**
  * Runs before every page: creates the nonce, sets the Content Security Policy on the
@@ -11,7 +14,11 @@ import { ACCESS_COOKIE, SESSION_HINT_COOKIE, SESSION_HINT_MAX_AGE } from "./lib/
  */
 export function proxy(request: NextRequest): NextResponse {
   const nonce = generateNonce();
-  const csp = buildCsp({ nonce, isDevelopment: process.env.NODE_ENV === "development" });
+  const csp = buildCsp({
+    nonce,
+    isDevelopment: process.env.NODE_ENV === "development",
+    storageOrigin: STORAGE_ORIGIN,
+  });
 
   const newHint = request.cookies.has(ACCESS_COOKIE) && !request.cookies.has(SESSION_HINT_COOKIE);
   // On the request too, so this very page is drawn knowing about the session.

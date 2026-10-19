@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { buildCsp, generateNonce } from "./csp";
 
+const STORAGE = "https://account.r2.cloudflarestorage.com";
+
 function directive(csp: string, name: string): string[] {
   const entry = csp.split("; ").find((part) => part.startsWith(`${name} `) || part === name);
   return entry ? entry.split(" ").slice(1) : [];
@@ -16,7 +18,7 @@ describe("generateNonce", () => {
 });
 
 describe("buildCsp (production)", () => {
-  const csp = buildCsp({ nonce: "abc123", isDevelopment: false });
+  const csp = buildCsp({ nonce: "abc123", isDevelopment: false, storageOrigin: STORAGE });
 
   it("only runs scripts that carry the nonce", () => {
     expect(directive(csp, "script-src")).toEqual(["'self'", "'nonce-abc123'", "'strict-dynamic'"]);
@@ -36,10 +38,14 @@ describe("buildCsp (production)", () => {
   });
 
   it("keeps every other resource type on the same origin", () => {
-    for (const name of ["default-src", "connect-src", "font-src"]) {
+    for (const name of ["default-src", "font-src"]) {
       expect(directive(csp, name)).toEqual(["'self'"]);
     }
     expect(directive(csp, "img-src")).toEqual(["'self'", "blob:", "data:"]);
+  });
+
+  it("lets scripts reach only the object storage besides this origin (picture uploads)", () => {
+    expect(directive(csp, "connect-src")).toEqual(["'self'", STORAGE]);
   });
 
   it("upgrades insecure requests", () => {
@@ -48,7 +54,7 @@ describe("buildCsp (production)", () => {
 });
 
 describe("buildCsp (development)", () => {
-  const csp = buildCsp({ nonce: "abc123", isDevelopment: true });
+  const csp = buildCsp({ nonce: "abc123", isDevelopment: true, storageOrigin: STORAGE });
 
   it("allows eval and inline styles for React debugging and hot reload", () => {
     expect(directive(csp, "script-src")).toContain("'unsafe-eval'");
