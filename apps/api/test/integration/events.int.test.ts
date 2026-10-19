@@ -98,11 +98,17 @@ describe.skipIf(!dockerAvailable)("organizer events (PostgreSQL)", () => {
     return organizerEventSchema.parse(response.body);
   }
 
-  /** What the image upload (N9) will do: an object key and its text alternative. */
+  /** What the image upload does (its own suite: event-images.int.test.ts), by hand. */
   async function attachImage(eventId: string) {
     await prisma.event.update({
       where: { id: eventId },
-      data: { imageKey: `events/${eventId}/capa.webp`, imageAlt: "Pista cheia sob a lona" },
+      data: {
+        imageKey: `events/${eventId}/capa.webp`,
+        imageAlt: "Pista cheia sob a lona",
+        imageWidth: 2400,
+        imageHeight: 1350,
+        imageBlurDataUrl: "data:image/webp;base64,AA==",
+      },
     });
   }
 

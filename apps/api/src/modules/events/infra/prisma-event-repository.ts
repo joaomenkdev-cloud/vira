@@ -14,7 +14,7 @@ import type {
   NewTicketType,
   TicketTypeChanges,
 } from "../application/ports/event-repository.js";
-import type { Event, TicketType, Venue } from "../domain/event.js";
+import type { Event, EventImage, TicketType, Venue } from "../domain/event.js";
 
 const withTicketTypes = {
   ticketTypes: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }] },
@@ -39,6 +39,18 @@ function venueColumns(venue: Venue | null) {
     venueAddress: venue?.address ?? null,
     venueCity: venue?.city ?? null,
     venueState: venue?.state ?? null,
+  };
+}
+
+function imageOf(row: EventColumns): EventImage | null {
+  // The migration keeps the four columns together (`events_image_details`).
+  if (!row.imageKey || !row.imageWidth || !row.imageHeight || !row.imageBlurDataUrl) return null;
+  return {
+    key: row.imageKey,
+    alt: row.imageAlt,
+    width: row.imageWidth,
+    height: row.imageHeight,
+    blurDataUrl: row.imageBlurDataUrl,
   };
 }
 
@@ -73,7 +85,7 @@ function columnsOf(
     endsAt: row.endsAt,
     timezone: row.timezone,
     venue: venueOf(row),
-    image: row.imageKey ? { key: row.imageKey, alt: row.imageAlt } : null,
+    image: imageOf(row),
     isDemo: row.isDemo,
     publishedAt: row.publishedAt,
     canceledAt: row.canceledAt,
@@ -226,6 +238,19 @@ export class PrismaEventRepository implements EventRepository {
       data: { status: "CANCELED", cancelReason: change.reason, canceledAt: change.canceledAt },
     });
     return count === 1;
+  }
+
+  async setImage(eventId: string, image: EventImage, tx?: TransactionContext): Promise<void> {
+    await clientFor(this.prisma, tx).event.update({
+      where: { id: eventId },
+      data: {
+        imageKey: image.key,
+        imageAlt: image.alt,
+        imageWidth: image.width,
+        imageHeight: image.height,
+        imageBlurDataUrl: image.blurDataUrl,
+      },
+    });
   }
 
   async createTicketType(ticketType: NewTicketType, tx?: TransactionContext): Promise<void> {

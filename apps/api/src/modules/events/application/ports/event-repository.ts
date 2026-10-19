@@ -1,7 +1,7 @@
 import type { EventStatus } from "@vira/shared";
 
 import type { TransactionContext } from "../../../../platform/database/transaction.js";
-import type { Event, TicketType, Venue } from "../../domain/event.js";
+import type { Event, EventImage, TicketType, Venue } from "../../domain/event.js";
 
 /** The columns a new draft starts with; the rest take their defaults. */
 export interface NewEvent {
@@ -106,6 +106,9 @@ export interface EventRepository {
     change: { readonly reason: string; readonly canceledAt: Date },
     tx?: TransactionContext,
   ): Promise<boolean>;
+
+  /** Points the event at a new picture (the previous one is left to the upload sweep). */
+  setImage(eventId: string, image: EventImage, tx?: TransactionContext): Promise<void>;
 
   createTicketType(ticketType: NewTicketType, tx?: TransactionContext): Promise<void>;
 

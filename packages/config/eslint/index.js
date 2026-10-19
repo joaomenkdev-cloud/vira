@@ -33,6 +33,7 @@ export const INFRA_PACKAGES = [
   "nodemailer",
   "@node-rs/*",
   "@aws-sdk/*",
+  "sharp",
 ];
 
 /** Frameworks the domain layer must not know about. */

@@ -57,6 +57,7 @@ Pontos-chave:
 - **Mesma origem para o navegador.** O Next.js faz proxy de `/api/v1/*` para a API, então os cookies de sessão são first-party no domínio do web app (`SameSite=Lax` funciona, sem CORS no caminho do navegador). Webhooks do Stripe chegam direto no domínio da API. Ver [ADR-0005](adr/0005-autenticacao-e-tokens.md).
 - **Nenhum dado de cartão passa pelos nossos servidores.** O Payment Element do Stripe roda em iframe no navegador e fala direto com o Stripe.
 - **A API nunca confia em valores do cliente.** Preço, total, disponibilidade e dono do recurso são sempre lidos do banco.
+- **A exceção é o upload de imagens:** o navegador envia o arquivo direto ao bucket privado com uma URL de `PUT` pré-assinada pela API, sem passar por ela, e o bucket aceita esse `PUT` só do `WEB_ORIGIN` (CORS). A API depois lê, confere e re-encoda o arquivo; as imagens são servidas por URL assinada. A porta `ObjectStorage` (`platform/storage`) fala S3, então R2 e SeaweedFS são só configuração ([ADR-0012](adr/0012-armazenamento-local-seaweedfs.md)).
 - **O worker é o mesmo código** (`apps/api`) iniciado com outro entrypoint (`main.worker.ts`), compartilhando módulos e camadas. Em ambientes de custo zero ele pode rodar embutido no processo da API (`WORKER_MODE=embedded`). Ver [ADR-0011](adr/0011-hospedagem.md).
 
 ## 2. Estrutura do monorepo

@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  attachEventImageRequestSchema,
   createEventRequestSchema,
   createTicketTypeRequestSchema,
+  EVENT_IMAGE_MAX_BYTES,
   isKnownTimeZone,
   listOrganizerEventsQuerySchema,
   MAX_PER_ORDER_DEFAULT,
+  requestImageUploadSchema,
   updateEventRequestSchema,
   updateTicketTypeRequestSchema,
 } from "./events.js";
@@ -102,5 +105,41 @@ describe("listOrganizerEventsQuerySchema", () => {
     expect(listOrganizerEventsQuerySchema.parse({}).limit).toBe(20);
     expect(listOrganizerEventsQuerySchema.safeParse({ limit: "51" }).success).toBe(false);
     expect(listOrganizerEventsQuerySchema.safeParse({ organizerId: "x" }).success).toBe(false);
+  });
+});
+
+describe("event image schemas", () => {
+  it("takes JPEG, PNG and WebP up to 5 MB", () => {
+    expect(
+      requestImageUploadSchema.parse({
+        contentType: "image/webp",
+        sizeBytes: EVENT_IMAGE_MAX_BYTES,
+      }),
+    ).toEqual({ contentType: "image/webp", sizeBytes: EVENT_IMAGE_MAX_BYTES });
+  });
+
+  it.each([
+    ["a type it does not take", { contentType: "image/gif", sizeBytes: 10 }],
+    ["SVG, which may carry scripts", { contentType: "image/svg+xml", sizeBytes: 10 }],
+    ["a file over 5 MB", { contentType: "image/png", sizeBytes: EVENT_IMAGE_MAX_BYTES + 1 }],
+    ["an empty file", { contentType: "image/png", sizeBytes: 0 }],
+    ["a fractional size", { contentType: "image/png", sizeBytes: 10.5 }],
+    ["a key chosen by the client", { contentType: "image/png", sizeBytes: 10, key: "x" }],
+  ])("refuses %s", (_case, body) => {
+    expect(requestImageUploadSchema.safeParse(body).success).toBe(false);
+  });
+
+  it("trims the alternative text and requires a real one", () => {
+    const uploadId = "0192a0e4-0000-7000-8000-000000000001";
+    expect(attachEventImageRequestSchema.parse({ uploadId, alt: "  Pista cheia  " }).alt).toBe(
+      "Pista cheia",
+    );
+    expect(attachEventImageRequestSchema.safeParse({ uploadId, alt: "   " }).success).toBe(false);
+    expect(
+      attachEventImageRequestSchema.safeParse({ uploadId, alt: "x".repeat(301) }).success,
+    ).toBe(false);
+    expect(attachEventImageRequestSchema.safeParse({ uploadId: "1", alt: "Pista" }).success).toBe(
+      false,
+    );
   });
 });

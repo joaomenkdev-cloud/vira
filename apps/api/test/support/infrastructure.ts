@@ -16,8 +16,10 @@ import {
 export const POSTGRES_IMAGE = "postgres:16.15-alpine";
 export const REDIS_IMAGE = "redis:8.8-alpine";
 export const MAILPIT_IMAGE = "axllent/mailpit:v1.31";
+export const SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.48";
 
 const API_ROOT = join(import.meta.dirname, "..", "..");
+const SEAWEEDFS_CONFIG = join(API_ROOT, "..", "..", "infra", "seaweedfs", "s3.json");
 const PRISMA_CLI = join(
   dirname(createRequire(import.meta.url).resolve("prisma/package.json")),
   "build",
@@ -31,6 +33,8 @@ export interface Infrastructure {
   readonly redis: StartedRedisContainer;
   /** Present when started with `{ mail: true }`. */
   readonly mailpit: Mailpit | undefined;
+  /** Present when started with `{ storage: true }`. */
+  readonly storage: Storage | undefined;
   stop(): Promise<void>;
 }
 
@@ -40,6 +44,43 @@ export interface Mailpit {
   /** Base URL of Mailpit's HTTP API. */
   readonly apiUrl: string;
   readonly container: StartedTestContainer;
+}
+
+/** SeaweedFS's S3 gateway, as in docker-compose.yml (ADR-0012), with an empty bucket. */
+export interface Storage {
+  /** The `S3_*` variables that point the API at it. */
+  readonly env: {
+    readonly S3_ENDPOINT: string;
+    readonly S3_BUCKET: string;
+    readonly S3_ACCESS_KEY_ID: string;
+    readonly S3_SECRET_ACCESS_KEY: string;
+  };
+  readonly container: StartedTestContainer;
+}
+
+async function startStorage(): Promise<Storage> {
+  const container = await new GenericContainer(SEAWEEDFS_IMAGE)
+    .withCommand([
+      "server",
+      "-dir=/data",
+      "-s3",
+      "-s3.port=8333",
+      "-s3.config=/etc/seaweedfs/s3.json",
+    ])
+    .withCopyFilesToContainer([{ source: SEAWEEDFS_CONFIG, target: "/etc/seaweedfs/s3.json" }])
+    .withExposedPorts(8333)
+    .withWaitStrategy(Wait.forHttp("/healthz", 8333).withStartupTimeout(120_000))
+    .start();
+  return {
+    // Local-only credentials of infra/seaweedfs/s3.json.
+    env: {
+      S3_ENDPOINT: `http://${container.getHost()}:${container.getMappedPort(8333)}`,
+      S3_BUCKET: "vira-test",
+      S3_ACCESS_KEY_ID: "vira-local",
+      S3_SECRET_ACCESS_KEY: "vira-local-secret",
+    },
+    container,
+  };
 }
 
 async function startMailpit(): Promise<Mailpit> {
@@ -82,13 +123,14 @@ export async function migrate(databaseUrl: string): Promise<void> {
 }
 
 /**
- * Starts PostgreSQL and Redis containers (and Mailpit, with `{ mail: true }`) and
- * applies every migration.
+ * Starts PostgreSQL and Redis containers (and Mailpit, with `{ mail: true }`, and
+ * SeaweedFS, with `{ storage: true }`) and applies every migration. The bucket is not
+ * created: suites set it up the way `pnpm storage:setup` does.
  */
 export async function startInfrastructure(
-  options: { readonly mail?: boolean } = {},
+  options: { readonly mail?: boolean; readonly storage?: boolean } = {},
 ): Promise<Infrastructure> {
-  const [postgres, redis, mailpit] = await Promise.all([
+  const [postgres, redis, mailpit, storage] = await Promise.all([
     new PostgreSqlContainer(POSTGRES_IMAGE)
       .withDatabase("vira")
       .withUsername("vira")
@@ -96,6 +138,7 @@ export async function startInfrastructure(
       .start(),
     new RedisContainer(REDIS_IMAGE).start(),
     options.mail ? startMailpit() : Promise.resolve(undefined),
+    options.storage ? startStorage() : Promise.resolve(undefined),
   ]);
   const databaseUrl = postgres.getConnectionUri();
   await migrate(databaseUrl);
@@ -106,8 +149,14 @@ export async function startInfrastructure(
     postgres,
     redis,
     mailpit,
+    storage,
     stop: async () => {
-      await Promise.all([postgres.stop(), redis.stop(), mailpit?.container.stop()]);
+      await Promise.all([
+        postgres.stop(),
+        redis.stop(),
+        mailpit?.container.stop(),
+        storage?.container.stop(),
+      ]);
     },
   };
 }

@@ -6,8 +6,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 
 - **Marco:** 1 — Núcleo (o Marco 0 terminou com o merge da F7).
 - **Concluído (mergeado):** F1 a F7, N1 a N6 (PRs #1, #2, #8, #10–#17, #26, #27) e Dependabot (#4–#7, #9 CodeQL v4).
-- **Entregas abertas:** N7 — Telas de autenticação (`feat/web-auth`, PR #28) e N8 — Eventos do organizador (`feat/events-management`), PRs draft independentes (a N8 só mexe na API).
-- **Próximo passo:** N9 — Upload de imagem, depois do merge da N8 (sem ela nenhum evento pode ser publicado pela API).
+- **Concluído também:** N8 — Eventos do organizador (PR #29, mergeado em 2026-10-18).
+- **Entregas abertas:** N7 — Telas de autenticação (`feat/web-auth`, PR #28) e N9 — Upload de imagem (`feat/events-image-upload`), PRs draft independentes (a N9 só mexe na API).
+- **Próximo passo:** N10 — Vitrine (API), depois do merge da N9.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +23,40 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-18 — N9: upload da imagem do evento
+
+Auditoria (antes de codar): a N8 deixou as colunas `image_key`/`image_alt` e a publicação exigindo imagem, mas nenhuma rota escrevia nelas; a API.md já descrevia `upload-url` e a confirmação; o DATA_MODEL previa `media_uploads`; o compose já tinha o SeaweedFS (ADR-0012), mas sem bucket nem CORS, e a API não lia as variáveis `S3_*`. Sem Docker, a integração rodou contra Postgres 16, Redis e o binário do SeaweedFS 4.48 locais (ajuste local no `infrastructure.ts`, não commitado).
+
+Feito (API, `@vira/shared` e CI; não mexe no web):
+
+- Config: `S3_ENDPOINT`, `S3_REGION` (padrão `auto`), `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, obrigatórias (em produção o endpoint exige `https`). O `.env.example` já vem com as do SeaweedFS.
+- Plataforma: porta `ObjectStorage` com o adaptador `S3ObjectStorage` (`@aws-sdk/client-s3`, path-style, sem os checksums automáticos do SDK, que R2 e SeaweedFS recusam numa URL pré-assinada), `StorageModule` e `setUpBucket` (bucket e CORS só de `PUT` do `WEB_ORIGIN`), exposto como `pnpm --filter @vira/api storage:setup` e rodado pelo job "Local infrastructure" do CI.
+- Migration `media_uploads` (enum `upload_status`; `CHECK`s de formato das chaves, tipo, tamanho até 5 MB e estado confirmado) e, em `events`, `image_width`, `image_height`, `image_blur_data_url` (`CHECK` de que andam com `image_key`) e o limite de 3–300 caracteres do `image_alt`.
+- Módulo `events`: `RequestImageUpload` (URL de `PUT` de 5 min com tipo e tamanho assinados, 20 por hora por conta), `AttachEventImage` (confirmação: tamanho, magic bytes, decodificação, re-encode, troca da imagem com a linha do evento travada) e `SweepMediaUploads` com o `MediaSweeper` (a cada 10 min, no worker ou embutido); porta `ImageProcessor` com o adaptador `SharpImageProcessor` (`sharp`); `PrismaMediaUploadRepository`; `EventPresenter`, que põe o endereço assinado da imagem na resposta.
+- `@vira/shared`: `requestImageUploadSchema`, `imageUploadSchema`, `attachEventImageRequestSchema`, `eventImageSchema` e as constantes da imagem; `OrganizerEvent.image` passou de `{ alt }` a `{ url, alt, width, height, blurDataUrl }`.
+- Problema novo: `invalid-image` (422). `sharp` entrou na lista de SDKs que só `infra` pode importar.
+- Testes: domínio e processamento com imagens geradas pelo `sharp` (magic bytes de JPEG/PNG/WebP contra texto, SVG, HTML, PDF e GIF; tipo trocado; arquivo truncado; abaixo de 1200 × 600; "pixel bomb" de 10 000 × 10 000; EXIF com GPS removido e orientação aplicada; redução a 2400 px; prévia de 16 px); casos de uso com armazenamento e repositórios em memória (upload alheio, de outro evento, usado duas vezes, arquivo que não chegou, tamanho diferente, prazo e tolerância, evento encerrado, limite por conta, varredura); e2e sem infraestrutura (`401`, `403` para BUYER, mass assignment com `key`, `bucket`, `url` e `width`, SVG, GIF, HTML, acima de 5 MB, `alt` vazio, `uploadId` malformado); integração contra Postgres e SeaweedFS reais (navegador → bucket → confirmação → publicação, imagem servida sem EXIF, armazenamento recusando outro tipo e outro tamanho, preflight CORS só da origem do web, PHP disfarçado de JPEG, imagem pequena, confirmação antes do envio, `404` entre organizadores, varredura e cada `CHECK` novo).
+
+Decisões tomadas por conta própria:
+
+- **Uma imagem só, sem variantes:** a confirmação guarda um WebP de até 2400 px no maior lado. Os recortes do DESIGN.md (3:2, 16:9, 4:3, 1:1) são `object-fit: cover`, e o `next/image` gera os tamanhos na entrega.
+- **Mínimo de 1200 × 600 e máximo de 40 megapixels** na entrada: menor que isso a foto não enche o banner; maior, a decodificação é recusada antes de alocar memória.
+- **Texto alternativo de 3 a 300 caracteres**, exigido na confirmação (não dá para ter imagem sem `alt` pela API).
+- **Chave nova a cada confirmação** (`events/<eventId>/<uuid>.webp`): duas confirmações simultâneas do mesmo envio não escrevem uma sobre a outra, e a perdedora apaga só o que escreveu.
+- **Confirmar antes de o arquivo chegar não gasta o envio** (`422`, tente de novo); um arquivo recusado gasta (é apagado e é preciso outra URL).
+- **Tolerância de 15 min** depois de a URL vencer para confirmar: um `PUT` lento pode ter começado no fim do prazo.
+- **Trocar a imagem vale também para evento publicado**; a anterior fica para a varredura, que apaga também as imagens de rascunhos excluídos (`event_id` vira `NULL`).
+- **Imagem servida por URL assinada de `GET` (1 h)** na visão do organizador; o bucket continua privado. A vitrine (N10) decide se usa o mesmo ou um domínio público do R2.
+- **Variáveis `S3_*` obrigatórias**, como as do banco e do Redis: a API não sobe sem o armazenamento.
+- **Limite por conta (20 URLs/hora)** em vez de por IP: cada URL deixa a conta pôr 5 MB no bucket.
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Painel (N12):** o CSP do web precisa liberar a origem do bucket em `connect-src` (o `PUT`) e `img-src` (a prévia); o envio é `fetch(url, { method: "PUT", body, headers })` com os `headers` da resposta.
+- **Trocar só o texto alternativo** sem reenviar a imagem não tem rota; dá para incluir no `PATCH` do evento se o painel pedir.
+- **Deploy (V11):** criar o bucket no R2, um token só com leitura e escrita nele, preencher as `S3_*` e rodar `storage:setup` com o `WEB_ORIGIN` de produção (aplica o CORS).
+- **Readiness:** o `/health/ready` ainda não confere o armazenamento.
 
 ### 2026-10-17 — N8: eventos do organizador (API)
 

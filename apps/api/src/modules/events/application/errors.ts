@@ -1,4 +1,5 @@
 import type { MissingRequirement } from "../domain/event.js";
+import type { ImageRejection } from "./ports/image-processor.js";
 
 /** The caller has no organizer profile, so there are no events to manage. */
 export class NotOrganizerError extends Error {
@@ -54,5 +55,27 @@ export class InvalidEventInputError extends Error {
   ) {
     super(detail);
     this.name = "InvalidEventInputError";
+  }
+}
+
+/** No such upload for this event, or it was already used, or its time is up. */
+export class UploadNotFoundError extends Error {
+  constructor() {
+    super("Upload not found");
+    this.name = "UploadNotFoundError";
+  }
+}
+
+/** Why an uploaded file cannot become the event's picture. */
+export type UploadProblem = ImageRejection | "not-received" | "size-mismatch";
+
+/**
+ * The upload cannot be used. Except for `not-received` (the file may still arrive while
+ * the URL is valid), the upload is spent: the organizer asks for a new URL.
+ */
+export class UnusableUploadError extends Error {
+  constructor(readonly problem: UploadProblem) {
+    super(`Unusable upload: ${problem}`);
+    this.name = "UnusableUploadError";
   }
 }

@@ -19,6 +19,7 @@ export const PROBLEM_TYPES = {
   "token-expired": { status: 410, title: "Link expirado ou já utilizado" },
   "payload-too-large": { status: 413, title: "Corpo da requisição muito grande" },
   "unsupported-media-type": { status: 415, title: "Tipo de conteúdo não suportado" },
+  "invalid-image": { status: 422, title: "Arquivo de imagem inválido" },
   "rate-limited": { status: 429, title: "Muitas requisições" },
   "internal-error": { status: 500, title: "Erro interno" },
 } as const satisfies Record<string, { status: number; title: string }>;

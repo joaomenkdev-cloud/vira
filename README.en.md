@@ -85,6 +85,7 @@ pnpm install
 pnpm infra:up
 cp apps/api/.env.example apps/api/.env
 pnpm --filter @vira/api db:deploy
+pnpm --filter @vira/api storage:setup
 pnpm --filter @vira/api dev
 ```
 

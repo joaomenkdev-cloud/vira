@@ -19,6 +19,7 @@ const event = {
   timezone: "America/Sao_Paulo",
 };
 const ticket = { name: "Pista", priceCents: 8000, capacity: 100 };
+const upload = { contentType: "image/jpeg", sizeBytes: 734_003 };
 
 const ROUTES: [Method, string][] = [
   ["get", "/api/v1/organizer/events"],
@@ -29,6 +30,8 @@ const ROUTES: [Method, string][] = [
   ["post", `/api/v1/organizer/events/${EVENT_ID}/publish`],
   ["post", `/api/v1/organizer/events/${EVENT_ID}/cancel`],
   ["post", `/api/v1/organizer/events/${EVENT_ID}/ticket-types`],
+  ["post", `/api/v1/organizer/events/${EVENT_ID}/image/upload-url`],
+  ["post", `/api/v1/organizer/events/${EVENT_ID}/image`],
   ["patch", `/api/v1/organizer/ticket-types/${EVENT_ID}`],
   ["delete", `/api/v1/organizer/ticket-types/${EVENT_ID}`],
 ];
@@ -89,6 +92,26 @@ describe("organizer event endpoints: what is refused at the door", () => {
       ["patch", `/api/v1/organizer/ticket-types/${EVENT_ID}`, { reserved: 0 }],
       ["patch", `/api/v1/organizer/ticket-types/${EVENT_ID}`, { eventId: EVENT_ID }],
       ["post", `/api/v1/organizer/events/${EVENT_ID}/cancel`, { reason: "Chuva", refund: false }],
+      [
+        "post",
+        `/api/v1/organizer/events/${EVENT_ID}/image/upload-url`,
+        { ...upload, key: `events/${EVENT_ID}/escolhida.jpg` },
+      ],
+      [
+        "post",
+        `/api/v1/organizer/events/${EVENT_ID}/image/upload-url`,
+        { ...upload, bucket: "outro" },
+      ],
+      [
+        "post",
+        `/api/v1/organizer/events/${EVENT_ID}/image`,
+        { uploadId: USER_ID, alt: "Pista", url: "http://169.254.169.254/latest" },
+      ],
+      [
+        "post",
+        `/api/v1/organizer/events/${EVENT_ID}/image`,
+        { uploadId: USER_ID, alt: "Pista", width: 1 },
+      ],
     ] as [Method, string, object][])("%s %s %j", async (method, path, body) => {
       const response = await request(server())
         [method](path)
@@ -131,6 +154,36 @@ describe("organizer event endpoints: what is refused at the door", () => {
           .post(`/api/v1/organizer/events/${EVENT_ID}/ticket-types`)
           .set("Authorization", organizer)
           .send({ ...ticket, priceCents })
+          .expect(400);
+      }
+    });
+
+    it.each([
+      ["SVG", { contentType: "image/svg+xml", sizeBytes: 100 }],
+      ["GIF", { contentType: "image/gif", sizeBytes: 100 }],
+      ["HTML", { contentType: "text/html", sizeBytes: 100 }],
+      ["over 5 MB", { contentType: "image/png", sizeBytes: 5 * 1024 * 1024 + 1 }],
+      ["empty", { contentType: "image/png", sizeBytes: 0 }],
+      ["without a size", { contentType: "image/png" }],
+    ])("refuses an upload URL for a file that is %s", async (_case, body) => {
+      const response = await request(server())
+        .post(`/api/v1/organizer/events/${EVENT_ID}/image/upload-url`)
+        .set("Authorization", organizer)
+        .send(body)
+        .expect(400);
+      expectProblem(response.body, "validation-failed");
+    });
+
+    it("refuses a confirmation without a text alternative or with a malformed upload id", async () => {
+      for (const body of [
+        { uploadId: USER_ID },
+        { uploadId: USER_ID, alt: "  " },
+        { uploadId: "../../outro-evento", alt: "Pista cheia" },
+      ]) {
+        await request(server())
+          .post(`/api/v1/organizer/events/${EVENT_ID}/image`)
+          .set("Authorization", organizer)
+          .send(body)
           .expect(400);
       }
     });

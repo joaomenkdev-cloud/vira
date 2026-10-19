@@ -188,8 +188,9 @@ model OrganizerProfile {
   createdAt   DateTime @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  events Event[]
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events       Event[]
+  mediaUploads MediaUpload[]
 
   @@map("organizer_profiles")
 }
@@ -224,6 +225,10 @@ model Event {
   venueState        String?     @map("venue_state") @db.Char(2)
   imageKey          String?     @map("image_key")
   imageAlt          String?     @map("image_alt")
+  imageWidth        Int?        @map("image_width")
+  imageHeight       Int?        @map("image_height")
+  /// Tiny blurred WebP preview (data URL), made by the upload.
+  imageBlurDataUrl  String?     @map("image_blur_data_url")
   imageCreditAuthor String?     @map("image_credit_author")
   imageCreditUrl    String?     @map("image_credit_url")
   imageLicense      String?     @map("image_license")
@@ -234,8 +239,9 @@ model Event {
   createdAt         DateTime    @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  organizer   OrganizerProfile @relation(fields: [organizerId], references: [id], onDelete: Restrict)
-  ticketTypes TicketType[]
+  organizer    OrganizerProfile @relation(fields: [organizerId], references: [id], onDelete: Restrict)
+  ticketTypes  TicketType[]
+  mediaUploads MediaUpload[]
 
   @@index([organizerId, createdAt])
   @@index([status, startsAt])
@@ -265,4 +271,36 @@ model TicketType {
 
   @@index([eventId, sortOrder])
   @@map("ticket_types")
+}
+
+enum UploadStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+
+  @@map("upload_status")
+}
+
+/// Uploads of event pictures (docs/DATA_MODEL.md#media_uploads): the original the browser
+/// sends (`objectKey`) and, once confirmed, the re-encoded picture (`imageKey`). Key
+/// formats, types, sizes and the confirmed state are CHECKs in the migration.
+model MediaUpload {
+  id          String       @id @db.Uuid
+  ownerId     String       @map("owner_id") @db.Uuid
+  eventId     String?      @map("event_id") @db.Uuid
+  objectKey   String       @unique @map("object_key")
+  contentType String       @map("content_type")
+  sizeBytes   Int          @map("size_bytes")
+  status      UploadStatus @default(PENDING)
+  imageKey    String?      @unique @map("image_key")
+  expiresAt   DateTime     @map("expires_at") @db.Timestamptz(3)
+  createdAt   DateTime     @map("created_at") @db.Timestamptz(3)
+  confirmedAt DateTime?    @map("confirmed_at") @db.Timestamptz(3)
+
+  owner OrganizerProfile @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  event Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([status, expiresAt])
+  @@index([eventId])
+  @@map("media_uploads")
 }

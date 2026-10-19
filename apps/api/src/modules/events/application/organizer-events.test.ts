@@ -94,7 +94,7 @@ function setup() {
   async function completeDraft(caller: Caller = ana) {
     const event = await s.create.execute(caller, draft);
     const ticketType = await s.addTicketType.execute(caller, event.id, ticket);
-    events.setImage(event.id, "Pista cheia sob a lona");
+    events.givePicture(event.id, "Pista cheia sob a lona");
     return { event, ticketType };
   }
   async function published(caller: Caller = ana) {

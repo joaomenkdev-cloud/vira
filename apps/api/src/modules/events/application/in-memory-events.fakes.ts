@@ -1,4 +1,4 @@
-import type { Event, TicketType } from "../domain/event.js";
+import type { Event, EventImage, TicketType } from "../domain/event.js";
 import type {
   EventChanges,
   EventListQuery,
@@ -109,6 +109,12 @@ export class InMemoryEvents implements EventRepository {
     return Promise.resolve(true);
   }
 
+  setImage(eventId: string, image: EventImage): Promise<void> {
+    const row = this.events.get(eventId);
+    if (row) this.events.set(eventId, { ...row, image });
+    return Promise.resolve();
+  }
+
   createTicketType(ticketType: NewTicketType): Promise<void> {
     this.ticketTypes.set(ticketType.id, { ...ticketType, sold: 0, reserved: 0 });
     return Promise.resolve();
@@ -134,11 +140,24 @@ export class InMemoryEvents implements EventRepository {
     return Promise.resolve(true);
   }
 
-  /** What N9 (image upload) and V1 (orders) will do; the tests do it by hand. */
-  setImage(eventId: string, alt: string | null): void {
+  /** A picture without going through the upload (tests of other use cases). */
+  givePicture(eventId: string, alt: string | null): void {
     const row = this.events.get(eventId);
-    if (row) this.events.set(eventId, { ...row, image: { key: `events/${eventId}/x.webp`, alt } });
+    if (row) {
+      this.events.set(eventId, {
+        ...row,
+        image: {
+          key: `events/${eventId}/x.webp`,
+          alt,
+          width: 2400,
+          height: 1350,
+          blurDataUrl: "data:image/webp;base64,AA==",
+        },
+      });
+    }
   }
+
+  /** What V1 (orders) will do; the tests do it by hand. */
 
   sell(ticketTypeId: string, sold: number, reserved = 0): void {
     const current = this.ticketTypes.get(ticketTypeId);
