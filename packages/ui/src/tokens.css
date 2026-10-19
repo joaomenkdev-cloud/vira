@@ -45,6 +45,12 @@
   --vira-width-dialog: 480px;
   --vira-width-dialog-wide: 640px;
 
+  /* Photo proportions (docs/DESIGN.md, 2.8 and 4.1) */
+  --vira-aspect-card: 3 / 2;
+  --vira-aspect-banner: 16 / 9;
+  --vira-aspect-banner-sm: 4 / 3;
+  --vira-aspect-hero: 4 / 5;
+
   /* Radii */
   --vira-radius-sm: 6px;
   --vira-radius-md: 10px;

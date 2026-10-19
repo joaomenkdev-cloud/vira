@@ -5,10 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 1 — Núcleo (o Marco 0 terminou com o merge da F7).
-- **Concluído (mergeado):** F1 a F7, N1 a N6 (PRs #1, #2, #8, #10–#17, #26, #27) e Dependabot (#4–#7, #9 CodeQL v4).
-- **Concluído também:** N8 — Eventos do organizador (PR #29, mergeado em 2026-10-18).
-- **Entregas abertas:** N7 — Telas de autenticação (`feat/web-auth`, PR #28), N9 — Upload de imagem (`feat/events-image-upload`, PR #30) e N10 — Vitrine da API (`feat/catalog`, empilhada na N9: depois do merge da N9, mudar a base do PR da N10 para `main`).
-- **Próximo passo:** N11 — Home, card e página do evento (web), que depende da N7 e da N10.
+- **Concluído (mergeado):** F1 a F7, N1 a N6, N8, N9 e N10 (PRs #1, #2, #8, #10–#17, #26, #27, #29, #30, #32) e Dependabot (#4–#7, #9 CodeQL v4).
+- **Entregas abertas:** N7 — Telas de autenticação (`feat/web-auth`, PR #28), N11 — Home, card e página do evento (`feat/web-storefront`, PR #33) e N12 — Painel do organizador (`feat/web-organizer`, empilhada na N11 e com a N7 mergeada dentro: depois dos merges da N7 e da N11, mudar a base do PR da N12 para `main`).
+- **Próximo passo:** N13 — Seed de demonstração, depois dos merges da N7, N11 e N12.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -23,6 +22,65 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-19 — N12: painel do organizador
+
+Auditoria (antes de codar): a API do organizador (N8) e o upload da imagem (N9) estavam prontos e documentados na API.md; o web não tinha nenhuma tela de organizador, e "Quero organizar eventos" em `/conta` (N7) terminava num "em construção". O painel precisa da sessão e do cliente da API da N7 (PR #28) e do `EventImage` e da formatação de datas da N11 (PR #33), nenhum dos dois mergeado; a branch saiu da N11 com a N7 mergeada dentro (conflitos resolvidos no merge commit). A pendência da N9 sobre a CSP também foi resolvida aqui.
+
+Feito (web; não mexe na API):
+
+- Rotas `/painel` (lista com filtros por situação e "Mais eventos"), `/painel/eventos/novo` (cria o rascunho) e `/painel/eventos/[id]` (edição). Sem a dica de sessão, redireciona para `/entrar?next=…`; conta sem perfil de organizador vê um estado vazio que leva a `/conta#organizador`.
+- Editor: detalhes (título, início e fim no fuso do evento, fuso, local tudo-ou-nada, descrição em markdown com a prévia sanitizada que a API devolve), imagem (prévia local, checagem de tipo, tamanho e dimensões, `PUT` direto no bucket e confirmação com a descrição), tipos de ingresso (Modal de criação e edição, exclusão com confirmação), painel de publicação com o que falta, publicar, cancelar com motivo, excluir rascunho. Evento cancelado ou encerrado fica só de leitura.
+- Erros da API: `invalid-state-transition` lista os campos que faltam no checklist, `invalid-image` e `conflict` mostram o `detail` da API; erros de campo voltam para o campo certo.
+- `lib/organizer`: datas no relógio do fuso do evento, preço em reais (`R$ 1.250,50`) para centavos, fusos do Brasil, situação do evento (Encerrado é publicado que já terminou) e validações dos formulários; `lib/api/organizer.ts` com as rotas do organizador.
+- `useForm`: textarea e validadores que leem os outros campos (fim depois do início, local tudo-ou-nada, janela de vendas).
+- CSP: `connect-src` passa a liberar o `STORAGE_ORIGIN` (o `PUT` da imagem). "Meus eventos" no menu da conta e "Criar um evento" no estado vazio da home, só para organizadores. O chip "Este fim de semana" virou um `FilterChip` genérico, usado também pelos filtros do painel.
+- Testes: unitários (fuso, preço, situação e checklist, arquivo de imagem, validações, CSP e mensagens de erro); E2E em desktop e mobile com a API falsa ganhando as rotas do organizador (validadas com os schemas do `@vira/shared`) e o armazenamento falso aceitando o `PUT`: redirecionamento do login, conta sem perfil, fluxo completo do rascunho vazio até a página pública (com axe em cada tela e a publicação recusada antes de completar), edição de detalhes e de tipo de ingresso, exclusão de tipo e de rascunho, cancelamento, evento inexistente.
+- Prints: `web-organizer-{empty,new-event,draft,ticket-type,published,list}-{desktop,mobile}.png` (o `screenshots.mjs` os gera com `FAKE_API_URL`).
+
+Decisões tomadas por conta própria:
+
+- **Datas digitadas no relógio do fuso do evento**, não no do navegador: um organizador em Manaus criando um show em São Paulo digita o horário que está no cartaz.
+- **Lista sem imagem:** o resumo da API do organizador não traz a imagem, e buscar o detalhe de cada evento só para isso não vale.
+- **Trocar só a descrição da imagem pede um novo envio**, porque não há rota para isso (pendência da N9).
+- **Validação no navegador espelha a da API** (preço de R$ 1,00 a R$ 100.000,00, até 20 por pedido, janela até o fim do evento, imagem de 1200 × 600 e 5 MB), mas a API continua decidindo: os erros dela voltam para os campos.
+- **Rascunho criado só com os detalhes;** imagem e ingressos entram na tela de edição, que é para onde a criação leva.
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Imagem na lista do painel:** incluir a imagem no resumo de `GET /organizer/events` permitiria a variante `compact` do card.
+- **Faixas de disponibilidade** ("últimos ingressos") a critério do organizador: ainda sem campo na API (pendência da N10).
+- **Vendas por evento** (`/sales`) entram com os pedidos (Marco 2).
+- **Deploy (V11):** o `STORAGE_ORIGIN` de produção também vale para o `connect-src`; o CORS do bucket precisa do `WEB_ORIGIN` de produção (`storage:setup`).
+
+### 2026-10-19 — N11: home, card e página do evento
+
+Auditoria (antes de codar): a N10 (PR #32) ainda não estava mergeada e a N11 consome os contratos dela, então a branch saiu da N10. A N7 (PR #28) também não estava, e a N11 não depende dela: as duas mexem no header, no `fake-api` do E2E e nos prints, e quem for mergeada depois resolve o conflito (pequeno: o header ganha "Explorar" e "Buscar" ao lado do menu da conta; os fixtures da vitrine ficam em `e2e/fixtures/`, fora do `fake-api.ts` da N7). O web não tinha cliente para ler a API no servidor nem configuração de imagens.
+
+Feito (web e `@vira/ui`; não mexe na API):
+
+- `@vira/ui`: `EventCard` (seção 3.3: foto 3:2, data no accent, título em até duas linhas, local, preço, badge de status sobre a foto e "Demonstração"; card inteiro clicável com uma parada de tabulação; placeholder tipográfico sem foto) e tokens de proporção das fotos.
+- Home: título, busca (GET para `/eventos`), chip "Este fim de semana", o próximo evento em destaque grande ao lado do título no desktop (no mobile vira o primeiro card) e até 6 destaques; estado vazio sem nada inventado.
+- Explorar (`/eventos`): busca por texto e cidade, chip de fim de semana, paginação por cursor ("Mais eventos"), erro de busca curta no campo, "Nada encontrado" com "Limpar filtros" e recuperação de cursor adulterado. "Explorar" no header (e "Buscar" no mobile).
+- Página do evento: banner 16:9 (4:3 sangrado no mobile), crédito da foto, badge e alert de demonstração, data e horário no fuso do evento com o nome do fuso, local com link para o OpenStreetMap, organizador, descrição sanitizada pela API (dobra em 6 linhas com "Ler mais" no mobile), ingressos em linhas com o estado de venda, evento cancelado e encerrado.
+- Carregamento: skeletons nas três páginas; erro: a página de erro existente.
+- SEO: `metadataBase`, título, descrição, canonical, Open Graph e Twitter card por evento, JSON-LD `Event`, `/eventos/[slug]/imagem` (endereço estável da foto para prévias), `robots.txt`.
+- Config: `STORAGE_ORIGIN` e `SITE_URL` (lidas no build, mesmas regras do `API_ORIGIN`), `images.remotePatterns` só do armazenamento.
+- Testes: unitários de formatação (preço, datas e fusos, intervalo de datas, resumo), busca (parâmetros, fim de semana em Brasília), SEO (metadata, JSON-LD que não fecha a tag), origens e `next.config`, e do `EventCard` (ordem, um único link, só a data em vermelho, sem `style=` no HTML do servidor); E2E em desktop e mobile com uma API falsa (fixtures marcados "Demonstração", fotos PNG geradas em código) e uma segunda instância vazia: cards, destaque, fotos pelo otimizador sem violação de CSP, busca, filtros, paginação, cursor adulterado, página do evento (ordem de leitura, fuso, crédito, ingressos, "Ler mais", cancelado, encerrado, metadados e JSON-LD, foto do Open Graph, slug inexistente), axe em todas e reflow em 320 px.
+
+Decisões tomadas por conta própria:
+
+- **Sem botão de compra:** o checkout é a V6. A página mostra os tipos e preços e diz, num alert, que a compra pelo site ainda não está aberta, em vez de um CTA que não leva a lugar nenhum.
+- **Fotos pelo otimizador com `getImageProps`**, sem o `style` que o `<Image>` escreve (a CSP bloquearia) e com a prévia borrada como `<img>` separada.
+- **Explorar entrou na N11:** a busca do wireframe da home precisa de um destino, e "Ver todos" também.
+- **"Este fim de semana"** é sábado 00:00 a segunda 00:00 em Brasília (sem horário de verão desde 2019), para eventos de qualquer fuso.
+- **Streaming com `loading.tsx`**: slug inexistente responde com a página de não encontrado e `noindex`, não com status 404 (o Next.js fixa o status quando o streaming começa).
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Cache das fotos (V11):** o endereço assinado muda a cada resposta da API, então o otimizador do Next.js não reaproveita o cache entre visitas (cada visita reprocessa a foto). Na demo isso custa transformações da Vercel; dá para resolver na API (assinar com horário arredondado) ou servir as fotos publicadas por um domínio público do R2.
+- **Deploy (V11):** preencher `STORAGE_ORIGIN` (origem do R2) e `SITE_URL` na Vercel.
+- **Seletor de cidades:** o wireframe da home tem "Cidade ▾", mas a API não lista cidades; hoje a cidade é texto livre em Explorar.
 
 ### 2026-10-19 — N10: vitrine da API
 
@@ -115,6 +173,36 @@ Pendências para o mantenedor decidir ou priorizar:
 - **`GET /organizer/events/{id}/sales`** fica para quando houver pedidos (todos os números seriam zero).
 - **Ocultar tipo de ingresso com vendas** (o DATA_MODEL citava) fica para quando houver vendas.
 - **Avisar compradores** de cancelamento ou mudança de data entra com os pedidos e o reembolso (Marco 2).
+
+### 2026-10-14 — N7: telas de autenticação
+
+Auditoria (antes de codar): o web tinha só a home, o 404 e `/dev/design-system`; o header só o logo; nenhum cliente da API. A API já tinha tudo o que as telas precisam (N3–N6) e o proxy `/api/v1/*` deixa os cookies first-party. Não existem ainda rotas de eventos, pedidos ou ingressos (N8 em diante), então a N7 ficou no que o ROADMAP pede: autenticação e conta.
+
+Feito (só `apps/web`, sem mudança na API):
+
+- **Cliente da API** (`src/lib/api`): `fetch` same-origin, Problem Details lidos para `ApiError` com o código do tipo e o `Retry-After`; refresh automático no `401` e **um refresh por vez** (as chamadas da aba dividem a mesma promessa, e as abas se revezam pela Web Locks API), como a detecção de reuso estrita da N4 exige; token CSRF buscado uma vez, enviado em `X-CSRF-Token` e buscado de novo uma vez quando a API recusa.
+- **Sessão no navegador** (`src/lib/session`): `SessionProvider` pergunta a `GET /me` quem está logado. Para não chamar a API (e levar `401`) em toda visita anônima, existe um cookie-dica `vira_session` legível pela página: o `proxy.ts` o grava quando a requisição traz o cookie de acesso (cobre o login social, que chega por redirect), a página o grava depois do login e o apaga quando a API diz que não há sessão. Ele só decide se vale perguntar; quem responde é a API.
+- **Páginas:** `/entrar` (e-mail e senha, botões de Google/GitHub, mensagens para `?erro=oauth-*`, `next` só com caminho do site), `/cadastro`, `/verificar-email`, `/esqueci-a-senha`, `/redefinir-senha`, `/confirmar-email` e `/conta` (nome, troca de e-mail, troca de senha, perfil de organizador, sessões com encerramento individual e "sair de todos" com confirmação). Header com "Entrar" ou avatar e menu ("Minha conta", "Sair").
+- **Formulários** (`src/components/forms`): validação no blur e no envio, resumo de erros no topo com links para os campos, foco no primeiro inválido, erros da API (`breached-password`, `incorrect-password`) no campo certo.
+- **Testes:** unitários (cliente: refresh único entre chamadas simultâneas, trava entre abas, CSRF e nova tentativa, sessão perdida, rotas de login sem refresh; erros e mensagens; validação; caminho de retorno seguro; token do fragmento usado uma vez; provedores sociais). E2E com Playwright + axe em desktop e mobile contra a API falsa ampliada (`e2e/fake-api.ts`, com cookies, CSRF e reuso estrito como a real): cadastro → confirmação → sair → entrar, volta ao `next`, sem redirecionamento aberto, erros de formulário, senha vazada, credenciais erradas, e-mail não confirmado, links expirados e incompletos, esqueci a senha completo, login social (sucesso e erro), **duas abas renovando a sessão ao mesmo tempo sem reuso detectado**, visita anônima sem nenhuma chamada à API, e toda a página de conta.
+- Prints novos em `docs/assets/screenshots` (`web-login-*`, `web-sign-up-*`, `web-forgot-password-*`, `web-email-verified-*`, `web-account-*`); `scripts/screenshots.mjs` tira os das páginas logadas com `FAKE_API_URL`.
+
+Decisões tomadas por conta própria:
+
+- **Escopo pelo ROADMAP:** o pedido falava em vitrine, checkout, ingressos e painel do organizador, mas a API dessas partes ainda não existe (N8, N10, V1–V8). A N7 entrega autenticação e conta; as outras telas ficam nas entregas delas (N11, N12, V6, V7, V8).
+- **Provedores sociais por variável do web** (`VIRA_OAUTH_PROVIDERS=google,github`): a API não tem rota que diga quais estão ligados, e um botão que leva a `404` seria pior do que nenhum. Sem a variável, não aparece botão.
+- **Token dos links lido uma vez e tirado da barra de endereço** (`history.replaceState`), e enviado uma única vez mesmo com o `StrictMode` rodando o efeito duas vezes.
+- **E-mail não confirmado no login:** a mensagem aponta "Esqueci minha senha", porque esse link também confirma o e-mail (N6) e o reenvio da verificação ainda exige sessão (pendência da N3).
+- **Erro some ao corrigir, não no blur:** um erro que sumisse no blur puxava o botão de baixo do cursor e o clique se perdia (o E2E pegou isso). O erro aparece no blur e no envio e some quando o valor fica válido.
+- **"Sair de todos"** usa modal de confirmação (ação destrutiva, DESIGN 3.5); encerrar uma sessão específica não pede.
+- **Perfil de organizador entrou na conta** (`POST /me/organizer` + refresh para o papel novo), com o aviso honesto de que o painel de eventos ainda está em construção.
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Configurar `VIRA_OAUTH_PROVIDERS`** no deploy do web (V11) junto com as credenciais da API.
+- **Reenvio da verificação sem sessão** continua pendente (N3); hoje o caminho é "Esqueci minha senha".
+- **Desvincular provedor social** e **excluir conta** (V9) ainda não têm tela.
+- **Páginas `/privacidade` e `/termos`** não existem; o cadastro não linka nada por enquanto.
 
 ### 2026-10-15 — N6: redefinição de senha, conta e senhas vazadas
 

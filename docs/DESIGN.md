@@ -265,7 +265,7 @@ Estados obrigatórios para todo componente interativo: `default`, `hover`, `focu
 - **Stepper de quantidade:** nos limites os botões ficam `aria-disabled` em vez de `disabled`. Parecem e agem como desabilitados, mas o foco do teclado não cai para a página quando o usuário chega ao máximo.
 - **Modal:** o botão × é o último filho no DOM, então o primeiro foco cai no conteúdo, não na saída. A ordem das ações no DOM é secundária → primária; no celular ela se inverte visualmente (primária no topo).
 - **Botão em carregamento** mantém a largura: o rótulo normal e o de carregamento ocupam a mesma célula de uma grade e o que não está em uso fica `invisible`.
-- **Header:** `sticky`, borda inferior só depois de rolar (`data-scrolled`); logo, navegação e ações são encaixes separados. O header do web continua só com o logo e o footer só com o texto de hoje: as páginas de navegação e o login ainda não existem.
+- **Header:** `sticky`, borda inferior só depois de rolar (`data-scrolled`); logo, navegação e ações são encaixes separados. Desde a N7 o header do web traz, à direita, "Entrar" (`secondary sm`) ou o avatar com as iniciais e o menu da conta ("Minha conta", "Sair"); a navegação "Explorar"/"Meus ingressos" chega com as páginas a que leva. Enquanto a página pergunta à API quem está logado, o lugar do avatar mostra um skeleton.
 - **Ainda não feito:** menus com mais de 6 itens virarem bottom sheet no celular (3.6). Nenhum menu do MVP chega a isso (o do avatar tem uns 4 itens); entra junto com o primeiro que precisar.
 
 ### 3.1 Botões
@@ -332,6 +332,7 @@ Validação: no `blur` e no envio, nunca a cada tecla. No envio com erros, o foc
 - Sem imagem: placeholder tipográfico — fundo `surface-sunken`, iniciais do evento em `h1` `ink-muted`, sem ícone nem gradiente.
 - Grid: 1 coluna (< 640), 2 (640–1023), 3 (≥ 1024). Destaques na home: **no máximo 6** cards.
 - Variante `compact` (lista de "Meus ingressos" e painel): imagem 1:1 de 72px à esquerda, texto à direita.
+- **Como ficou implementado (N11):** `EventCard` em `@vira/ui`, que recebe o link vazio (`link={<Link href=… />}`) e desenha o título dentro dele; o pseudo-elemento do link cobre o card, e o anel de foco é do `<article>` (`has-[a:focus-visible]`). As proporções das fotos viraram tokens (`aspect-card` 3:2, `aspect-banner` 16:9, `aspect-banner-sm` 4:3, `aspect-hero` 4:5). A variante `compact` entra com "Meus ingressos" (V7).
 
 ### 3.4 Badges
 
@@ -392,6 +393,15 @@ Composição única: **título `h3` + uma frase `body` em `ink-muted` + no máxi
 | Painel do organizador (vazio) | Seu primeiro evento começa aqui | Crie um rascunho; ele só fica público quando você publicar. | Criar evento |
 | Evento sem tipos à venda | Ingressos indisponíveis | As vendas deste evento não estão abertas no momento. | — |
 | Erro de carregamento | Não foi possível carregar | Verifique sua conexão e tente de novo. Código: `requestId` | Tentar novamente |
+
+**Como ficou implementado (N12).** O painel (`/painel`) não tem wireframe próprio; segue os componentes da seção 3 com estas escolhas:
+
+- **Lista ("Meus eventos"):** um único CTA primário ("Criar evento") no topo; chips de situação (Todos, Rascunhos, Publicados, Cancelados) que mudam o endereço (`?status=`); cada evento é uma linha com data no estilo do card, título, local, número de tipos de ingresso e o badge da situação. Sem a imagem 1:1 da variante `compact` do card: o resumo da API do organizador não traz a imagem (fica para quando trouxer). Estado vazio da tabela acima, e um por filtro ("Nenhum evento em …").
+- **Badges de situação:** Rascunho (`neutral`), Publicado (`success`), Encerrado (`neutral`, publicado que já terminou) e Cancelado (`danger`).
+- **Editor:** uma coluna de leitura (`max-w-reading`) com as seções Detalhes, Imagem, Ingressos e a zona de exclusão/cancelamento no fim. No rascunho, um painel "Publicação" no topo lista o que falta (✓/○ com texto para leitor de tela e link "Preencher" para a seção) e tem o único botão primário da tela; publicado, um alert de sucesso com o link para a página pública. Cancelado ou encerrado, tudo fica só de leitura e o alert explica por quê.
+- **Campos com 44px** (`fieldSize="md"`), como a tabela da seção 3.2 pede para o painel. As datas são digitadas no relógio do fuso do evento (o fuso fica logo abaixo), não no do navegador.
+- **Tipos de ingresso:** criados e editados num Modal (bottom sheet no mobile); excluir pede confirmação num Modal. A linha mostra "N vendidos de M · até X por pedido" e a janela de vendas quando houver.
+- **Imagem:** prévia local do arquivo escolhido antes do envio, checagem de tipo, tamanho e 1200 × 600 no navegador (a API confere de novo) e descrição obrigatória. Trocar só a descrição pede um novo envio, porque a API não tem rota para isso.
 
 ### 3.10 Ingresso digital
 
@@ -580,6 +590,8 @@ O evento em destaque do hero não aparece no mobile (vira o primeiro card), para
 ```
 
 A barra fixa sempre mostra o total e o CTA; antes de selecionar um tipo, o CTA é "Ver ingressos" e rola até o seletor.
+
+**Como ficou implementado (N11).** Home, Explorar e a página do evento seguem estes wireframes, com quatro diferenças até o checkout (V6) existir: os tipos de ingresso aparecem como linhas só de leitura (nome, preço e estado em texto: "Últimos ingressos" abaixo de 10, "Esgotado", "Vendas a partir de…", "Vendas encerradas"), sem radio, stepper, total, CTA nem barra fixa no mobile, e um alert diz que a compra pelo site ainda não está aberta; o header do mobile continua o global (logo e "Buscar"), sem o "‹ Voltar ⤴" da página do evento; a busca da home não tem o seletor de cidade (não há lista de cidades na API) — a cidade é um campo de texto em Explorar; dos chips, só "Este fim de semana" existe, porque é o único que os dados sustentam. A seção "Informações" (classificação, acessibilidade) não aparece porque esses campos não existem no evento.
 
 ### 4.3 Checkout
 

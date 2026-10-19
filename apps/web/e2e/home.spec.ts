@@ -13,20 +13,15 @@ async function violations(page: Page) {
 }
 
 test.describe("home", () => {
-  test("presents the product and an honest empty state", async ({ page }) => {
+  test("presents the product and the search", async ({ page }) => {
     await page.goto("/");
 
     await expect(page).toHaveTitle("Vira — Encontre seu próximo evento");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Encontre seu próximo evento.",
     );
-    await expect(page.getByRole("heading", { name: "Nenhum evento por aqui ainda" })).toBeVisible();
-
-    // Nothing invented: no event cards, prices, links to pages that do not exist yet.
-    await expect(page.getByText(/R\$/)).toHaveCount(0);
-    await expect(page.getByRole("article")).toHaveCount(0);
-    await expect(page.getByRole("searchbox")).toHaveCount(0);
-    await expect(page.getByRole("navigation")).toHaveCount(0);
+    await expect(page.getByRole("search")).toBeVisible();
+    // The events themselves are covered by storefront.spec.ts.
   });
 
   test("has the page landmarks and a single level-1 heading", async ({ page }) => {

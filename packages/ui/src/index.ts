@@ -70,3 +70,4 @@ export {
   type HeaderProps,
 } from "./components/header";
 export { CspNonce } from "./components/csp-nonce";
+export { EventCard, initialsOf, type EventCardProps } from "./components/event-card";
