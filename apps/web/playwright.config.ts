@@ -1,9 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const WEB_PORT = 3101;
+/** The same build against an API with no published event, for the empty states. */
+const EMPTY_WEB_PORT = 3102;
 // The port the web app proxies to by default (see src/config/api-origin.ts): the rewrite is
 // fixed when the app is built, so the stand-in API listens exactly there.
 const FAKE_API_PORT = 3000;
+const EMPTY_FAKE_API_PORT = 3002;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -23,7 +26,7 @@ export default defineConfig({
   webServer: [
     {
       // Stands in for the real API, so the /api/v1 proxy can be exercised in a browser.
-      command: "node e2e/fake-api.mjs",
+      command: "node e2e/fake-api.ts",
       env: { PORT: String(FAKE_API_PORT) },
       url: `http://127.0.0.1:${FAKE_API_PORT}/api/v1/health/live`,
       reuseExistingServer: !process.env["CI"],
@@ -34,6 +37,20 @@ export default defineConfig({
       // Serves /dev/design-system from the production build (src/config/design-system.ts).
       env: { VIRA_DESIGN_SYSTEM: "true" },
       url: `http://127.0.0.1:${WEB_PORT}`,
+      reuseExistingServer: !process.env["CI"],
+      timeout: 120_000,
+    },
+    {
+      command: "node e2e/fake-api.ts",
+      env: { PORT: String(EMPTY_FAKE_API_PORT), FAKE_CATALOG: "empty" },
+      url: `http://127.0.0.1:${EMPTY_FAKE_API_PORT}/api/v1/health/live`,
+      reuseExistingServer: !process.env["CI"],
+    },
+    {
+      // The pages read the storefront at request time, from API_ORIGIN.
+      command: `pnpm exec next start --port ${EMPTY_WEB_PORT}`,
+      env: { API_ORIGIN: `http://127.0.0.1:${EMPTY_FAKE_API_PORT}` },
+      url: `http://127.0.0.1:${EMPTY_WEB_PORT}`,
       reuseExistingServer: !process.env["CI"],
       timeout: 120_000,
     },
