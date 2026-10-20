@@ -56,8 +56,8 @@ The event page and the ticket arrive with the next screens (Core milestone).
 
 | Milestone | Scope | State |
 | --- | --- | --- |
-| 0. Foundation | Planning, tooling, API/worker/web skeletons, audit log | In progress |
-| 1. Core | Design system, authentication, events, storefront, organizer dashboard | Planned |
+| 0. Foundation | Planning, tooling, API/worker/web skeletons, audit log | Done |
+| 1. Core | Design system, authentication, events, storefront, organizer dashboard, demo seed | Done |
 | 2. MVP v1.0 | Reservations, Stripe, tickets, check-in, LGPD rights, demo deployment | Planned |
 | 3. Evolution | Free events, refunds, Pix, offline check-in, dark mode and more | Ideas |
 
@@ -86,8 +86,11 @@ pnpm infra:up
 cp apps/api/.env.example apps/api/.env
 pnpm --filter @vira/api db:deploy
 pnpm --filter @vira/api storage:setup
+pnpm db:seed:demo   # optional: demo events (downloads the photos from Unsplash)
 pnpm --filter @vira/api dev
 ```
+
+Demo events carry the "Demonstração" badge and are removed with `pnpm db:seed:demo --reset`, which touches nothing else ([ADR-0010](docs/adr/0010-dados-da-demo.md)).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) (in Portuguese) for details.
 
