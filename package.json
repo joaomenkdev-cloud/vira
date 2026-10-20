@@ -19,7 +19,8 @@
     "check": "pnpm format:check && pnpm lint:md && turbo run lint typecheck test build",
     "prepare": "lefthook install",
     "infra:up": "docker compose up --detach --wait",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "db:seed:demo": "pnpm --filter @vira/api db:seed:demo"
   },
   "devDependencies": {
     "@vira/config": "workspace:^",
