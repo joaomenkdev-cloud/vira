@@ -68,11 +68,11 @@ vira/
 │   ├── api/                 # NestJS: HTTP API + worker (dois entrypoints)
 │   │   ├── src/
 │   │   │   ├── main.ts           # API HTTP
-│   │   │   ├── bootstrap/        # AppModule, configuração do app HTTP, run()
+│   │   │   ├── bootstrap/        # AppModule, configuração do app HTTP, run(), seed da demo
 │   │   │   ├── main.worker.ts    # consumidores BullMQ + agendamentos
 │   │   │   ├── modules/          # um diretório por módulo de negócio
 │   │   │   └── platform/         # transversal: config, logger, errors, db, queue, security
-│   │   ├── prisma/               # schema.prisma, migrations/, seed
+│   │   ├── prisma/               # schema.prisma, migrations/
 │   │   └── test/                 # integração (Supertest + Testcontainers)
 │   └── web/                 # Next.js App Router + Tailwind
 ├── packages/

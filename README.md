@@ -56,8 +56,8 @@ Página do evento e ingresso entram com as próximas telas (marco Núcleo).
 
 | Marco | Conteúdo | Estado |
 | --- | --- | --- |
-| 0. Fundação | Planejamento, ferramentas, esqueletos da API, do worker e do web, auditoria | Em andamento |
-| 1. Núcleo | Design system, autenticação, eventos, vitrine, painel do organizador | Planejado |
+| 0. Fundação | Planejamento, ferramentas, esqueletos da API, do worker e do web, auditoria | Concluído |
+| 1. Núcleo | Design system, autenticação, eventos, vitrine, painel do organizador, seed de demonstração | Concluído |
 | 2. MVP v1.0 | Reserva, Stripe, ingresso, check-in, LGPD, deploy da demo | Planejado |
 | 3. Evolução | Gratuitos, reembolsos, Pix, check-in offline, modo escuro e mais | Ideias |
 
@@ -87,8 +87,11 @@ pnpm infra:up
 cp apps/api/.env.example apps/api/.env
 pnpm --filter @vira/api db:deploy
 pnpm --filter @vira/api storage:setup
+pnpm db:seed:demo   # opcional: eventos de demonstração (baixa as fotos da Unsplash)
 pnpm --filter @vira/api dev
 ```
+
+Os eventos de demonstração levam o selo "Demonstração" e saem com `pnpm db:seed:demo --reset`, sem tocar em outros dados ([ADR-0010](docs/adr/0010-dados-da-demo.md)).
 
 Detalhes em [CONTRIBUTING.md](CONTRIBUTING.md).
 

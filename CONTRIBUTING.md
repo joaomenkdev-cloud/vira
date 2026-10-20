@@ -69,6 +69,15 @@ pnpm --filter @vira/api storage:setup   # cria o bucket (se faltar) e a regra de
 
 Rode uma vez depois do `pnpm infra:up` (e de novo se o `WEB_ORIGIN` mudar). Os arquivos ficam no SeaweedFS (`S3_*` no `.env`); o navegador envia as imagens direto para lá por URL pré-assinada. No R2 o bucket é criado no painel da Cloudflare, e o mesmo comando, com as variáveis de produção, aplica o CORS.
 
+### Eventos de demonstração
+
+```bash
+pnpm db:seed:demo           # cria ou atualiza o organizador e os eventos de demonstração
+pnpm db:seed:demo --reset   # apaga só os dados de demonstração (eventos, ingressos, fotos e o organizador)
+```
+
+Precisa das migrations aplicadas, do bucket pronto (`storage:setup`) e de internet: as fotos vêm da Unsplash, passam pelo mesmo tratamento dos uploads (WebP sem metadados) e vão para o bucket. Pode rodar de novo quando quiser: nada é duplicado, as datas andam junto com o dia em que roda e as fotos que já estão no bucket não são baixadas outra vez. Os eventos ficam com `is_demo`, o selo "Demonstração" e o crédito da foto ([ADR-0010](docs/adr/0010-dados-da-demo.md)); o conteúdo está em `apps/api/src/bootstrap/demo-seed/demo-events.ts`.
+
 ### Testes de integração
 
 Os testes em `apps/api/test/integration` sobem Postgres, Redis e, nos testes de e-mail, o Mailpit reais com Testcontainers. Sem Docker, eles são pulados com aviso; no CI (`CI=true`) a falta de Docker é erro.

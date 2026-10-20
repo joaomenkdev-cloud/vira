@@ -4,10 +4,10 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 
 ## Estado atual
 
-- **Marco:** 1 — Núcleo (o Marco 0 terminou com o merge da F7).
-- **Concluído (mergeado):** F1 a F7, N1 a N6, N8, N9 e N10 (PRs #1, #2, #8, #10–#17, #26, #27, #29, #30, #32) e Dependabot (#4–#7, #9 CodeQL v4).
-- **Entregas abertas:** N7 — Telas de autenticação (`feat/web-auth`, PR #28), N11 — Home, card e página do evento (`feat/web-storefront`, PR #33) e N12 — Painel do organizador (`feat/web-organizer`, empilhada na N11 e com a N7 mergeada dentro: depois dos merges da N7 e da N11, mudar a base do PR da N12 para `main`).
-- **Próximo passo:** N13 — Seed de demonstração, depois dos merges da N7, N11 e N12.
+- **Marco:** 2 — MVP público v1.0 (o Marco 1 terminou com a N13).
+- **Concluído (mergeado):** F1 a F7 e N1 a N12 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#34) e Dependabot (#4–#7, #9 CodeQL v4). N13 no PR do seed de demonstração (`feat/demo-seed`).
+- **Entregas abertas:** nenhuma além da N13.
+- **Próximo passo:** V1 — Reserva de estoque (`feat/orders-reservation`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,32 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-20 — N13: seed de demonstração
+
+Auditoria (antes de codar): a coluna `is_demo`, o `CHECK` do crédito da foto, o selo "Demonstração" no card, na página e no painel e o aviso de modo de teste já existiam (N8, N10–N12), com E2E sobre a API falsa. Faltava o seed que cria os dados de verdade e o `--reset` do ADR-0010.
+
+Feito (API e docs; não mexe no web):
+
+- `pnpm db:seed:demo` (raiz) → `apps/api` `db:seed:demo`, como o `storage:setup`: um organizador ("Vira Demonstração", `demo@vira.invalid`, sem senha, ninguém entra com ele) e cinco eventos publicados em cidades diferentes (jazz em São Paulo, teatro em Belo Horizonte, show em Porto Alegre, festival de dois dias em Recife, conferência em Florianópolis), com descrição em markdown, local, tipos de ingresso (meia-entrada, mesa, camarote, lotes) e foto.
+- Fotos reais da Unsplash (Licença Unsplash), com autor, link e licença conferidos na página de cada uma; o seed baixa o recorte 2400 × 1600 (3:2), passa pelo mesmo `SharpImageProcessor` dos uploads da N9 (WebP sem metadados, `blurDataUrl`) e grava no bucket com a chave `events/<eventId>/<uuid>.webp`.
+- Idempotente: ids derivados de nomes estáveis (UUIDv5), `upsert` de usuário, perfil, evento e tipos de ingresso; foto que já está no bucket não é baixada de novo; `sold` e `reserved` nunca são tocados; tipo de ingresso que saiu do seed só é apagado se não tiver vendas nem reservas; evento de demonstração cancelado à mão volta a ficar à venda.
+- Datas relativas ao dia em que roda (dia da semana e horário no fuso do evento), para a demo nunca mostrar evento passado; na conferência o segundo lote só abre quando o primeiro fecha, para a vitrine mostrar um ingresso "em breve".
+- `--reset` apaga só os eventos com `is_demo` (os tipos de ingresso vão junto), as fotos deles no bucket e o organizador de demonstração (se não sobrou evento dele).
+- Testes: unitários (cada evento passa pelos schemas de criação de evento, de tipo de ingresso e de texto alternativo; slugs, créditos, dias e horários no fuso; argumentos e configuração inválida) e de integração com Postgres e S3 (vitrine e página com selo e crédito, segunda execução sem duplicar nem baixar fotos, foto que sumiu do bucket baixada de novo, evento cancelado republicado, `--reset` que preserva o evento de outro organizador e apaga as imagens).
+- Docs: README (pt e en) com o passo opcional e o quadro do roadmap atualizado, CONTRIBUTING, ARCHITECTURE e ROADMAP (N7 a N12 marcadas como concluídas).
+
+Decisões tomadas por conta própria:
+
+- **Fotos baixadas na hora, não commitadas:** o repositório fica leve e a licença continua apontando para a página de cada foto; o seed precisa de internet (a nuvem do agente não alcança a Unsplash, então o download real não foi exercitado aqui, só com fotos geradas nos testes).
+- **Locais e atrações inventados,** com o selo "Demonstração" deixando isso claro; nenhum número de vendas é inventado (`sold` fica zero).
+- **Seed em `src/bootstrap/demo-seed/`,** e não em `prisma/`: reaproveita o processamento de imagem, o markdown sanitizado e o armazenamento da API, e é compilado como o `storage:setup`.
+- **Branch `feat/demo-seed`,** o nome do roadmap.
+
+Pendências para o mantenedor decidir ou priorizar:
+
+- **Créditos das fotos no rodapé** (DESIGN.md, Footer): hoje o crédito aparece sob a foto na página do evento; o rodapé ainda não lista os créditos da demo.
+- **Rodar `pnpm db:seed:demo` na sua máquina** para conferir as fotos baixadas de verdade.
 
 ### 2026-10-19 — N12: painel do organizador
 
