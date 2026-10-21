@@ -28,6 +28,7 @@ export const UNREACHABLE_INFRASTRUCTURE = {
 export const TEST_SECRETS = {
   JWT_SECRET: "test-jwt-secret-0123456789-abcdefghijklmnopqrstuvwxyz",
   CSRF_SECRET: "test-csrf-secret-0123456789-abcdefghijklmnopqrstuvwxyz",
+  QR_SIGNING_KEYS: "t1:dGVzdC1xci1rZXktMDEyMzQ1Njc4OS1hYmNkZWZnaGlqa2w=",
 };
 
 export interface TestApp {

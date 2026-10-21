@@ -22,6 +22,7 @@ describe("runWorker", () => {
         S3_SECRET_ACCESS_KEY: "key-secret",
         JWT_SECRET: "j".repeat(44),
         CSRF_SECRET: "c".repeat(44),
+        QR_SIGNING_KEYS: `w1:${"w".repeat(44)}`,
       },
       { writeError: (message) => errors.push(message) },
     );

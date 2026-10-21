@@ -55,6 +55,45 @@ const STRIPE_KEY_PATTERN = {
 } as const;
 const stripeKeySchema = z.string().trim().max(300).optional();
 
+/**
+ * QR signing keys (ADR-0008): `kid:key` pairs separated by commas, the first one signing
+ * and all of them verifying, so a key can be rotated without voiding issued tickets. Each
+ * key is at least 256 bits in base64 or base64url (`openssl rand -base64 32`).
+ */
+const QR_KEY_ID_PATTERN = /^[a-z0-9]{1,16}$/;
+const QR_KEY_MIN_BYTES = 32;
+const qrSigningKeysSchema = z
+  .string()
+  .trim()
+  .max(4096)
+  .transform((value, ctx) => {
+    const keys: { kid: string; key: Buffer }[] = [];
+    for (const entry of value.split(",")) {
+      const [kid, encoded, ...rest] = entry.trim().split(":");
+      if (!kid || !encoded || rest.length > 0 || !QR_KEY_ID_PATTERN.test(kid)) {
+        ctx.addIssue({
+          code: "custom",
+          message: "must be kid:key pairs separated by commas (kid: 1-16 of a-z, 0-9)",
+        });
+        return z.NEVER;
+      }
+      const key = Buffer.from(encoded.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+      if (key.length < QR_KEY_MIN_BYTES || !/^[A-Za-z0-9+/_-]+=*$/.test(encoded)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `key "${kid}" must be base64 of at least ${QR_KEY_MIN_BYTES} bytes (256 bits)`,
+        });
+        return z.NEVER;
+      }
+      if (keys.some((k) => k.kid === kid)) {
+        ctx.addIssue({ code: "custom", message: `key id "${kid}" is repeated` });
+        return z.NEVER;
+      }
+      keys.push({ kid, key });
+    }
+    return keys;
+  });
+
 function usesTls(databaseUrl: string): boolean {
   const sslMode = new URL(databaseUrl).searchParams.get("sslmode");
   return sslMode !== null && ENCRYPTED_SSL_MODES.has(sslMode);
@@ -81,6 +120,7 @@ export const envSchema = z
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).max(60_000).default(5_000),
     JWT_SECRET: secretSchema,
     CSRF_SECRET: secretSchema,
+    QR_SIGNING_KEYS: qrSigningKeysSchema,
     GOOGLE_CLIENT_ID: oauthCredentialSchema,
     GOOGLE_CLIENT_SECRET: oauthCredentialSchema,
     GITHUB_CLIENT_ID: oauthCredentialSchema,
@@ -233,6 +273,8 @@ export const envSchema = z
       /** Without it the webhook refuses every event (`503`): nothing can be verified. */
       webhookSecret: env.STRIPE_WEBHOOK_SECRET,
     },
+    /** The first key signs the QR tokens of new views; all of them verify (ADR-0008). */
+    tickets: { qrSigningKeys: env.QR_SIGNING_KEYS },
     worker: { mode: env.WORKER_MODE, outboxPollIntervalMs: env.OUTBOX_POLL_INTERVAL_MS },
     auth: {
       jwtSecret: env.JWT_SECRET,

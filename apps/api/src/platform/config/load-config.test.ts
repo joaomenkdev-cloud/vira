@@ -13,6 +13,7 @@ const validEnv = {
   S3_SECRET_ACCESS_KEY: "vira-local-secret",
   JWT_SECRET: "a".repeat(43),
   CSRF_SECRET: "b".repeat(43),
+  QR_SIGNING_KEYS: `q1:${"q".repeat(43)}`,
 };
 
 // Fake keys: they name no Stripe account (.gitleaks.toml).
@@ -35,6 +36,7 @@ const productionEnv = {
   S3_SECRET_ACCESS_KEY: "key-secret",
   JWT_SECRET: "c".repeat(44),
   CSRF_SECRET: "d".repeat(44),
+  QR_SIGNING_KEYS: `p1:${"p".repeat(44)}`,
   ...stripeTestKeys,
 };
 
@@ -66,6 +68,7 @@ describe("loadConfig", () => {
         secretAccessKey: "vira-local-secret",
       },
       payments: { mode: "test", stripe: undefined, webhookSecret: undefined },
+      tickets: { qrSigningKeys: [{ kid: "q1", key: Buffer.from("q".repeat(43), "base64") }] },
       worker: { mode: "separate", outboxPollIntervalMs: 5_000 },
       auth: {
         jwtSecret: validEnv.JWT_SECRET,
@@ -342,6 +345,31 @@ describe("loadConfig", () => {
     });
   });
 
+  it("reads the QR signing keys, the first one signing, and refuses weak or malformed ones", () => {
+    const old = Buffer.alloc(32, 1).toString("base64");
+    const current = Buffer.alloc(48, 2).toString("base64url");
+    expect(
+      loadConfig({ ...validEnv, QR_SIGNING_KEYS: `k2:${current}, k1:${old}` }).tickets,
+    ).toEqual({
+      qrSigningKeys: [
+        { kid: "k2", key: Buffer.alloc(48, 2) },
+        { kid: "k1", key: Buffer.alloc(32, 1) },
+      ],
+    });
+    for (const value of [
+      "",
+      `k1:${Buffer.alloc(31).toString("base64")}`,
+      `K1:${old}`,
+      `k1:${old},k1:${old}`,
+      `k1:${old}:extra`,
+      `k1:not base64!`,
+    ]) {
+      const error = captureError({ ...validEnv, QR_SIGNING_KEYS: value });
+      expect(error.issues.map((i) => i.variable)).toEqual(["QR_SIGNING_KEYS"]);
+      expect(JSON.stringify(error.issues)).not.toContain(old);
+    }
+  });
+
   it("reports every invalid variable at once", () => {
     const error = captureError({ PORT: "0", LOG_LEVEL: "verbose" });
     expect(error.issues.map((i) => i.variable).sort()).toEqual([
@@ -350,6 +378,7 @@ describe("loadConfig", () => {
       "JWT_SECRET",
       "LOG_LEVEL",
       "PORT",
+      "QR_SIGNING_KEYS",
       "REDIS_URL",
       "S3_ACCESS_KEY_ID",
       "S3_BUCKET",
