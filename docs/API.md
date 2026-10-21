@@ -344,7 +344,7 @@ Publicar, editar e mexer em tipos de ingresso travam a linha do evento (`SELECT 
 
 `Order`: `{ id, publicCode, status, event: { id, slug, title, startsAt, endsAt, timezone }, items: [{ id, ticketTypeId, name, quantity, unitPrice: Money, subtotal: Money }], total: Money, expiresAt, extensionAvailable, createdAt, paidAt }`. Os titulares (`holders`) entram com `PUT /orders/{id}/holders`. O pedido nunca mostra as cópias do nome e do e-mail do comprador nem a `Idempotency-Key`.
 
-Entregue na V1: `POST /orders` e `GET /orders/{id}`; as outras rotas chegam com a expiração (V2), o pagamento (V3) e o checkout (V6).
+Entregue na V1: `POST /orders` e `GET /orders/{id}`; na V2, `POST /orders/{id}/extend` e `POST /orders/{id}/cancel`. As outras rotas chegam com o pagamento (V3) e o checkout (V6).
 
 | `POST /orders` | Regra |
 | --- | --- |
@@ -356,6 +356,14 @@ Entregue na V1: `POST /orders` e `GET /orders/{id}`; as outras rotas chegam com 
 | Já existe pedido `PENDING` do comprador para o evento | `409 pending-order-exists`. Um pendente cujo prazo já venceu é expirado na hora (estoque devolvido) e não impede o novo |
 | Estoque insuficiente em qualquer tipo | `409 insufficient-inventory` ("Restam N ingresso(s) de …" ou "… esgotaram"); nada fica reservado |
 | Mesmo tipo de ingresso em dois itens | `400 validation-failed` (some as quantidades num item só) |
+
+| Extensão e cancelamento | Regra |
+| --- | --- |
+| `POST /orders/{id}/extend` | Só `PENDING`, uma vez por pedido e nos 2 minutos finais: `expiresAt` ganha +10 min e `extensionAvailable` vira `false`; os ingressos continuam segurados. Cedo demais, já estendido ou reserva vencida (mesmo antes de o job rodar): `409 invalid-state-transition`, com o motivo em `detail`. Requisições simultâneas estendem uma vez só |
+| `POST /orders/{id}/cancel` | `PENDING` → `CANCELED` (mesmo com o prazo vencido), estoque devolvido na mesma transação; audita `order.canceled`. Repetir devolve o pedido cancelado (`200`). Pago, expirado ou reembolsado: `409 invalid-state-transition` |
+| De outro comprador | `404`, como nas outras rotas |
+
+A reserva termina sozinha: um job com delay até `expiresAt` passa o pedido para `EXPIRED` e devolve o estoque, com uma varredura a cada minuto como rede de segurança (ARCHITECTURE, seção 6). A expiração é auditada (`order.expired`, ator `SYSTEM`).
 
 A resposta `201` traz `Location: /api/v1/orders/{id}`. O preço de cada item é lido da mesma linha que a reserva atualiza, então o pedido guarda o preço vigente no instante da reserva.
 
