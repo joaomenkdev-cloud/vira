@@ -94,7 +94,7 @@ Ferramentas: pnpm workspaces + Turborepo ([ADR-0001](adr/0001-monorepo.md)). `pa
 | `events` | Lado do organizador: rascunho, edição, publicação e cancelamento de eventos; tipos de ingresso; upload de imagem. | `users`, `audit` |
 | `catalog` | Lado público (somente leitura): listagem, busca e detalhe de eventos publicados, paginação por cursor. | — (lê projeções de `events`) |
 | `orders` | Reserva de estoque, pedidos, expiração, extensão única da reserva, idempotência. | `users` (nome e e-mail do comprador), `audit`, `payments` (a partir da V3); lê o evento e reserva o estoque direto em `events`/`ticket_types`, como o `catalog` lê suas projeções |
-| `payments` | PaymentIntents, webhook do Stripe, registro de eventos recebidos, reembolso de pagamento tardio. | `orders` (via eventos de domínio), `audit` |
+| `payments` | PaymentIntents, webhook do Stripe, registro de eventos recebidos, reembolso de pagamento tardio. | `audit`. Não depende de `orders`: expõe `PaymentEvents`, onde `orders` se inscreve (`PaymentSubscriber`) para aplicar o pagamento na transação do webhook (`SettlePayment`), então a dependência vai só de `orders` para `payments` |
 | `tickets` | Emissão de ingressos para pedidos pagos, token do QR (HMAC), envio por e-mail. | `orders` (via eventos de domínio) |
 | `checkin` | Validação do QR/código na entrada, transição única VALID → USED, registro de tentativas. | `tickets`, `events` (autorização), `audit` |
 | `audit` | Log append-only de ações sensíveis. | — |
@@ -199,6 +199,7 @@ sequenceDiagram
     A->>A: Verifica assinatura (Stripe-Signature, tolerância 5 min)
     A->>DB: BEGIN
     A->>DB: INSERT processed_webhook_events (event.id) — conflito = já processado, responde 200
+    A->>DB: SELECT ... FROM orders WHERE id = metadata.orderId FOR UPDATE (confere PaymentIntent e valor)
     A->>DB: UPDATE orders SET status = PAID WHERE id = $1 AND status = PENDING
     A->>DB: UPDATE ticket_types SET reserved = reserved - q, sold = sold + q
     A->>DB: INSERT tickets (VALID, qr_nonce), audit_log, outbox(OrderPaid, TicketsIssued)
@@ -283,7 +284,7 @@ O resultado do check-in é uma resposta de negócio, por isso volta com `200` e 
 | varredura da expiração | timer em processo (1 min, e uma vez ao subir) | worker | Rede de segurança: expira os `PENDING` vencidos cujo job se perdeu, em lotes de 100 pelo índice parcial de `expires_at` |
 | `outbox.dispatch` | poller em processo (a cada `OUTBOX_POLL_INTERVAL_MS`, 5 s por padrão) | worker | Lê `outbox_messages` devidas com `FOR UPDATE SKIP LOCKED`, publica no BullMQ e marca como despachada na mesma transação |
 | `email.send` | outbox | worker | Retentativas exponenciais (5×), chave de idempotência por mensagem |
-| `payments.refund` | webhook (pagamento tardio) | worker | Idempotency key do Stripe = `refund:{orderId}` |
+| `orders.refund_requested` (fila `payments`) | outbox, na transação do webhook (pagamento tardio sem estoque, ou depois do cancelamento) | worker | Idempotency key do Stripe = `refund:{orderId}`; retentativas do BullMQ |
 
 **Poller, não job repetível.** O despacho da outbox roda num poller em processo (`OutboxPoller`), não num job repetível do BullMQ: assim a outbox não depende do Redis para ser lida, e uma queda do Redis só faz as mensagens esperarem. As rodadas **nunca se sobrepõem** (uma rodada lenta faz a seguinte ser ignorada) e várias instâncias podem rodar juntas, porque `SKIP LOCKED` entrega cada mensagem a um só despachante. O poller também apaga mensagens entregues há mais de 7 dias, uma vez por hora. Substitui o "agendamento repetível + gatilho pós-commit" do desenho inicial; o gatilho foi dispensado porque 5 s de latência bastam.
 

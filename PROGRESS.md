@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 2 — MVP público v1.0 (o Marco 1 terminou com a N13).
-- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 e V2 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#37) e Dependabot (#4–#7, #9 CodeQL v4). V3 no PR do pagamento (`feat/payments-intents`).
-- **Entregas abertas:** V3.
-- **Próximo passo:** V4 — Webhook do Stripe (`feat/payments-webhook`).
+- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V3 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#38) e Dependabot (#4–#7, #9 CodeQL v4). V4 no PR do webhook (`feat/payments-webhook`).
+- **Entregas abertas:** V4.
+- **Próximo passo:** V5 — Emissão de ingressos (`feat/tickets-issuance`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,26 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-21 — V4: webhook do Stripe
+
+Auditoria (antes de codar): a outbox já tinha `orders.paid` e `orders.refund_requested`, a auditoria já tinha `order.paid`/`order.refunded`/`payment.webhook_processed`; não existiam a tabela de eventos processados, o segredo do webhook nem o body bruto no Nest. O `CHECK` dos carimbos não deixava um pedido cancelado virar `REFUNDED`.
+
+Feito (API e docs; não mexe no web):
+
+- `POST /payments/stripe/webhook` (público, fora do OpenAPI): assinatura verificada com o SDK sobre o body bruto (`rawBody: true` no Nest), tolerância de 5 min; `400 invalid-signature` sem efeito; `503` sem `STRIPE_WEBHOOK_SECRET` (exigido em produção, formato `whsec_`).
+- `processed_webhook_events` (migração), gravado na transação do efeito: reenvio, inclusive simultâneo, responde `200` sem efeito; efeito que falha deixa o evento sem registro, para o Stripe reenviar.
+- `payment_intent.succeeded`: o módulo `orders` aplica o pagamento (`SettlePayment`) com o pedido travado `FOR UPDATE`, conferindo PaymentIntent e valor contra o pedido. `PENDING → PAID` (reservado vira vendido, `orders.paid` na outbox, auditoria); `EXPIRED` → vende de novo, tudo ou nada → `PAID` tardio, senão `REFUNDED`; `CANCELED → REFUNDED`. O reembolso vai pela outbox para a fila `payments`, onde o worker chama o Stripe com `refund:{orderId}`.
+- `payments` não depende de `orders`: expõe `PaymentEvents`, onde `orders` se inscreve.
+- Testes: verificador (body alterado, outro segredo, timestamp velho, cabeçalho inválido) e caso de uso com **fixtures assinadas** (`generateTestHeaderString`), reenvio, falha no meio (evento não registrado), tipos ignorados, `livemode`; liquidação com fakes (no prazo, tardio com e sem estoque, cancelado, PaymentIntent/valor errados); integração com Postgres e Redis: 4 entregas simultâneas → um `PAID`, estoque e auditoria uma vez; assinatura errada/velha/ausente → `400` sem efeito; pagamento tardio com e sem estoque; reembolso chegando ao gateway pelo worker.
+
+Decisões tomadas por conta própria:
+
+- **Pagamento depois do cancelamento é reembolsado** (`CANCELED → REFUNDED`), em vez de reviver o pedido: o comprador desistiu.
+- **PaymentIntent ou valor que não confere** com o pedido: evento registrado, pedido intocado, log de aviso (sem reembolso automático: não deveria acontecer e pede olho humano).
+- **Body de até 100 kB também no webhook** (a doc falava em 1 MB): eventos de PaymentIntent têm poucos kB, e um parser separado só para essa rota não compensa agora.
+- **`payment_intent.payment_failed` e `charge.refunded` só são registrados.**
+- Ficam para depois: cancelar o PaymentIntent quando a reserva expira, e-mail ao comprador no reembolso, limpeza de `processed_webhook_events` após 90 dias (V9) e a emissão de ingressos no pagamento (V5).
 
 ### 2026-10-21 — V3: pagamento (PaymentIntents)
 
