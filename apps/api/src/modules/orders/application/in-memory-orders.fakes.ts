@@ -6,7 +6,12 @@ import type { Order, OrderEvent } from "../domain/order.js";
 import type { SaleEvent } from "../domain/reservation-policy.js";
 import type { ExpirationScheduler } from "./ports/expiration-scheduler.js";
 import type { Inventory, Reservation } from "./ports/inventory.js";
-import type { HeldTickets, NewOrder, OrderRepository } from "./ports/order-repository.js";
+import type {
+  HeldTickets,
+  NewOrder,
+  OrderRepository,
+  PayableOrder,
+} from "./ports/order-repository.js";
 
 export interface StockRow {
   readonly id: string;
@@ -31,6 +36,8 @@ type OrderRow = Omit<NewOrder, "expiresAt"> & {
   extensionCount: number;
   expiredAt: Date | null;
   canceledAt: Date | null;
+  paidAt: Date | null;
+  refundedAt: Date | null;
   paymentIntentId: string | null;
 };
 
@@ -103,6 +110,8 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
       extensionCount: 0,
       expiredAt: null,
       canceledAt: null,
+      paidAt: null,
+      refundedAt: null,
       paymentIntentId: null,
     });
     return Promise.resolve("created");
@@ -156,6 +165,34 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
     return Promise.resolve();
   }
 
+  findForPayment(orderId: string): Promise<PayableOrder | null> {
+    const row = this.orders.get(orderId);
+    if (!row) return Promise.resolve(null);
+    return Promise.resolve({
+      id: row.id,
+      status: row.status,
+      totalCents: row.totalCents,
+      paymentIntentId: row.paymentIntentId,
+      items: row.items.map(({ ticketTypeId, quantity }) => ({ ticketTypeId, quantity })),
+    });
+  }
+
+  markPaid(orderId: string, now: Date): Promise<boolean> {
+    const row = this.orders.get(orderId);
+    if (row?.status !== "PENDING" && row?.status !== "EXPIRED") return Promise.resolve(false);
+    row.status = "PAID";
+    row.paidAt = now;
+    return Promise.resolve(true);
+  }
+
+  markRefunded(orderId: string, now: Date): Promise<boolean> {
+    const row = this.orders.get(orderId);
+    if (row?.status !== "EXPIRED" && row?.status !== "CANCELED") return Promise.resolve(false);
+    row.status = "REFUNDED";
+    row.refundedAt = now;
+    return Promise.resolve(true);
+  }
+
   findOverdue(now: Date, limit: number): Promise<string[]> {
     return Promise.resolve(
       [...this.orders.values()]
@@ -185,7 +222,7 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
       expiresAt: row.expiresAt,
       extensionCount: row.extensionCount,
       createdAt: row.createdAt,
-      paidAt: null,
+      paidAt: row.paidAt,
       paymentIntentId: row.paymentIntentId,
     });
   }
@@ -219,6 +256,29 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
     const row = this.stock.get(ticketTypeId);
     if (!row || row.reserved < quantity) throw new Error("releasing more than held");
     row.reserved -= quantity;
+    return Promise.resolve();
+  }
+
+  sell(ticketTypeId: string, quantity: number): Promise<void> {
+    const row = this.stock.get(ticketTypeId);
+    if (!row || row.reserved < quantity) throw new Error("selling more than held");
+    row.reserved -= quantity;
+    row.sold += quantity;
+    return Promise.resolve();
+  }
+
+  sellUnheld(ticketTypeId: string, quantity: number): Promise<boolean> {
+    const row = this.stock.get(ticketTypeId);
+    if (!row) throw new Error("unknown ticket type");
+    if (row.sold + row.reserved + quantity > row.capacity) return Promise.resolve(false);
+    row.sold += quantity;
+    return Promise.resolve(true);
+  }
+
+  unsell(ticketTypeId: string, quantity: number): Promise<void> {
+    const row = this.stock.get(ticketTypeId);
+    if (!row || row.sold < quantity) throw new Error("unselling more than sold");
+    row.sold -= quantity;
     return Promise.resolve();
   }
 }

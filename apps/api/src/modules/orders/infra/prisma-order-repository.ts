@@ -8,6 +8,7 @@ import type {
   HeldTickets,
   NewOrder,
   OrderRepository,
+  PayableOrder,
 } from "../application/ports/order-repository.js";
 import type { Order } from "../domain/order.js";
 
@@ -172,6 +173,52 @@ export class PrismaOrderRepository implements OrderRepository {
         expiresAt: { equals: expiresAt, gt: now },
       },
       data: { expiresAt: newExpiresAt, extensionCount: 1 },
+    });
+    return count === 1;
+  }
+
+  async findForPayment(orderId: string, tx: TransactionContext): Promise<PayableOrder | null> {
+    const client = clientFor(this.prisma, tx);
+    // The expiration and the cancellation update this row: they wait for the payment, or
+    // the payment sees what they did.
+    const rows = await client.$queryRaw<
+      {
+        id: string;
+        status: PayableOrder["status"];
+        total_cents: number;
+        stripe_payment_intent_id: string | null;
+      }[]
+    >`
+      SELECT "id", "status", "total_cents", "stripe_payment_intent_id"
+        FROM "orders" WHERE "id" = ${orderId}::uuid
+         FOR UPDATE`;
+    const row = rows[0];
+    if (!row) return null;
+    const items = await client.orderItem.findMany({
+      where: { orderId },
+      select: { ticketTypeId: true, quantity: true },
+    });
+    return {
+      id: row.id,
+      status: row.status,
+      totalCents: row.total_cents,
+      paymentIntentId: row.stripe_payment_intent_id,
+      items,
+    };
+  }
+
+  async markPaid(orderId: string, now: Date, tx: TransactionContext): Promise<boolean> {
+    const { count } = await clientFor(this.prisma, tx).order.updateMany({
+      where: { id: orderId, status: { in: ["PENDING", "EXPIRED"] } },
+      data: { status: "PAID", paidAt: now },
+    });
+    return count === 1;
+  }
+
+  async markRefunded(orderId: string, now: Date, tx: TransactionContext): Promise<boolean> {
+    const { count } = await clientFor(this.prisma, tx).order.updateMany({
+      where: { id: orderId, status: { in: ["EXPIRED", "CANCELED"] } },
+      data: { status: "REFUNDED", refundedAt: now },
     });
     return count === 1;
   }

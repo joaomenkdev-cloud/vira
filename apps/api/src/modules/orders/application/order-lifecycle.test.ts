@@ -1,9 +1,11 @@
+import type { PinoLogger } from "nestjs-pino";
 import { describe, expect, it } from "vitest";
 
 import type { AppConfig } from "../../../platform/config/config.schema.js";
 import type { RateLimiter } from "../../../platform/rate-limit/rate-limiter.js";
 import { RateLimitExceededError } from "../../../platform/rate-limit/rate-limiter.js";
 import { AuditLog } from "../../audit/application/public-api.js";
+import { Outbox } from "../../outbox/application/public-api.js";
 import {
   PaymentGatewayError,
   PaymentIntents,
@@ -16,6 +18,7 @@ import { ExpireOrder } from "./expire-order.js";
 import { ExtendOrder } from "./extend-order.js";
 import { InMemoryOrderStore, RecordingScheduler } from "./in-memory-orders.fakes.js";
 import { OrderExpiry } from "./order-expiry.js";
+import { SettlePayment } from "./settle-payment.js";
 import { StartPayment } from "./start-payment.js";
 import { SweepExpiredOrders } from "./sweep-expired-orders.js";
 
@@ -41,6 +44,10 @@ class FakeGateway implements Gateway {
     let index = this.created.findIndex((c) => c.idempotencyKey === intent.idempotencyKey);
     if (index < 0) index = this.created.push(intent) - 1;
     return this.retrievePaymentIntent(`pi_fake${String(index + 1).padStart(4, "0")}`);
+  }
+
+  refundPaymentIntent() {
+    return Promise.reject(new Error("not used here"));
   }
 
   retrievePaymentIntent(id: string) {
@@ -111,6 +118,20 @@ function setup() {
     clock,
     ids,
   );
+  const outboxMessages: { type: string; payload: Record<string, unknown> }[] = [];
+  const outbox = new Outbox(
+    {
+      append: (message: { type: string; payload: Record<string, unknown> }) => {
+        outboxMessages.push(message);
+        return Promise.resolve();
+      },
+    } as never,
+    clock,
+    ids,
+  );
+  const warnings: string[] = [];
+  const logger = { warn: (_: unknown, msg: string) => warnings.push(msg) } as unknown as PinoLogger;
+  const settlePayment = new SettlePayment(store, store, clock, outbox, audit, logger);
   const scheduler = new RecordingScheduler();
   const gateway = new FakeGateway();
   let paymentHits = 0;
@@ -171,7 +192,20 @@ function setup() {
     cancel: new CancelOrder(store, store, store, clock, audit),
     gateway,
     startPayment,
+    outboxMessages,
+    warnings,
+    /** Applies a succeeded payment as the webhook does, then runs what follows the commit. */
+    settle: async (
+      orderId: string,
+      { paymentIntentId = "pi_fake0001", amountCents = 24000 } = {},
+    ) => {
+      const after = await store.run((tx) =>
+        settlePayment.execute({ paymentIntentId, orderId, amountCents, currency: "BRL" }, tx),
+      );
+      await after?.();
+    },
     held: () => [store.stock.get(PISTA)?.reserved, store.stock.get(CAMAROTE)?.reserved],
+    sold: () => [store.stock.get(PISTA)?.sold, store.stock.get(CAMAROTE)?.sold],
     statusOf: (id: string) => store.orders.get(id)?.status,
   };
 }
@@ -382,5 +416,114 @@ describe("starting the payment", () => {
     const id = await s.pendingOrder();
     for (let i = 0; i < 10; i++) await s.startPayment().execute(ana, id);
     await expect(s.startPayment().execute(ana, id)).rejects.toThrow(RateLimitExceededError);
+  });
+});
+
+describe("settling a payment", () => {
+  async function paidFor(s: ReturnType<typeof setup>, buyer: Caller = ana) {
+    const id = await s.pendingOrder(buyer);
+    const { paymentIntentId } = await s.startPayment().execute(buyer, id);
+    return { id, paymentIntentId };
+  }
+
+  it("turns a pending order into a paid one, and its held tickets into sold ones, once", async () => {
+    const s = setup();
+    const { id, paymentIntentId } = await paidFor(s);
+
+    await s.settle(id, { paymentIntentId });
+    expect(s.store.orders.get(id)).toMatchObject({ status: "PAID", paidAt: s.clock.current });
+    expect([s.held(), s.sold()]).toEqual([
+      [0, 0],
+      [2, 1],
+    ]);
+    expect(s.outboxMessages).toEqual([
+      expect.objectContaining({ type: "orders.paid", payload: { orderId: id } }),
+    ]);
+
+    // Stripe may send the same payment in a second event: nothing changes.
+    await s.settle(id, { paymentIntentId });
+    expect(s.sold()).toEqual([2, 1]);
+    expect(s.outboxMessages).toHaveLength(1);
+    expect(s.auditEntries.map((e) => [e["action"], e["metadata"]])).toEqual([
+      ["order.paid", { totalCents: 24000, paymentIntentId, late: false }],
+    ]);
+
+    // Nor does the expiration job that was still scheduled.
+    s.advance(10);
+    expect(await s.expire.execute(id)).toBe(false);
+    expect(s.statusOf(id)).toBe("PAID");
+  });
+
+  it("ignores a payment that is not the order's own PaymentIntent, or not its total", async () => {
+    const s = setup();
+    const { id, paymentIntentId } = await paidFor(s);
+
+    await s.settle(id, { paymentIntentId: "pi_somebodyElse" });
+    await s.settle(id, { paymentIntentId, amountCents: 100 });
+    await s.settle("0192a0e4-2222-7000-8000-999999999999", { paymentIntentId });
+    expect(s.statusOf(id)).toBe("PENDING");
+    expect(s.held()).toEqual([2, 1]);
+    expect(s.outboxMessages).toEqual([]);
+    expect(s.warnings).toHaveLength(3);
+  });
+
+  it("sells the tickets again for a late payment, when they are still there", async () => {
+    const s = setup();
+    const { id, paymentIntentId } = await paidFor(s);
+    s.advance(10);
+    await s.expire.execute(id);
+    expect(s.held()).toEqual([0, 0]);
+
+    await s.settle(id, { paymentIntentId });
+    expect(s.statusOf(id)).toBe("PAID");
+    expect([s.held(), s.sold()]).toEqual([
+      [0, 0],
+      [2, 1],
+    ]);
+    expect(s.auditEntries.at(-1)).toMatchObject({
+      action: "order.paid",
+      metadata: { late: true },
+    });
+  });
+
+  it("refunds a late payment when a line sold out meanwhile, selling none of it", async () => {
+    const s = setup();
+    const { id, paymentIntentId } = await paidFor(s);
+    s.advance(10);
+    await s.expire.execute(id);
+    const camarote = s.store.stock.get(CAMAROTE);
+    if (camarote) camarote.sold = camarote.capacity;
+
+    await s.settle(id, { paymentIntentId });
+    expect(s.store.orders.get(id)).toMatchObject({
+      status: "REFUNDED",
+      refundedAt: s.clock.current,
+    });
+    // "Pista" was sold again before "Camarote" fell short, and was given back.
+    expect(s.sold()).toEqual([0, 10]);
+    expect(s.outboxMessages).toEqual([
+      expect.objectContaining({
+        type: "orders.refund_requested",
+        payload: { orderId: id, paymentIntentId },
+      }),
+    ]);
+    expect(s.auditEntries.at(-1)).toMatchObject({
+      action: "order.refunded",
+      metadata: { reason: "late_payment", totalCents: 24000 },
+    });
+
+    await s.settle(id, { paymentIntentId });
+    expect(s.outboxMessages).toHaveLength(1);
+  });
+
+  it("refunds a payment that arrives after the buyer canceled", async () => {
+    const s = setup();
+    const { id, paymentIntentId } = await paidFor(s);
+    await s.cancel.execute(ana, id);
+
+    await s.settle(id, { paymentIntentId });
+    expect(s.statusOf(id)).toBe("REFUNDED");
+    expect(s.sold()).toEqual([0, 0]);
+    expect(s.outboxMessages.map((m) => m.type)).toEqual(["orders.refund_requested"]);
   });
 });
