@@ -13,12 +13,13 @@ import {
 } from "../../payments/application/public-api.js";
 import type { Caller } from "./buyer.js";
 import { CancelOrder } from "./cancel-order.js";
-import { OrderNotFoundError, OrderStateError } from "./errors.js";
+import { InvalidOrderError, OrderNotFoundError, OrderStateError } from "./errors.js";
 import { ExpireOrder } from "./expire-order.js";
 import { ExtendOrder } from "./extend-order.js";
 import { InMemoryOrderStore, RecordingScheduler } from "./in-memory-orders.fakes.js";
 import { OrderEvents, type PaidOrder } from "./order-events.js";
 import { OrderExpiry } from "./order-expiry.js";
+import { SetHolders } from "./set-holders.js";
 import { SettlePayment } from "./settle-payment.js";
 import { StartPayment } from "./start-payment.js";
 import { SweepExpiredOrders } from "./sweep-expired-orders.js";
@@ -157,9 +158,14 @@ function setup() {
     new StartPayment(store, limiter, clock, new PaymentIntents(gateway, paymentsConfig(stripe)));
   const expireOrder = new ExpireOrder(store, clock, new OrderExpiry(store, store), audit);
 
-  /** A pending order of `buyer` made now, holding 2 "Pista" and 1 "Camarote". */
-  async function pendingOrder(buyer: Caller = ana): Promise<string> {
+  /**
+   * A pending order of `buyer` made now, holding 2 "Pista" and 1 "Camarote", with its
+   * holders named ("Ana", "Caio" and "Duda") unless `named` is false.
+   */
+  async function pendingOrder(buyer: Caller = ana, { named = true } = {}): Promise<string> {
     const id = ids.next();
+    const pistaLine = ids.next();
+    const camaroteLine = ids.next();
     const stockOf = (ticketTypeId: string) => store.stock.get(ticketTypeId);
     const pista = stockOf(PISTA);
     const camarote = stockOf(CAMAROTE);
@@ -179,10 +185,19 @@ function setup() {
       buyerEmail: "ana@exemplo.com",
       createdAt: clock.current,
       items: [
-        { id: ids.next(), ticketTypeId: PISTA, quantity: 2, unitPriceCents: 8000 },
-        { id: ids.next(), ticketTypeId: CAMAROTE, quantity: 1, unitPriceCents: 8000 },
+        { id: pistaLine, ticketTypeId: PISTA, quantity: 2, unitPriceCents: 8000 },
+        { id: camaroteLine, ticketTypeId: CAMAROTE, quantity: 1, unitPriceCents: 8000 },
       ],
     });
+    if (named) {
+      store.holders.set(
+        id,
+        new Map([
+          [pistaLine, ["Ana", "Caio"]],
+          [camaroteLine, ["Duda"]],
+        ]),
+      );
+    }
     return id;
   }
 
@@ -197,6 +212,7 @@ function setup() {
     sweep: new SweepExpiredOrders(store, clock, expireOrder),
     extend: new ExtendOrder(store, scheduler, clock),
     cancel: new CancelOrder(store, store, store, clock, audit),
+    setHolders: new SetHolders(store, clock),
     gateway,
     startPayment,
     outboxMessages,
@@ -455,6 +471,7 @@ describe("settling a payment", () => {
           orderItemId: item.id,
           ticketTypeId: item.ticketTypeId,
           quantity: item.quantity,
+          holderNames: s.store.holders.get(id)?.get(item.id),
         })),
       },
     ]);
@@ -546,5 +563,72 @@ describe("settling a payment", () => {
     expect(s.sold()).toEqual([0, 0]);
     expect(s.outboxMessages.map((m) => m.type)).toEqual(["orders.refund_requested"]);
     expect(s.paidOrders).toEqual([]);
+  });
+});
+
+describe("naming the holders", () => {
+  it("records one name per ticket of every line, and lets the order be paid", async () => {
+    const s = setup();
+    const id = await s.pendingOrder(ana, { named: false });
+    await expect(s.startPayment().execute(ana, id)).rejects.toThrow(
+      new OrderStateError("Informe o nome do titular de cada ingresso antes de pagar."),
+    );
+
+    const order = await s.store.findOwned(id, ana.id);
+    const [pista, camarote] = order?.items ?? [];
+    if (!pista || !camarote) throw new Error("no lines");
+    const named = await s.setHolders.execute(ana, id, [
+      { orderItemId: camarote.id, names: ["Duda"] },
+      { orderItemId: pista.id.toUpperCase(), names: ["Ana", "Caio"] },
+    ]);
+    expect(named.items.map((item) => item.holderNames)).toEqual([["Ana", "Caio"], ["Duda"]]);
+    expect((await s.startPayment().execute(ana, id)).paymentIntentId).toBe("pi_fake0001");
+
+    // Saying it again replaces the names.
+    const renamed = await s.setHolders.execute(ana, id, [
+      { orderItemId: pista.id, names: ["Bia", "Caio"] },
+      { orderItemId: camarote.id, names: ["Duda"] },
+    ]);
+    expect(renamed.items[0]?.holderNames).toEqual(["Bia", "Caio"]);
+  });
+
+  it("refuses a missing line, an unknown one or the wrong number of names", async () => {
+    const s = setup();
+    const id = await s.pendingOrder(ana, { named: false });
+    const order = await s.store.findOwned(id, ana.id);
+    const [pista, camarote] = order?.items ?? [];
+    if (!pista || !camarote) throw new Error("no lines");
+
+    await expect(
+      s.setHolders.execute(ana, id, [{ orderItemId: pista.id, names: ["Ana", "Caio"] }]),
+    ).rejects.toThrow(new InvalidOrderError("holders", "faltam os titulares de Camarote"));
+    await expect(
+      s.setHolders.execute(ana, id, [
+        { orderItemId: pista.id, names: ["Ana"] },
+        { orderItemId: camarote.id, names: ["Duda"] },
+      ]),
+    ).rejects.toThrow(new InvalidOrderError("holders.0.names", "informe 2 nomes para Pista"));
+    await expect(
+      s.setHolders.execute(ana, id, [
+        { orderItemId: pista.id, names: ["Ana", "Caio"] },
+        { orderItemId: camarote.id, names: ["Duda"] },
+        { orderItemId: EVENT, names: ["Eva"] },
+      ]),
+    ).rejects.toThrow(
+      new InvalidOrderError("holders.2.orderItemId", "não é uma linha deste pedido"),
+    );
+    expect(s.store.holders.get(id)).toBeUndefined();
+  });
+
+  it("refuses someone else's order and one whose reservation is over", async () => {
+    const s = setup();
+    const id = await s.pendingOrder(ana, { named: false });
+    const lines = (await s.store.findOwned(id, ana.id))?.items.map((item) => ({
+      orderItemId: item.id,
+      names: Array.from({ length: item.quantity }, () => "Ana"),
+    }));
+    await expect(s.setHolders.execute(bia, id, lines ?? [])).rejects.toThrow(OrderNotFoundError);
+    s.advance(10);
+    await expect(s.setHolders.execute(ana, id, lines ?? [])).rejects.toThrow(OrderStateError);
   });
 });

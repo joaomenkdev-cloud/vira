@@ -374,12 +374,14 @@ model ProcessedWebhookEvent {
 
 /// The lines of an order (docs/DATA_MODEL.md#order_items), one per ticket type.
 model OrderItem {
-  id             String @id @db.Uuid
-  orderId        String @map("order_id") @db.Uuid
-  ticketTypeId   String @map("ticket_type_id") @db.Uuid
+  id             String   @id @db.Uuid
+  orderId        String   @map("order_id") @db.Uuid
+  ticketTypeId   String   @map("ticket_type_id") @db.Uuid
   quantity       Int
   /// Copy of the price when the tickets were reserved.
-  unitPriceCents Int    @map("unit_price_cents")
+  unitPriceCents Int      @map("unit_price_cents")
+  /// One name per ticket, given before paying (V6), empty until then; copied to the tickets.
+  holderNames    String[] @default([]) @map("holder_names")
 
   order      Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   ticketType TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)

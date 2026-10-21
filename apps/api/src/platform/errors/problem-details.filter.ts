@@ -61,7 +61,13 @@ export class ProblemDetailsFilter implements ExceptionFilter {
 
   private toProblem(exception: unknown): Omit<ProblemDetails, "instance" | "requestId"> {
     if (exception instanceof ProblemException) {
-      return this.build(exception.type, exception.options.detail, exception.options.errors);
+      const problem = this.build(
+        exception.type,
+        exception.options.detail,
+        exception.options.errors,
+      );
+      const { orderId } = exception.options;
+      return orderId === undefined ? problem : { ...problem, orderId };
     }
 
     const status =

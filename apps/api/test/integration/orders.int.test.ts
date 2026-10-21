@@ -1,4 +1,5 @@
 import {
+  type OrderBody,
   orderSchema,
   paymentSessionSchema,
   problemDetailsSchema,
@@ -135,6 +136,21 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
           .send(body),
       get: (path: string) => api().get(`/api/v1${path}`).set("Authorization", auth()),
       post: (path: string) => api().post(`/api/v1${path}`).set("Authorization", auth()),
+      put: (path: string, body: object) =>
+        api().put(`/api/v1${path}`).set("Authorization", auth()).send(body),
+      /** Names the holder of every ticket of the order ("Titular 1", "Titular 2"...). */
+      nameHolders: async (order: OrderBody) => {
+        let n = 0;
+        const holders = order.items.map((item) => ({
+          orderItemId: item.id,
+          names: Array.from({ length: item.quantity }, () => `Titular ${++n}`),
+        }));
+        return api()
+          .put(`/api/v1/orders/${order.id}/holders`)
+          .set("Authorization", auth())
+          .send({ holders })
+          .expect(200);
+      },
     };
   }
 
@@ -751,6 +767,7 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
       );
       // The organizer raises the price after the reservation: the order keeps its own.
       await prisma.ticketType.update({ where: { id: pista }, data: { priceCents: 9900 } });
+      await ana.nameHolders(order);
 
       const responses = await Promise.all(
         Array.from({ length: 3 }, () => ana.post(`/orders/${order.id}/payment`)),
@@ -796,6 +813,13 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
         await (await buyer()).post(`/orders/${order.id}/payment`).expect(404),
         "not-found",
       );
+      // The holders come first (V6).
+      const unnamed = await ana.post(`/orders/${order.id}/payment`).expect(409);
+      expectProblem(unnamed, "invalid-state-transition");
+      expect(unnamed.body).toMatchObject({
+        detail: "Informe o nome do titular de cada ingresso antes de pagar.",
+      });
+      await ana.nameHolders(order);
 
       gateway.down = true;
       try {
@@ -840,6 +864,7 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
         (await ana.order({ eventId, items: [{ ticketTypeId: pista, quantity: 2 }] }).expect(201))
           .body,
       );
+      await ana.nameHolders(order);
       await ana.post(`/orders/${order.id}/payment`).expect(200);
       const { stripePaymentIntentId } = await orderRow(order.id);
       if (!stripePaymentIntentId) throw new Error("no PaymentIntent");
@@ -986,6 +1011,7 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
             .expect(201)
         ).body,
       );
+      await ana.nameHolders(order);
       await ana.post(`/orders/${order.id}/payment`).expect(200);
       const { stripePaymentIntentId } = await prisma.order.findUniqueOrThrow({
         where: { id: order.id },
@@ -998,12 +1024,15 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
       const { eventId, ana, order } = await paidOrder();
 
       const rows = await prisma.ticket.findMany({ where: { orderId: order.id } });
-      expect(rows).toHaveLength(3);
+      expect(rows.map((row) => row.holderName).sort()).toEqual([
+        "Titular 1",
+        "Titular 2",
+        "Titular 3",
+      ]);
       for (const row of rows) {
         expect(row).toMatchObject({
           eventId,
           status: "VALID",
-          holderName: "Compradora",
           issuedAt: clock.current,
         });
         expect(row.code).toMatch(/^VIRA-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
@@ -1020,7 +1049,7 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
       ]);
       expect(list.data[0]).toMatchObject({
         orderId: order.id,
-        holderName: "Compradora",
+        holderName: expect.stringMatching(/^Titular [1-3]$/),
         event: { id: eventId, title: "Noite de forró", venueCity: "Rio de Janeiro" },
         usedAt: null,
       });
@@ -1141,6 +1170,7 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
         (await ana.order({ eventId, items: [{ ticketTypeId: pista, quantity: 1 }] }).expect(201))
           .body,
       );
+      await ana.nameHolders(order);
       await ana.post(`/orders/${order.id}/payment`).expect(200);
       await ana.post(`/orders/${order.id}/cancel`).expect(200);
       const { stripePaymentIntentId } = await prisma.order.findUniqueOrThrow({
@@ -1151,6 +1181,122 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
         "REFUNDED",
       );
       expect(await prisma.ticket.count({ where: { orderId: order.id } })).toBe(0);
+    });
+  });
+
+  describe("holders (V6)", () => {
+    it("names the holder of each ticket, which the tickets then carry", async () => {
+      const {
+        eventId,
+        ticketTypeIds: [pista, camarote],
+      } = await publishedEvent([
+        { name: "Pista", priceCents: 8000, capacity: 10 },
+        { name: "Camarote", priceCents: 20000, capacity: 5 },
+      ]);
+      const ana = await buyer();
+      const order = orderSchema.parse(
+        (
+          await ana
+            .order({
+              eventId,
+              items: [
+                { ticketTypeId: pista, quantity: 2 },
+                { ticketTypeId: camarote, quantity: 1 },
+              ],
+            })
+            .expect(201)
+        ).body,
+      );
+      expect(order.items.map((item) => item.holderNames)).toEqual([[], []]);
+      const pistaLine = order.items.find((item) => item.ticketTypeId === pista);
+      const camaroteLine = order.items.find((item) => item.ticketTypeId === camarote);
+      if (!pistaLine || !camaroteLine) throw new Error("no lines");
+
+      // Wrong count, missing line, someone else's order, extra fields.
+      expectProblem(
+        await ana
+          .put(`/orders/${order.id}/holders`, {
+            holders: [
+              { orderItemId: pistaLine.id, names: ["Maria Souza"] },
+              { orderItemId: camaroteLine.id, names: ["João Lima"] },
+            ],
+          })
+          .expect(400),
+        "validation-failed",
+      );
+      expectProblem(
+        await ana
+          .put(`/orders/${order.id}/holders`, {
+            holders: [{ orderItemId: pistaLine.id, names: ["Maria Souza", "Ana Reis"] }],
+          })
+          .expect(400),
+        "validation-failed",
+      );
+      const holders = [
+        { orderItemId: pistaLine.id, names: [" Maria Souza ", "Ana Reis"] },
+        { orderItemId: camaroteLine.id, names: ["João Lima"] },
+      ];
+      expectProblem(
+        await (await buyer()).put(`/orders/${order.id}/holders`, { holders }).expect(404),
+        "not-found",
+      );
+      expectProblem(
+        await ana.put(`/orders/${order.id}/holders`, { holders, buyerId: ana.userId }).expect(400),
+        "validation-failed",
+      );
+
+      const named = orderSchema.parse(
+        (await ana.put(`/orders/${order.id}/holders`, { holders }).expect(200)).body,
+      );
+      expect(named.items.find((item) => item.id === pistaLine.id)?.holderNames).toEqual([
+        "Maria Souza",
+        "Ana Reis",
+      ]);
+
+      await ana.post(`/orders/${order.id}/payment`).expect(200);
+      const { stripePaymentIntentId } = await prisma.order.findUniqueOrThrow({
+        where: { id: order.id },
+      });
+      const event = succeededEvent(order.id, stripePaymentIntentId ?? "", 36000);
+      await api()
+        .post("/api/v1/payments/stripe/webhook")
+        .set("Content-Type", "application/json")
+        .set("Stripe-Signature", event.signature)
+        .send(event.payload)
+        .expect(200);
+      const tickets = await prisma.ticket.findMany({
+        where: { orderId: order.id },
+        orderBy: { holderName: "asc" },
+      });
+      expect(tickets.map((t) => [t.holderName, t.ticketTypeId])).toEqual([
+        ["Ana Reis", pista],
+        ["João Lima", camarote],
+        ["Maria Souza", pista],
+      ]);
+
+      // Once paid, the names can no longer change.
+      expectProblem(
+        await ana.put(`/orders/${order.id}/holders`, { holders }).expect(409),
+        "invalid-state-transition",
+      );
+    });
+
+    it("refuses names that break the database's own rule", async () => {
+      const {
+        eventId,
+        ticketTypeIds: [pista],
+      } = await publishedEvent([{ name: "Pista", capacity: 5 }]);
+      const ana = await buyer();
+      const order = orderSchema.parse(
+        (await ana.order({ eventId, items: [{ ticketTypeId: pista, quantity: 2 }] }).expect(201))
+          .body,
+      );
+      const [line] = order.items;
+      for (const names of [["Só um"], ["", "Ana"], [" Ana", "Bia"], ["x".repeat(121), "Ana"]]) {
+        await expect(
+          prisma.orderItem.update({ where: { id: line?.id ?? "" }, data: { holderNames: names } }),
+        ).rejects.toThrow(/order_items_holder_names/);
+      }
     });
   });
 });

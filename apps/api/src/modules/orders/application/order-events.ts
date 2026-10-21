@@ -7,13 +7,15 @@ export interface PaidOrderLine {
   readonly orderItemId: string;
   readonly ticketTypeId: string;
   readonly quantity: number;
+  /** One per ticket, as the buyer gave them before paying. */
+  readonly holderNames: readonly string[];
 }
 
 /** An order that just became PAID, inside the transaction that made it so. */
 export interface PaidOrder {
   readonly orderId: string;
   readonly eventId: string;
-  /** The buyer's name as copied into the order; the holder until holders exist (V6). */
+  /** The buyer's name as copied into the order; the holder of a line without names. */
   readonly buyerName: string;
   readonly lines: readonly PaidOrderLine[];
 }

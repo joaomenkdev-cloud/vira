@@ -104,28 +104,36 @@ const paidOrder = {
   eventId: EVENT,
   buyerName: "Ana Souza",
   lines: [
-    { orderItemId: "0192a0e4-3333-7000-8000-000000000001", ticketTypeId: CAMAROTE, quantity: 1 },
-    { orderItemId: "0192a0e4-3333-7000-8000-000000000002", ticketTypeId: PISTA, quantity: 2 },
+    {
+      orderItemId: "0192a0e4-3333-7000-8000-000000000001",
+      ticketTypeId: CAMAROTE,
+      quantity: 1,
+      holderNames: [],
+    },
+    {
+      orderItemId: "0192a0e4-3333-7000-8000-000000000002",
+      ticketTypeId: PISTA,
+      quantity: 2,
+      holderNames: ["Caio Lima", "Duda Reis"],
+    },
   ],
 };
 
 describe("issuing tickets", () => {
-  it("issues one ticket per unit, each with its own code and nonce, and announces them", async () => {
+  it("issues one ticket per unit, each with its holder, code and nonce, and announces them", async () => {
     const s = setup();
     await s.issue.execute(paidOrder, {} as TransactionContext);
 
-    expect(s.tickets.rows.map((t) => [t.orderItemId.slice(-1), t.ticketTypeId])).toEqual([
-      ["1", CAMAROTE],
-      ["2", PISTA],
-      ["2", PISTA],
+    // A line without names is the buyer's own.
+    expect(
+      s.tickets.rows.map((t) => [t.orderItemId.slice(-1), t.ticketTypeId, t.holderName]),
+    ).toEqual([
+      ["1", CAMAROTE, "Ana Souza"],
+      ["2", PISTA, "Caio Lima"],
+      ["2", PISTA, "Duda Reis"],
     ]);
     for (const ticket of s.tickets.rows) {
-      expect(ticket).toMatchObject({
-        orderId: ORDER,
-        eventId: EVENT,
-        holderName: "Ana Souza",
-        issuedAt: T0,
-      });
+      expect(ticket).toMatchObject({ orderId: ORDER, eventId: EVENT, issuedAt: T0 });
       expect(ticket.code).toMatch(/^VIRA-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
       expect(ticket.qrNonce).toHaveLength(16);
     }

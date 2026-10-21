@@ -38,6 +38,13 @@ export interface PayableOrder {
 /** A line of an order being paid. */
 export interface PayableItem extends HeldTickets {
   readonly id: string;
+  readonly holderNames: readonly string[];
+}
+
+/** The names of the holders of one line's tickets. */
+export interface LineHolders {
+  readonly orderItemId: string;
+  readonly names: readonly string[];
 }
 
 /** What a pending order held, to give it back. */
@@ -119,6 +126,17 @@ export interface OrderRepository {
 
   /** EXPIRED or CANCELED → REFUNDED (a payment that cannot be honoured); answers whether it changed. */
   markRefunded(orderId: string, now: Date, tx: TransactionContext): Promise<boolean>;
+
+  /**
+   * Records the holders of each line, if the order is still the buyer's, pending and
+   * within its reservation at `now`; answers whether it did.
+   */
+  setHolders(
+    orderId: string,
+    buyerId: string,
+    holders: readonly LineHolders[],
+    now: Date,
+  ): Promise<boolean>;
 
   /** Records the order's PaymentIntent, unless it already has one. */
   attachPaymentIntent(orderId: string, paymentIntentId: string): Promise<void>;

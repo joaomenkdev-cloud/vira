@@ -7,6 +7,7 @@ import {
 } from "../../../platform/rate-limit/rate-limiter.js";
 import { CLOCK, type Clock } from "../../../platform/runtime/runtime.js";
 import { PaymentIntents, type PaymentSession } from "../../payments/application/public-api.js";
+import { holdersComplete } from "../domain/order.js";
 import type { Caller } from "./buyer.js";
 import { OrderNotFoundError, OrderStateError } from "./errors.js";
 import { ORDER_REPOSITORY, type OrderRepository } from "./ports/order-repository.js";
@@ -30,7 +31,8 @@ export class StartPayment {
   /**
    * @throws RateLimitExceededError past the account's budget.
    * @throws OrderNotFoundError when there is no such order or it is someone else's.
-   * @throws OrderStateError when it is not pending, or its reservation is over.
+   * @throws OrderStateError when it is not pending, its reservation is over, or a ticket has
+   *   no holder yet.
    * @throws PaymentsUnavailableError or PaymentGatewayError when Stripe cannot be used.
    */
   async execute(caller: Caller, orderId: string): Promise<PaymentSession> {
@@ -41,6 +43,9 @@ export class StartPayment {
     if (!order) throw new OrderNotFoundError();
     if (order.status !== "PENDING" || this.clock.now() >= order.expiresAt) {
       throw new OrderStateError("Esta reserva não está mais em andamento.");
+    }
+    if (!holdersComplete(order)) {
+      throw new OrderStateError("Informe o nome do titular de cada ingresso antes de pagar.");
     }
 
     const session = await this.payments.open({

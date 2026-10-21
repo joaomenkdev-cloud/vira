@@ -62,8 +62,47 @@ export const orderItemSchema = z
     quantity: z.number().int(),
     unitPrice: moneySchema.meta({ description: "Preço no momento da reserva" }),
     subtotal: moneySchema,
+    holderNames: z.array(z.string()).meta({
+      description: "Um nome por ingresso da linha; vazio até `PUT /orders/{id}/holders`",
+    }),
   })
   .meta({ id: "OrderItem" });
+
+/** The name printed on a ticket and checked at the door (docs/PRIVACY.md). */
+export const HOLDER_NAME_MAX_LENGTH = 120;
+export const holderNameSchema = z
+  .string()
+  .trim()
+  .min(1, "informe o nome do titular")
+  .max(HOLDER_NAME_MAX_LENGTH, `use no máximo ${HOLDER_NAME_MAX_LENGTH} caracteres`);
+
+/** One name per ticket of each line of the order, before paying (V6). */
+export const setOrderHoldersRequestSchema = z
+  .strictObject({
+    holders: z
+      .array(
+        z.strictObject({
+          orderItemId: z.uuid(),
+          names: z.array(holderNameSchema).min(1).max(MAX_PER_ORDER_LIMIT),
+        }),
+      )
+      .min(1)
+      .max(ORDER_ITEMS_MAX),
+  })
+  .superRefine((request, context) => {
+    const seen = new Set<string>();
+    request.holders.forEach((line, index) => {
+      if (seen.has(line.orderItemId.toLowerCase())) {
+        context.addIssue({
+          code: "custom",
+          message: "linha repetida",
+          path: ["holders", index, "orderItemId"],
+        });
+      }
+      seen.add(line.orderItemId.toLowerCase());
+    });
+  })
+  .meta({ id: "SetOrderHoldersRequest" });
 
 export const orderEventSchema = z
   .strictObject({
@@ -94,6 +133,7 @@ export const orderSchema = z
   .meta({ id: "Order" });
 
 export type CreateOrderRequest = z.infer<typeof createOrderRequestSchema>;
+export type SetOrderHoldersRequest = z.infer<typeof setOrderHoldersRequestSchema>;
 export type OrderBody = z.infer<typeof orderSchema>;
 export type OrderItemBody = z.infer<typeof orderItemSchema>;
 

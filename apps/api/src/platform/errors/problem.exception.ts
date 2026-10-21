@@ -6,6 +6,8 @@ export interface ProblemOptions {
   /** Human-readable explanation specific to this occurrence. Never include personal data. */
   readonly detail?: string;
   readonly errors?: readonly FieldError[];
+  /** On `pending-order-exists`: the buyer's own pending order, so the client can resume it. */
+  readonly orderId?: string;
   /** Extra response headers, e.g. `Retry-After` and `RateLimit-*` on a 429. */
   readonly headers?: Readonly<Record<string, string>>;
 }

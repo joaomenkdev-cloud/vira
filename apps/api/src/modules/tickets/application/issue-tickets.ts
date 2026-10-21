@@ -38,14 +38,15 @@ export class IssueTickets {
   async execute(order: PaidOrder, tx: TransactionContext): Promise<void> {
     const issuedAt = this.clock.now();
     let pending: NewTicket[] = order.lines.flatMap((line) =>
-      Array.from({ length: line.quantity }, () => ({
+      Array.from({ length: line.quantity }, (_, index) => ({
         id: this.ids.next(),
         orderId: order.orderId,
         orderItemId: line.orderItemId,
         eventId: order.eventId,
         ticketTypeId: line.ticketTypeId,
         code: newTicketCode(),
-        holderName: order.buyerName,
+        // Named by the buyer before paying (V6); a line without names is the buyer's own.
+        holderName: line.holderNames[index] ?? order.buyerName,
         qrNonce: randomBytes(16),
         issuedAt,
       })),

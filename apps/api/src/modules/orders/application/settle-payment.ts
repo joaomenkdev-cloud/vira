@@ -97,6 +97,7 @@ export class SettlePayment {
           orderItemId: item.id,
           ticketTypeId: item.ticketTypeId,
           quantity: item.quantity,
+          holderNames: item.holderNames,
         })),
       },
       tx,

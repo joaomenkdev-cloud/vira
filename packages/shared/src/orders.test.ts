@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { createOrderRequestSchema, idempotencyKeySchema } from "./orders.js";
+import {
+  createOrderRequestSchema,
+  idempotencyKeySchema,
+  setOrderHoldersRequestSchema,
+} from "./orders.js";
 
 const eventId = "0192a0e4-0000-7000-8000-000000000001";
 const ticketTypeId = "0192a0e4-0000-7000-8000-000000000002";
@@ -47,5 +51,30 @@ describe("order request schemas", () => {
   it("takes only UUIDs as idempotency keys", () => {
     expect(idempotencyKeySchema.safeParse(eventId).success).toBe(true);
     expect(idempotencyKeySchema.safeParse("tentativa-1").success).toBe(false);
+  });
+});
+
+describe("holders request", () => {
+  const orderItemId = "0192a0e4-0000-7000-8000-000000000003";
+
+  it("trims the names and accepts one line per order item", () => {
+    expect(
+      setOrderHoldersRequestSchema.parse({
+        holders: [{ orderItemId, names: ["  Maria Souza ", "João"] }],
+      }),
+    ).toEqual({ holders: [{ orderItemId, names: ["Maria Souza", "João"] }] });
+  });
+
+  it("refuses empty or long names, a repeated line and extra fields", () => {
+    for (const names of [[""], ["   "], ["x".repeat(121)], []]) {
+      expect(
+        setOrderHoldersRequestSchema.safeParse({ holders: [{ orderItemId, names }] }).success,
+      ).toBe(false);
+    }
+    const line = { orderItemId, names: ["Ana"] };
+    expect(setOrderHoldersRequestSchema.safeParse({ holders: [line, line] }).success).toBe(false);
+    expect(
+      setOrderHoldersRequestSchema.safeParse({ holders: [line], buyerId: orderItemId }).success,
+    ).toBe(false);
   });
 });
