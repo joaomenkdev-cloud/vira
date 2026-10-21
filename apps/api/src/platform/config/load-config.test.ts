@@ -15,6 +15,12 @@ const validEnv = {
   CSRF_SECRET: "b".repeat(43),
 };
 
+// Fake keys: they name no Stripe account (.gitleaks.toml).
+const stripeTestKeys = {
+  STRIPE_SECRET_KEY: "sk_test_viraFakeSecret000000",
+  STRIPE_PUBLISHABLE_KEY: "pk_test_viraFakePublishable0",
+};
+
 const productionEnv = {
   NODE_ENV: "production",
   WEB_ORIGIN: "https://vira.example",
@@ -28,6 +34,7 @@ const productionEnv = {
   S3_SECRET_ACCESS_KEY: "key-secret",
   JWT_SECRET: "c".repeat(44),
   CSRF_SECRET: "d".repeat(44),
+  ...stripeTestKeys,
 };
 
 function captureError(env: NodeJS.ProcessEnv): ConfigValidationError {
@@ -57,6 +64,7 @@ describe("loadConfig", () => {
         accessKeyId: "vira-local",
         secretAccessKey: "vira-local-secret",
       },
+      payments: { mode: "test", stripe: undefined },
       worker: { mode: "separate", outboxPollIntervalMs: 5_000 },
       auth: {
         jwtSecret: validEnv.JWT_SECRET,
@@ -196,6 +204,70 @@ describe("loadConfig", () => {
     ]);
   });
 
+  describe("Stripe", () => {
+    it("takes a pair of test-mode keys", () => {
+      expect(loadConfig({ ...validEnv, ...stripeTestKeys }).payments).toEqual({
+        mode: "test",
+        stripe: {
+          secretKey: stripeTestKeys.STRIPE_SECRET_KEY,
+          publishableKey: stripeTestKeys.STRIPE_PUBLISHABLE_KEY,
+        },
+      });
+    });
+
+    it("refuses to start with live keys", () => {
+      const error = captureError({
+        ...validEnv,
+        STRIPE_SECRET_KEY: "sk_live_viraFakeSecret000000",
+        STRIPE_PUBLISHABLE_KEY: "pk_live_viraFakePublishable0",
+      });
+      expect(error.issues).toEqual([
+        {
+          variable: "STRIPE_SECRET_KEY",
+          message: "live keys are refused: PAYMENTS_MODE=test accepts only test-mode keys",
+        },
+        {
+          variable: "STRIPE_PUBLISHABLE_KEY",
+          message: "live keys are refused: PAYMENTS_MODE=test accepts only test-mode keys",
+        },
+      ]);
+      expect(error.message).not.toContain("viraFake");
+      expect(
+        captureError({
+          ...validEnv,
+          ...stripeTestKeys,
+          STRIPE_SECRET_KEY: "rk_live_viraFakeRestricted00",
+        }).issues.map((i) => i.variable),
+      ).toEqual(["STRIPE_SECRET_KEY"]);
+      expect(
+        captureError({ ...validEnv, ...stripeTestKeys, PAYMENTS_MODE: "live" }).issues.map(
+          (i) => i.variable,
+        ),
+      ).toEqual(["PAYMENTS_MODE"]);
+    });
+
+    it("refuses keys swapped or alone", () => {
+      expect(
+        captureError({
+          ...validEnv,
+          STRIPE_SECRET_KEY: stripeTestKeys.STRIPE_PUBLISHABLE_KEY,
+          STRIPE_PUBLISHABLE_KEY: stripeTestKeys.STRIPE_SECRET_KEY,
+        }).issues,
+      ).toEqual([
+        { variable: "STRIPE_SECRET_KEY", message: "must be a test-mode key (sk_test_...)" },
+        { variable: "STRIPE_PUBLISHABLE_KEY", message: "must be a test-mode key (pk_test_...)" },
+      ]);
+      expect(
+        captureError({ ...validEnv, STRIPE_SECRET_KEY: stripeTestKeys.STRIPE_SECRET_KEY }).issues,
+      ).toEqual([
+        {
+          variable: "STRIPE_PUBLISHABLE_KEY",
+          message: "STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY must be set together",
+        },
+      ]);
+    });
+  });
+
   describe("in production", () => {
     it("accepts encrypted connections and disables the API docs by default", () => {
       expect(loadConfig(productionEnv).docs.enabled).toBe(false);
@@ -236,6 +308,17 @@ describe("loadConfig", () => {
       const { MAIL_FROM: _omitted, ...withoutSender } = productionEnv;
       expect(captureError(withoutSender).issues).toEqual([
         { variable: "MAIL_FROM", message: "is required in production" },
+      ]);
+    });
+
+    it("requires the Stripe keys", () => {
+      const {
+        STRIPE_SECRET_KEY: _secret,
+        STRIPE_PUBLISHABLE_KEY: _publishable,
+        ...withoutStripe
+      } = productionEnv;
+      expect(captureError(withoutStripe).issues).toEqual([
+        { variable: "STRIPE_SECRET_KEY", message: "is required in production" },
       ]);
     });
 
