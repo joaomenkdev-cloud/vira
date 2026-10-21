@@ -278,8 +278,10 @@ export class PrismaEventRepository implements EventRepository {
   }
 
   async deleteUnsoldTicketType(ticketTypeId: string, tx?: TransactionContext): Promise<boolean> {
+    // A ticket type that was ever ordered stays: the order still shows its name (and the
+    // foreign key of `order_items` would refuse it anyway).
     const { count } = await clientFor(this.prisma, tx).ticketType.deleteMany({
-      where: { id: ticketTypeId, sold: 0, reserved: 0 },
+      where: { id: ticketTypeId, sold: 0, reserved: 0, orderItems: { none: {} } },
     });
     return count === 1;
   }

@@ -122,7 +122,7 @@ export interface EventRepository {
     tx?: TransactionContext,
   ): Promise<"updated" | "below-committed">;
 
-  /** Deletes the ticket type only if nothing of it is sold or reserved. */
+  /** Deletes the ticket type only if nothing of it is sold or reserved, nor was ever ordered. */
   deleteUnsoldTicketType(ticketTypeId: string, tx?: TransactionContext): Promise<boolean>;
 }
 

@@ -32,7 +32,7 @@ export class DeleteTicketType {
    *   someone else's.
    * @throws InvalidTransitionError when the event is canceled or ended, or it is the
    *   last ticket type of a published event.
-   * @throws InventoryConflictError when tickets of it are sold or reserved.
+   * @throws InventoryConflictError when tickets of it are sold, reserved or were ever ordered.
    */
   async execute(caller: Caller, ticketTypeId: string): Promise<void> {
     const organizerId = await this.scope.organizerIdOf(caller);
@@ -57,7 +57,7 @@ export class DeleteTicketType {
       }
       if (!(await this.events.deleteUnsoldTicketType(ticketTypeId, tx))) {
         throw new InventoryConflictError(
-          "Este tipo de ingresso já tem vendas ou reservas e não pode ser excluído.",
+          "Este tipo de ingresso já tem vendas, reservas ou pedidos e não pode ser excluído.",
         );
       }
     });
