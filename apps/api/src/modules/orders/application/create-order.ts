@@ -40,6 +40,7 @@ import {
   TicketTypeNotFoundError,
 } from "./errors.js";
 import { byTicketTypeId, OrderExpiry } from "./order-expiry.js";
+import { EXPIRATION_SCHEDULER, type ExpirationScheduler } from "./ports/expiration-scheduler.js";
 import { INVENTORY, type Inventory } from "./ports/inventory.js";
 import {
   type NewOrderItem,
@@ -68,7 +69,7 @@ export interface CreatedOrder {
  * one transaction: the stock of each ticket type is held by a conditional `UPDATE` (in
  * id order, so two orders never deadlock), and any refusal rolls back what was held
  * before it. The `Idempotency-Key` makes a retried request find the order it made instead
- * of making another (ADR-0006).
+ * of making another (ADR-0006). Once committed, the order's expiration is scheduled (V2).
  */
 @Injectable()
 export class CreateOrder {
@@ -82,6 +83,7 @@ export class CreateOrder {
     private readonly expiry: OrderExpiry,
     private readonly contacts: AccountContacts,
     private readonly audit: AuditLog,
+    @Inject(EXPIRATION_SCHEDULER) private readonly scheduler: ExpirationScheduler,
   ) {}
 
   /**
@@ -150,7 +152,8 @@ export class CreateOrder {
         );
       }
 
-      // One pending order per buyer and event; one whose time is up gives way.
+      // One pending order per buyer and event; one whose time is up gives way, even if its
+      // job has not run yet.
       const pending = await this.orders.findPending(caller.id, event.id, tx);
       if (pending && !(await this.expiry.expireIfOverdue(pending.id, now, tx))) {
         throw new PendingOrderExistsError(pending.id);
@@ -175,7 +178,14 @@ export class CreateOrder {
         const inserted = await this.orders.insert({ ...order, publicCode: newPublicCode() }, tx);
         if (inserted === "created") {
           const ticketCount = items.reduce((sum, item) => sum + item.quantity, 0);
-          return { orderId, replayed: false, totalCents: order.totalCents, ticketCount } as const;
+          return {
+            orderId,
+            replayed: false,
+            totalCents: order.totalCents,
+            ticketCount,
+            expiresAt: order.expiresAt,
+            expiredOrderId: pending?.id ?? null,
+          } as const;
         }
         // A concurrent request of the same buyer won the event's single pending slot.
         if (inserted === "pending-exists") throw new PendingOrderExistsError(null);
@@ -184,6 +194,13 @@ export class CreateOrder {
     });
 
     if (!outcome.replayed) {
+      if (outcome.expiredOrderId) {
+        await this.audit.record(
+          { action: "order.expired", entityId: outcome.expiredOrderId, metadata: {} },
+          { actor: "system" },
+        );
+      }
+      await this.scheduler.schedule(outcome.orderId, outcome.expiresAt);
       await this.audit.record(
         {
           action: "order.created",

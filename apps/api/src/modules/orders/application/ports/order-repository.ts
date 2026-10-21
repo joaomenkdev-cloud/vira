@@ -70,6 +70,34 @@ export interface OrderRepository {
    */
   markExpired(orderId: string, now: Date, tx: TransactionContext): Promise<HeldTickets[] | null>;
 
+  /**
+   * PENDING → CANCELED for its buyer, whatever time it has left; answers what it held, or
+   * `null` when it is not theirs or no longer pending.
+   */
+  markCanceled(
+    orderId: string,
+    buyerId: string,
+    now: Date,
+    tx: TransactionContext,
+  ): Promise<HeldTickets[] | null>;
+
+  /**
+   * Moves the end of the buyer's reservation from `expiresAt` to `newExpiresAt`, spending
+   * its single extension, if it is still pending at `now` and still ends at `expiresAt`
+   * (so two concurrent requests extend it once); answers whether it did.
+   */
+  extend(
+    orderId: string,
+    buyerId: string,
+    expiresAt: Date,
+    newExpiresAt: Date,
+    now: Date,
+    tx?: TransactionContext,
+  ): Promise<boolean>;
+
+  /** Pending orders whose time is up at `now`, the most overdue first. */
+  findOverdue(now: Date, limit: number): Promise<string[]>;
+
   findOwned(orderId: string, buyerId: string, tx?: TransactionContext): Promise<Order | null>;
 }
 

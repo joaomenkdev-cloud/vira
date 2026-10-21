@@ -21,7 +21,7 @@ import {
   TicketTypeNotFoundError,
 } from "./errors.js";
 import { GetOrder } from "./get-order.js";
-import { InMemoryOrderStore, type StockRow } from "./in-memory-orders.fakes.js";
+import { InMemoryOrderStore, RecordingScheduler, type StockRow } from "./in-memory-orders.fakes.js";
 import { OrderExpiry } from "./order-expiry.js";
 
 const ana: Caller = { id: "0192a0e4-0000-7000-8000-00000000a0a0", role: "BUYER" };
@@ -107,12 +107,25 @@ function setup() {
     ids,
   );
   const expiry = new OrderExpiry(store, store);
+  const scheduler = new RecordingScheduler();
   return {
     clock,
     advance,
     store,
     auditEntries,
-    create: new CreateOrder(store, store, store, limiter, clock, ids, expiry, contacts, audit),
+    scheduler,
+    create: new CreateOrder(
+      store,
+      store,
+      store,
+      limiter,
+      clock,
+      ids,
+      expiry,
+      contacts,
+      audit,
+      scheduler,
+    ),
     get: new GetOrder(store),
     reserved: (id: string) => store.stock.get(id)?.reserved,
     stockOf: (id: string) => {
@@ -337,6 +350,11 @@ describe("one pending order per buyer and event", () => {
     });
     expect(second.order.status).toBe("PENDING");
     expect(s.reserved(PISTA)).toBe(1);
+    expect(s.auditEntries.map((e) => [e["action"], e["entityId"], e["actorRole"]])).toEqual([
+      ["order.created", first.order.id, "BUYER"],
+      ["order.expired", first.order.id, "SYSTEM"],
+      ["order.created", second.order.id, "BUYER"],
+    ]);
   });
 });
 
@@ -360,6 +378,7 @@ describe("idempotency", () => {
     expect(s.reserved(PISTA)).toBe(2);
     expect(s.store.orders.size).toBe(1);
     expect(s.auditEntries).toHaveLength(1);
+    expect(s.scheduler.scheduled).toEqual([`${first.order.id} @ 2026-11-01T12:10:00.000Z`]);
   });
 
   it("refuses the same key with another request", async () => {
