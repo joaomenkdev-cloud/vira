@@ -94,6 +94,7 @@ model User {
   sessions           Session[]
   oauthAccounts      OAuthAccount[]
   organizerProfile   OrganizerProfile?
+  orders             Order[]
 
   @@map("users")
 }
@@ -242,6 +243,7 @@ model Event {
   organizer    OrganizerProfile @relation(fields: [organizerId], references: [id], onDelete: Restrict)
   ticketTypes  TicketType[]
   mediaUploads MediaUpload[]
+  orders       Order[]
 
   @@index([organizerId, createdAt])
   @@index([status, startsAt])
@@ -267,7 +269,8 @@ model TicketType {
   createdAt    DateTime  @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event      Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
 
   @@index([eventId, sortOrder])
   @@map("ticket_types")
@@ -303,4 +306,69 @@ model MediaUpload {
   @@index([status, expiresAt])
   @@index([eventId])
   @@map("media_uploads")
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELED
+  REFUNDED
+
+  @@map("order_status")
+}
+
+/// Purchases (docs/DATA_MODEL.md#orders). A PENDING order holds its tickets in
+/// `ticket_types.reserved` until `expiresAt` (ADR-0007). One pending order per buyer and
+/// event (a partial unique index), the timestamps of each status and the total's range
+/// are in the migration.
+model Order {
+  id                    String      @id @db.Uuid
+  publicCode            String      @unique @map("public_code")
+  buyerId               String      @map("buyer_id") @db.Uuid
+  eventId               String      @map("event_id") @db.Uuid
+  status                OrderStatus @default(PENDING)
+  totalCents            Int         @map("total_cents")
+  currency              String      @default("BRL") @db.Char(3)
+  expiresAt             DateTime    @map("expires_at") @db.Timestamptz(3)
+  extensionCount        Int         @default(0) @map("extension_count") @db.SmallInt
+  idempotencyKey        String      @map("idempotency_key")
+  /// SHA-256 of the normalized request body.
+  requestHash           Bytes       @map("request_hash")
+  stripePaymentIntentId String?     @unique @map("stripe_payment_intent_id")
+  /// Copies taken at purchase time, for the receipt. Personal data.
+  buyerName             String      @map("buyer_name")
+  buyerEmail            String      @map("buyer_email") @db.Citext
+  createdAt             DateTime    @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  paidAt                DateTime?   @map("paid_at") @db.Timestamptz(3)
+  expiredAt             DateTime?   @map("expired_at") @db.Timestamptz(3)
+  canceledAt            DateTime?   @map("canceled_at") @db.Timestamptz(3)
+  refundedAt            DateTime?   @map("refunded_at") @db.Timestamptz(3)
+
+  buyer User        @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  event Event       @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  items OrderItem[]
+
+  @@unique([buyerId, idempotencyKey])
+  @@index([buyerId, createdAt(sort: Desc)])
+  @@index([eventId, status])
+  @@map("orders")
+}
+
+/// The lines of an order (docs/DATA_MODEL.md#order_items), one per ticket type.
+model OrderItem {
+  id             String @id @db.Uuid
+  orderId        String @map("order_id") @db.Uuid
+  ticketTypeId   String @map("ticket_type_id") @db.Uuid
+  quantity       Int
+  /// Copy of the price when the tickets were reserved.
+  unitPriceCents Int    @map("unit_price_cents")
+
+  order      Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ticketType TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, ticketTypeId])
+  @@index([ticketTypeId])
+  @@map("order_items")
 }

@@ -120,6 +120,17 @@ describe("every application route declares an access policy", () => {
     });
   });
 
+  it("keeps orders to signed-in buyers", () => {
+    const orderRoutes = collectRoutes(testApp).filter((route) =>
+      route.name.includes("OrdersController"),
+    );
+    const buyer = { kind: "role", role: "BUYER" };
+    expect(Object.fromEntries(orderRoutes.map((route) => [route.name, route.policy]))).toEqual({
+      "POST OrdersController.create": buyer,
+      "GET OrdersController.get": buyer,
+    });
+  });
+
   it("keeps the storefront public", () => {
     const catalogRoutes = collectRoutes(testApp).filter((route) =>
       route.name.includes("CatalogController"),
