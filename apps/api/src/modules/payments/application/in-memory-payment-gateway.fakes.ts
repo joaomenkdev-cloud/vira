@@ -12,6 +12,8 @@ import {
 export class InMemoryPaymentGateway implements PaymentGateway {
   readonly intents = new Map<string, PaymentIntent & { readonly orderId: string }>();
   readonly created: NewPaymentIntent[] = [];
+  /** Refunds made, as `{paymentIntentId} {idempotencyKey}`, once per key. */
+  readonly refunds: string[] = [];
   down = false;
   private readonly byKey = new Map<string, string>();
 
@@ -31,6 +33,13 @@ export class InMemoryPaymentGateway implements PaymentGateway {
     this.intents.set(id, created);
     this.byKey.set(intent.idempotencyKey, id);
     return Promise.resolve(created);
+  }
+
+  refundPaymentIntent(paymentIntentId: string, idempotencyKey: string): Promise<void> {
+    if (this.down) return Promise.reject(new PaymentGatewayError("unreachable"));
+    const refund = `${paymentIntentId} ${idempotencyKey}`;
+    if (!this.refunds.includes(refund)) this.refunds.push(refund);
+    return Promise.resolve();
   }
 
   retrievePaymentIntent(id: string): Promise<PaymentIntent> {

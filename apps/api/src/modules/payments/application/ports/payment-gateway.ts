@@ -27,6 +27,12 @@ export interface PaymentGateway {
 
   /** @throws PaymentGatewayError when the provider cannot be reached or refuses the call. */
   retrievePaymentIntent(id: string): Promise<PaymentIntent>;
+
+  /**
+   * Refunds the whole PaymentIntent; the same idempotency key never refunds twice.
+   * @throws PaymentGatewayError when the provider cannot be reached or refuses the call.
+   */
+  refundPaymentIntent(paymentIntentId: string, idempotencyKey: string): Promise<void>;
 }
 
 export const PAYMENT_GATEWAY = Symbol("PAYMENT_GATEWAY");

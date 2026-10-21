@@ -134,6 +134,15 @@ describe("every application route declares an access policy", () => {
     });
   });
 
+  it("keeps the Stripe webhook public: its signature is what authenticates it", () => {
+    const webhookRoutes = collectRoutes(testApp).filter((route) =>
+      route.name.includes("StripeWebhookController"),
+    );
+    expect(Object.fromEntries(webhookRoutes.map((route) => [route.name, route.policy]))).toEqual({
+      "POST StripeWebhookController.webhook": { kind: "public" },
+    });
+  });
+
   it("keeps the storefront public", () => {
     const catalogRoutes = collectRoutes(testApp).filter((route) =>
       route.name.includes("CatalogController"),

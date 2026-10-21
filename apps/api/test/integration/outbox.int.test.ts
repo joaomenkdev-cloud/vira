@@ -152,7 +152,10 @@ describe.skipIf(!dockerAvailable)("transactional outbox (PostgreSQL + Redis)", (
 
   it("retries a failed message later, with exponential backoff", async () => {
     const orderId = newOrderId();
-    await outbox.publish({ type: "orders.refund_requested", payload: { orderId } });
+    await outbox.publish({
+      type: "orders.refund_requested",
+      payload: { orderId, paymentIntentId: "pi_3QabcDEF123" },
+    });
 
     publisher.failWith = new Error("redis\nunavailable");
     expect(await dispatch.execute()).toEqual({ dispatched: 0, failed: 1 });

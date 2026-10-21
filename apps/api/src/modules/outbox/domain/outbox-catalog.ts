@@ -31,7 +31,13 @@ export const OUTBOX_CATALOG = {
   /** Tickets exist; the buyer gets them by e-mail. */
   "tickets.issued": { queue: "email", payload: z.strictObject({ orderId: id }) },
   /** A late payment could not be honoured; the charge must be refunded. */
-  "orders.refund_requested": { queue: "payments", payload: z.strictObject({ orderId: id }) },
+  "orders.refund_requested": {
+    queue: "payments",
+    payload: z.strictObject({
+      orderId: id,
+      paymentIntentId: z.string().regex(/^pi_[A-Za-z0-9]+$/),
+    }),
+  },
 } as const satisfies Record<string, { queue: QueueName; payload: z.ZodType<object> }>;
 
 export type OutboxType = keyof typeof OUTBOX_CATALOG;

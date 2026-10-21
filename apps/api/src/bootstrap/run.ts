@@ -29,6 +29,8 @@ export async function run(env: NodeJS.ProcessEnv, options: RunOptions = {}): Pro
   const app = await NestFactory.create<NestExpressApplication>(AppModule.register({ config }), {
     bufferLogs: true,
     bodyParser: false,
+    // The JSON parser keeps the exact bytes too: Stripe signs what it sends (V4 webhook).
+    rawBody: true,
   });
   configureApp(app, config);
   await app.listen(config.http.port, config.http.host);

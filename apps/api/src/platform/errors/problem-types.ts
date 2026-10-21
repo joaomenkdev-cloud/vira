@@ -6,6 +6,7 @@ export const PROBLEM_TYPES = {
   "validation-failed": { status: 400, title: "Requisição inválida" },
   "breached-password": { status: 400, title: "Senha encontrada em vazamentos" },
   "incorrect-password": { status: 400, title: "Senha atual incorreta" },
+  "invalid-signature": { status: 400, title: "Assinatura do webhook inválida" },
   unauthenticated: { status: 401, title: "Autenticação necessária" },
   "invalid-credentials": { status: 401, title: "E-mail ou senha inválidos" },
   forbidden: { status: 403, title: "Acesso negado" },

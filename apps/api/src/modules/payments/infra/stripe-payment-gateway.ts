@@ -72,6 +72,14 @@ export class StripePaymentGateway implements PaymentGateway {
     }
   }
 
+  async refundPaymentIntent(paymentIntentId: string, idempotencyKey: string): Promise<void> {
+    try {
+      await this.client().refunds.create({ payment_intent: paymentIntentId }, { idempotencyKey });
+    } catch (error) {
+      throw gatewayError(error);
+    }
+  }
+
   private client(): Stripe {
     if (!this.stripe) throw new PaymentGatewayError("not configured");
     return this.stripe;

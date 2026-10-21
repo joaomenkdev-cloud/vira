@@ -4,6 +4,7 @@ import { AuthJobsModule } from "../modules/auth/auth.module.js";
 import { EventsJobsModule } from "../modules/events/events.module.js";
 import { OrdersJobsModule } from "../modules/orders/orders.module.js";
 import { OutboxPollerModule } from "../modules/outbox/outbox.module.js";
+import { PaymentsJobsModule } from "../modules/payments/payments.module.js";
 import { ConfigModule } from "../platform/config/config.module.js";
 import type { AppConfig } from "../platform/config/config.schema.js";
 import { DatabaseModule } from "../platform/database/database.module.js";
@@ -39,6 +40,7 @@ export class WorkerModule {
         AuthJobsModule,
         EventsJobsModule,
         OrdersJobsModule,
+        PaymentsJobsModule,
       ],
     };
   }
