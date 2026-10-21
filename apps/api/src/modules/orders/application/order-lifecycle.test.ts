@@ -17,6 +17,7 @@ import { OrderNotFoundError, OrderStateError } from "./errors.js";
 import { ExpireOrder } from "./expire-order.js";
 import { ExtendOrder } from "./extend-order.js";
 import { InMemoryOrderStore, RecordingScheduler } from "./in-memory-orders.fakes.js";
+import { OrderEvents, type PaidOrder } from "./order-events.js";
 import { OrderExpiry } from "./order-expiry.js";
 import { SettlePayment } from "./settle-payment.js";
 import { StartPayment } from "./start-payment.js";
@@ -131,7 +132,13 @@ function setup() {
   );
   const warnings: string[] = [];
   const logger = { warn: (_: unknown, msg: string) => warnings.push(msg) } as unknown as PinoLogger;
-  const settlePayment = new SettlePayment(store, store, clock, outbox, audit, logger);
+  const paidOrders: PaidOrder[] = [];
+  const orderEvents = new OrderEvents();
+  orderEvents.onOrderPaid((order) => {
+    paidOrders.push(order);
+    return Promise.resolve();
+  });
+  const settlePayment = new SettlePayment(store, store, clock, outbox, audit, orderEvents, logger);
   const scheduler = new RecordingScheduler();
   const gateway = new FakeGateway();
   let paymentHits = 0;
@@ -193,6 +200,7 @@ function setup() {
     gateway,
     startPayment,
     outboxMessages,
+    paidOrders,
     warnings,
     /** Applies a succeeded payment as the webhook does, then runs what follows the commit. */
     settle: async (
@@ -436,14 +444,25 @@ describe("settling a payment", () => {
       [0, 0],
       [2, 1],
     ]);
-    expect(s.outboxMessages).toEqual([
-      expect.objectContaining({ type: "orders.paid", payload: { orderId: id } }),
+    // Its tickets are issued in the same transaction, one per unit of each line.
+    const items = s.store.orders.get(id)?.items ?? [];
+    expect(s.paidOrders).toEqual([
+      {
+        orderId: id,
+        eventId: EVENT,
+        buyerName: "Ana",
+        lines: items.map((item) => ({
+          orderItemId: item.id,
+          ticketTypeId: item.ticketTypeId,
+          quantity: item.quantity,
+        })),
+      },
     ]);
 
     // Stripe may send the same payment in a second event: nothing changes.
     await s.settle(id, { paymentIntentId });
     expect(s.sold()).toEqual([2, 1]);
-    expect(s.outboxMessages).toHaveLength(1);
+    expect(s.paidOrders).toHaveLength(1);
     expect(s.auditEntries.map((e) => [e["action"], e["metadata"]])).toEqual([
       ["order.paid", { totalCents: 24000, paymentIntentId, late: false }],
     ]);
@@ -463,7 +482,7 @@ describe("settling a payment", () => {
     await s.settle("0192a0e4-2222-7000-8000-999999999999", { paymentIntentId });
     expect(s.statusOf(id)).toBe("PENDING");
     expect(s.held()).toEqual([2, 1]);
-    expect(s.outboxMessages).toEqual([]);
+    expect(s.paidOrders).toEqual([]);
     expect(s.warnings).toHaveLength(3);
   });
 
@@ -484,6 +503,7 @@ describe("settling a payment", () => {
       action: "order.paid",
       metadata: { late: true },
     });
+    expect(s.paidOrders.map((o) => o.orderId)).toEqual([id]);
   });
 
   it("refunds a late payment when a line sold out meanwhile, selling none of it", async () => {
@@ -525,5 +545,6 @@ describe("settling a payment", () => {
     expect(s.statusOf(id)).toBe("REFUNDED");
     expect(s.sold()).toEqual([0, 0]);
     expect(s.outboxMessages.map((m) => m.type)).toEqual(["orders.refund_requested"]);
+    expect(s.paidOrders).toEqual([]);
   });
 });

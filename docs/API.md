@@ -390,10 +390,12 @@ Fica fora do proxy do web, sem CSRF e sem cookies, e fora do OpenAPI; protegido 
 
 | Método | Rota | Papel | Sucesso | Erros |
 | --- | --- | --- | --- | --- |
-| GET | `/tickets` | BUYER | `200 { data: TicketSummary[], page }` — só ingressos de pedidos do próprio usuário; filtro `when=upcoming\|past` | 401 |
-| GET | `/tickets/{id}` | OWNER | `200 Ticket` com `qrToken` | 404 |
+| GET | `/tickets` | BUYER | `200 { data: TicketSummary[], page }` — só ingressos de pedidos do próprio usuário; `when=upcoming` (padrão: eventos que não terminaram, os mais próximos primeiro) ou `when=past` (os mais recentes primeiro); `limit` e `cursor` | 400, 401 |
+| GET | `/tickets/{id}` | OWNER | `200 Ticket` com `qrToken`, `Cache-Control: no-store` | 401, 404 |
 
-`Ticket`: `{ id, code, status, holderName, ticketType: { name }, event: EventSummary, usedAt, qrToken }`. O `qrToken` só é devolvido ao dono e nunca aparece em listagens, logs ou URLs.
+`TicketSummary`: `{ id, code, status, holderName, ticketType: { name }, event: { id, slug, title, startsAt, endsAt, timezone, venueName, venueCity, venueState }, orderId, issuedAt, usedAt }`. `Ticket` é o mesmo com `qrToken`, o conteúdo do QR Code (`v1.<kid>.<payload>.<sig>`, [ADR-0008](adr/0008-qr-code-assinado.md)). O `qrToken` só é devolvido ao dono e nunca aparece em listagens, logs, URLs ou e-mails. Ingresso de outra pessoa responde `404`, igual a um que não existe; o cursor da lista vale só para o mesmo comprador e o mesmo `when`.
+
+Emissão (V5): um ingresso por unidade de cada linha, na mesma transação do webhook que marca o pedido `PAID` (inclusive o pagamento tardio que ainda encontrou estoque), com código `VIRA-XXXX-XXXX` e nonce aleatórios. Em seguida o comprador recebe um e-mail com os códigos e o link para os ingressos (`/ingressos` no web, V7), pela outbox (`tickets.issued`).
 
 ### Check-in (`checkin`)
 

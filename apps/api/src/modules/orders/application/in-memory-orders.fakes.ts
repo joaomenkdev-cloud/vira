@@ -170,10 +170,12 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
     if (!row) return Promise.resolve(null);
     return Promise.resolve({
       id: row.id,
+      eventId: row.eventId,
       status: row.status,
       totalCents: row.totalCents,
       paymentIntentId: row.paymentIntentId,
-      items: row.items.map(({ ticketTypeId, quantity }) => ({ ticketTypeId, quantity })),
+      buyerName: row.buyerName,
+      items: row.items.map(({ id, ticketTypeId, quantity }) => ({ id, ticketTypeId, quantity })),
     });
   }
 

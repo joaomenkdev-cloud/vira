@@ -9,6 +9,7 @@ import { CreateOrder } from "./application/create-order.js";
 import { ExpireOrder } from "./application/expire-order.js";
 import { ExtendOrder } from "./application/extend-order.js";
 import { GetOrder } from "./application/get-order.js";
+import { OrderEvents } from "./application/order-events.js";
 import { OrderExpiry } from "./application/order-expiry.js";
 import { SettlePayment } from "./application/settle-payment.js";
 import { StartPayment } from "./application/start-payment.js";
@@ -42,12 +43,14 @@ const persistence = [
     StartPayment,
     SettlePayment,
     PaymentSubscriber,
+    OrderEvents,
     GetOrder,
     ExtendOrder,
     CancelOrder,
     ...persistence,
     { provide: EXPIRATION_SCHEDULER, useClass: BullMqExpirationScheduler },
   ],
+  exports: [OrderEvents],
 })
 export class OrdersModule {}
 

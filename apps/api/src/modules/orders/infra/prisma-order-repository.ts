@@ -184,25 +184,30 @@ export class PrismaOrderRepository implements OrderRepository {
     const rows = await client.$queryRaw<
       {
         id: string;
+        event_id: string;
         status: PayableOrder["status"];
         total_cents: number;
         stripe_payment_intent_id: string | null;
+        buyer_name: string;
       }[]
     >`
-      SELECT "id", "status", "total_cents", "stripe_payment_intent_id"
+      SELECT "id", "event_id", "status", "total_cents", "stripe_payment_intent_id", "buyer_name"
         FROM "orders" WHERE "id" = ${orderId}::uuid
          FOR UPDATE`;
     const row = rows[0];
     if (!row) return null;
     const items = await client.orderItem.findMany({
       where: { orderId },
-      select: { ticketTypeId: true, quantity: true },
+      select: { id: true, ticketTypeId: true, quantity: true },
+      orderBy: { ticketTypeId: "asc" },
     });
     return {
       id: row.id,
+      eventId: row.event_id,
       status: row.status,
       totalCents: row.total_cents,
       paymentIntentId: row.stripe_payment_intent_id,
+      buyerName: row.buyer_name,
       items,
     };
   }

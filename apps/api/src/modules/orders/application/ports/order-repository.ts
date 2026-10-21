@@ -27,10 +27,17 @@ export interface NewOrderItem {
 /** An order as a payment finds it, locked until the transaction ends. */
 export interface PayableOrder {
   readonly id: string;
+  readonly eventId: string;
   readonly status: Order["status"];
   readonly totalCents: number;
   readonly paymentIntentId: string | null;
-  readonly items: readonly HeldTickets[];
+  readonly buyerName: string;
+  readonly items: readonly PayableItem[];
+}
+
+/** A line of an order being paid. */
+export interface PayableItem extends HeldTickets {
+  readonly id: string;
 }
 
 /** What a pending order held, to give it back. */

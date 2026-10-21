@@ -134,6 +134,17 @@ describe("every application route declares an access policy", () => {
     });
   });
 
+  it("keeps tickets to signed-in buyers", () => {
+    const ticketRoutes = collectRoutes(testApp).filter((route) =>
+      route.name.includes("TicketsController"),
+    );
+    const buyer = { kind: "role", role: "BUYER" };
+    expect(Object.fromEntries(ticketRoutes.map((route) => [route.name, route.policy]))).toEqual({
+      "GET TicketsController.list": buyer,
+      "GET TicketsController.get": buyer,
+    });
+  });
+
   it("keeps the Stripe webhook public: its signature is what authenticates it", () => {
     const webhookRoutes = collectRoutes(testApp).filter((route) =>
       route.name.includes("StripeWebhookController"),

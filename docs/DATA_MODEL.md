@@ -338,9 +338,9 @@ Regra anti-açambarcamento: no máximo **1 pedido `PENDING` por comprador por ev
 | `checked_in_by` | uuid | FK → users (operador) | — |
 | `issued_at`, `canceled_at` | timestamptz | | Não |
 
-Índices: `UNIQUE(code)`, `(order_id)`, `(event_id, status)`. `CHECK ((status = 'USED') = (used_at IS NOT NULL))`.
+Índices: `UNIQUE(code)`, `(order_id)`, `(order_item_id)`, `(event_id, status)`, `(ticket_type_id)`, `(checked_in_by)`. `CHECK`s: formato do `code`, `holder_name` com 1–120 caracteres, `qr_nonce` com 16 bytes, `(status = 'USED') = (used_at IS NOT NULL)`, `(status = 'CANCELED') = (canceled_at IS NOT NULL)`, `checked_in_by` só com `used_at`. Todas as FKs são `ON DELETE RESTRICT`.
 
-Tickets só são criados na transação que marca o pedido como `PAID`. Não existe caminho de código que crie ticket para pedido em outro estado; um trigger `BEFORE INSERT` confere `orders.status = 'PAID'` como defesa adicional.
+Tickets só são criados na transação que marca o pedido como `PAID` (V5), um por unidade de cada linha. Não existe caminho de código que crie ticket para pedido em outro estado; um trigger `BEFORE INSERT` confere, como defesa adicional, que o pedido está `PAID`, que a linha é do pedido e do mesmo tipo de ingresso, que o evento é o do pedido e que a linha ainda não tem todos os seus ingressos. Até os titulares existirem (V6), o titular é o nome do comprador copiado no pedido.
 
 ### `checkin_attempts`
 
@@ -370,7 +370,7 @@ Não guardamos o payload (pode conter dados de cobrança). O `INSERT` acontece n
 
 | Campo | Tipo | Regras |
 | --- | --- | --- |
-| `type` | text | `CHECK` no formato `area.evento`. Catálogo em `apps/api/src/modules/outbox/domain/outbox-catalog.ts`, que também fixa a fila de destino e o schema do payload. Ex.: `orders.paid`, `tickets.issued`, `orders.refund_requested` |
+| `type` | text | `CHECK` no formato `area.evento`. Catálogo em `apps/api/src/modules/outbox/domain/outbox-catalog.ts`, que também fixa a fila de destino e o schema do payload. Ex.: `tickets.issued`, `orders.refund_requested` |
 | `payload` | jsonb | Somente IDs — nunca dados pessoais; o consumidor busca o resto. `CHECK`: sempre um objeto JSON; schema estrito por tipo na aplicação |
 | `created_at` | timestamptz | |
 | `available_at` | timestamptz | Momento da próxima tentativa; começa igual a `created_at` e avança com o backoff a cada falha |

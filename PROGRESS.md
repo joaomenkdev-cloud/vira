@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 2 — MVP público v1.0 (o Marco 1 terminou com a N13).
-- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V3 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#38) e Dependabot (#4–#7, #9 CodeQL v4). V4 no PR do webhook (`feat/payments-webhook`).
-- **Entregas abertas:** V4.
-- **Próximo passo:** V5 — Emissão de ingressos (`feat/tickets-issuance`).
+- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V4 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#39) e Dependabot (#4–#7, #9 CodeQL v4). V5 no PR da emissão de ingressos (`feat/tickets-issuance`).
+- **Entregas abertas:** V5.
+- **Próximo passo:** V6 — Checkout (`feat/web-checkout`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,27 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-21 — V5: emissão de ingressos
+
+Auditoria (antes de codar): não existia a tabela `tickets` nem o módulo; a outbox tinha `orders.paid` (fila `tickets`, sem consumidor) e `tickets.issued` (fila `email`). Titulares (`PUT /orders/{id}/holders`) só entram na V6.
+
+Feito (API e docs; não mexe no web):
+
+- Migração `tickets` (enum `ticket_status`, `CHECK`s de formato, nonce de 16 bytes, carimbos por status) e trigger `BEFORE INSERT` que recusa ingresso de pedido não `PAID`, de outra linha/tipo/evento ou além da quantidade da linha.
+- Emissão na transação do webhook: `orders` expõe `OrderEvents` (API pública), `tickets` se inscreve e emite um ingresso por unidade, com código `VIRA-XXXX-XXXX` e nonce aleatórios (código já usado → sorteia outro, até 5 tentativas) e `tickets.issued` na outbox. `orders.paid` saiu do catálogo da outbox.
+- Token do QR (ADR-0008): `v1.<kid>.<payload>.<sig>`, HMAC-SHA256, chaves em `QR_SIGNING_KEYS` (`kid:chave`, a primeira assina, todas verificam), só base64url canônico (sem duas grafias do mesmo token).
+- `GET /tickets` (`when=upcoming|past`, cursor preso ao comprador e ao filtro) e `GET /tickets/{id}` (só o dono, com `qrToken`, `Cache-Control: no-store`).
+- E-mail com os códigos dos ingressos e link para `/ingressos` (página na V7), pelo worker; sem o token do QR.
+- Testes: token (assina/verifica, rotação, **cada troca de 1 caractere em qualquer posição → recusado**, kid desconhecido, formato), códigos, emissão com fakes (colisão de código, desistência após 5), e-mail; integração: webhook → 3 ingressos para 3 unidades, lista e detalhe só para o dono (`404`/lista vazia para outro, `401` sem sessão), QR verificando com a chave da config, e-mail pelo worker, paginação com cursor recusado para outro comprador, trigger recusando pedido pendente, outra linha e excesso, e pagamento reembolsado sem ingressos.
+
+Decisões tomadas por conta própria:
+
+- **Titular = nome do comprador** até a V6 trazer os titulares.
+- **O evento do ingresso é um resumo próprio** (com local), não o `EventSummary` da vitrine, que exige a URL da imagem.
+- **`orders.paid` removido da outbox** em vez de manter uma fila sem consumidor; os testes da outbox passaram a usar `tickets.issued`.
+- **Lista padrão `upcoming`**; o e-mail não leva o QR (só quem entra na conta vê o token).
+- Ficam para depois: titulares (V6), página de ingressos (V7), validação no check-in (V8), anonimização do titular (V9).
 
 ### 2026-10-21 — V4: webhook do Stripe
 
