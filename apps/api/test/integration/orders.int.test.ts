@@ -1,4 +1,10 @@
-import { orderSchema, paymentSessionSchema, problemDetailsSchema } from "@vira/shared";
+import {
+  orderSchema,
+  paymentSessionSchema,
+  problemDetailsSchema,
+  ticketListSchema,
+  ticketSchema,
+} from "@vira/shared";
 import Stripe from "stripe";
 import request, { type Response } from "supertest";
 import { v7 as uuidv7 } from "uuid";
@@ -8,7 +14,11 @@ import { ExpireOrder } from "../../src/modules/orders/application/expire-order.j
 import { OrderSweeper } from "../../src/modules/orders/infra/order-sweeper.js";
 import { InMemoryPaymentGateway } from "../../src/modules/payments/application/in-memory-payment-gateway.fakes.js";
 import { PAYMENT_GATEWAY } from "../../src/modules/payments/application/ports/payment-gateway.js";
+import { verifyQrToken } from "../../src/modules/tickets/domain/qr-token.js";
+import { APP_CONFIG } from "../../src/platform/config/config.module.js";
+import type { AppConfig } from "../../src/platform/config/config.schema.js";
 import { PrismaService } from "../../src/platform/database/prisma.service.js";
+import { MAILER, type MailMessage } from "../../src/platform/mail/mailer.js";
 import { problemTypeUri, type ProblemType } from "../../src/platform/errors/problem-types.js";
 import type { RateLimiter } from "../../src/platform/rate-limit/rate-limiter.js";
 import { RATE_LIMITER } from "../../src/platform/rate-limit/rate-limiter.js";
@@ -89,6 +99,14 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
   let testApp: TestApp;
   let prisma: PrismaService;
   const gateway = new InMemoryPaymentGateway();
+  /** The e-mails the embedded worker sent. */
+  const mails: MailMessage[] = [];
+  const mailer = {
+    send: (message: MailMessage) => {
+      mails.push(message);
+      return Promise.resolve();
+    },
+  };
   const api = () => request(testApp.app.getHttpServer());
 
   /** A signed-in buyer: an account and the bearer header of a session of theirs. */
@@ -222,7 +240,9 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
           .overrideProvider(RATE_LIMITER)
           .useValue(unlimited)
           .overrideProvider(PAYMENT_GATEWAY)
-          .useValue(gateway),
+          .useValue(gateway)
+          .overrideProvider(MAILER)
+          .useValue(mailer),
     });
     prisma = testApp.app.get(PrismaService);
     // Listening once: concurrent requests would otherwise each start the server.
@@ -839,7 +859,8 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
       const paid = orderSchema.parse((await ana.get(`/orders/${order.id}`).expect(200)).body);
       expect(paid).toMatchObject({ status: "PAID", paidAt: clock.current.toISOString() });
       expect(await stockOf(pista)).toMatchObject({ reserved: 0, sold: 2 });
-      expect((await outboxOf(order.id)).filter((t) => t === "orders.paid")).toHaveLength(1);
+      expect((await outboxOf(order.id)).filter((t) => t === "tickets.issued")).toHaveLength(1);
+      expect(await prisma.ticket.count({ where: { orderId: order.id } })).toBe(2);
       expect(await prisma.processedWebhookEvent.count({ where: { id: event.eventId } })).toBe(1);
       const audit = await prisma.auditLog.findMany({
         where: { action: { in: ["order.paid", "payment.webhook_processed"] } },
@@ -931,6 +952,205 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
       await eventually(() =>
         Promise.resolve(gateway.refunds.includes(`${paymentIntentId} refund:${order.id}`)),
       );
+    });
+  });
+
+  describe("tickets (V5)", () => {
+    const deliver = ({ payload, signature }: { payload: string; signature: string }) =>
+      api()
+        .post("/api/v1/payments/stripe/webhook")
+        .set("Content-Type", "application/json")
+        .set("Stripe-Signature", signature)
+        .send(payload);
+
+    /** A paid order of 2 "Pista" and 1 "Camarote" of `ana`. */
+    async function paidOrder() {
+      const {
+        eventId,
+        ticketTypeIds: [pista, camarote],
+      } = await publishedEvent([
+        { name: "Pista", priceCents: 8000, capacity: 10 },
+        { name: "Camarote", priceCents: 20000, capacity: 5 },
+      ]);
+      const ana = await buyer();
+      const order = orderSchema.parse(
+        (
+          await ana
+            .order({
+              eventId,
+              items: [
+                { ticketTypeId: pista, quantity: 2 },
+                { ticketTypeId: camarote, quantity: 1 },
+              ],
+            })
+            .expect(201)
+        ).body,
+      );
+      await ana.post(`/orders/${order.id}/payment`).expect(200);
+      const { stripePaymentIntentId } = await prisma.order.findUniqueOrThrow({
+        where: { id: order.id },
+      });
+      await deliver(succeededEvent(order.id, stripePaymentIntentId ?? "", 36000)).expect(200);
+      return { eventId, pista, camarote, ana, order };
+    }
+
+    it("issues one ticket per unit in the payment, and shows them only to their buyer", async () => {
+      const { eventId, ana, order } = await paidOrder();
+
+      const rows = await prisma.ticket.findMany({ where: { orderId: order.id } });
+      expect(rows).toHaveLength(3);
+      for (const row of rows) {
+        expect(row).toMatchObject({
+          eventId,
+          status: "VALID",
+          holderName: "Compradora",
+          issuedAt: clock.current,
+        });
+        expect(row.code).toMatch(/^VIRA-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
+        expect(row.qrNonce).toHaveLength(16);
+      }
+
+      const list = ticketListSchema.parse(
+        (await ana.get("/tickets?when=upcoming").expect(200)).body,
+      );
+      expect(list.data.map((t) => t.ticketType.name).sort()).toEqual([
+        "Camarote",
+        "Pista",
+        "Pista",
+      ]);
+      expect(list.data[0]).toMatchObject({
+        orderId: order.id,
+        holderName: "Compradora",
+        event: { id: eventId, title: "Noite de forró", venueCity: "Rio de Janeiro" },
+        usedAt: null,
+      });
+      expect(JSON.stringify(list)).not.toContain("qrToken");
+      expect(
+        ticketListSchema.parse((await ana.get("/tickets?when=past").expect(200)).body).data,
+      ).toEqual([]);
+
+      const first = list.data[0];
+      if (!first) throw new Error("no ticket");
+      const response = await ana.get(`/tickets/${first.id}`).expect(200);
+      expect(response.headers["cache-control"]).toBe("no-store");
+      const ticket = ticketSchema.parse(response.body);
+      const keys = testApp.app.get<AppConfig>(APP_CONFIG).tickets.qrSigningKeys;
+      const claims = verifyQrToken(ticket.qrToken, keys);
+      const row = rows.find((r) => r.id === first.id);
+      expect(claims).toEqual({ ticketId: first.id, nonce: Buffer.from(row?.qrNonce ?? []) });
+
+      // Someone else's ticket is not found, nor listed.
+      const bia = await buyer();
+      expectProblem(await bia.get(`/tickets/${first.id}`).expect(404), "not-found");
+      expect(ticketListSchema.parse((await bia.get("/tickets").expect(200)).body).data).toEqual([]);
+      expectProblem(await api().get(`/api/v1/tickets/${first.id}`).expect(401), "unauthenticated");
+
+      // The buyer gets them by e-mail, through the outbox and the worker.
+      const mail = await eventually(() =>
+        Promise.resolve(mails.find((m) => rows.every((r) => m.text.includes(r.code)))),
+      );
+      expect(mail.to).toBe(`c-${ana.userId}@exemplo.com`);
+      expect(mail.text).not.toContain(ticket.qrToken);
+    });
+
+    it("pages through the tickets with a cursor bound to the buyer", async () => {
+      const { ana } = await paidOrder();
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      do {
+        const query: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+        const page = ticketListSchema.parse(
+          (await ana.get(`/tickets?limit=2${query}`).expect(200)).body,
+        );
+        seen.push(...page.data.map((t) => t.id));
+        cursor = page.page.nextCursor;
+        if (cursor) {
+          // Carried to another buyer's list, the cursor is refused.
+          const bia = await buyer();
+          expectProblem(
+            await bia.get(`/tickets?limit=2&cursor=${encodeURIComponent(cursor)}`).expect(400),
+            "validation-failed",
+          );
+        }
+      } while (cursor);
+      expect(seen).toHaveLength(3);
+      expect(new Set(seen).size).toBe(3);
+    });
+
+    it("never issues a ticket for an unpaid order, another order's line or beyond the line", async () => {
+      const { pista, camarote, order } = await paidOrder();
+      const items = await prisma.orderItem.findMany({ where: { orderId: order.id } });
+      const pistaLine = items.find((i) => i.ticketTypeId === pista);
+      const camaroteLine = items.find((i) => i.ticketTypeId === camarote);
+      if (!pistaLine || !camaroteLine) throw new Error("no lines");
+      const event = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+      const ticket = (overrides: object) => ({
+        id: uuidv7(),
+        orderId: order.id,
+        orderItemId: pistaLine.id,
+        eventId: event.eventId,
+        ticketTypeId: pista,
+        code: `VIRA-${uuidv7()
+          .slice(-8, -4)
+          .toUpperCase()
+          .replace(/[ILOU]/g, "0")}-0000`,
+        holderName: "Intrusa",
+        qrNonce: new Uint8Array(16),
+        issuedAt: clock.current,
+        ...overrides,
+      });
+
+      // The line already has its 2 tickets.
+      await expect(prisma.ticket.create({ data: ticket({}) })).rejects.toThrow(/all its tickets/);
+      // Another line's ticket type.
+      await expect(
+        prisma.ticket.create({ data: ticket({ ticketTypeId: camarote }) }),
+      ).rejects.toThrow(/does not match/);
+
+      // A pending order of someone else.
+      const { eventId, ticketTypeIds } = await publishedEvent([{ name: "Pista", capacity: 5 }]);
+      const bia = await buyer();
+      const pending = orderSchema.parse(
+        (
+          await bia
+            .order({ eventId, items: [{ ticketTypeId: ticketTypeIds[0], quantity: 1 }] })
+            .expect(201)
+        ).body,
+      );
+      const [pendingLine] = await prisma.orderItem.findMany({ where: { orderId: pending.id } });
+      await expect(
+        prisma.ticket.create({
+          data: ticket({
+            orderId: pending.id,
+            orderItemId: pendingLine?.id,
+            eventId,
+            ticketTypeId: ticketTypeIds[0],
+          }),
+        }),
+      ).rejects.toThrow(/only for PAID orders/);
+      expect(await prisma.ticket.count({ where: { holderName: "Intrusa" } })).toBe(0);
+    });
+
+    it("issues no ticket for a payment that is refunded", async () => {
+      const {
+        ticketTypeIds: [pista],
+        eventId,
+      } = await publishedEvent([{ name: "Pista", capacity: 5 }]);
+      const ana = await buyer();
+      const order = orderSchema.parse(
+        (await ana.order({ eventId, items: [{ ticketTypeId: pista, quantity: 1 }] }).expect(201))
+          .body,
+      );
+      await ana.post(`/orders/${order.id}/payment`).expect(200);
+      await ana.post(`/orders/${order.id}/cancel`).expect(200);
+      const { stripePaymentIntentId } = await prisma.order.findUniqueOrThrow({
+        where: { id: order.id },
+      });
+      await deliver(succeededEvent(order.id, stripePaymentIntentId ?? "", 8000)).expect(200);
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe(
+        "REFUNDED",
+      );
+      expect(await prisma.ticket.count({ where: { orderId: order.id } })).toBe(0);
     });
   });
 });
