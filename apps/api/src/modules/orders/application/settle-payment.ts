@@ -6,6 +6,7 @@ import { CLOCK, type Clock } from "../../../platform/runtime/runtime.js";
 import { AuditLog } from "../../audit/application/public-api.js";
 import { Outbox } from "../../outbox/application/public-api.js";
 import type { AfterCommit, SucceededPayment } from "../../payments/application/public-api.js";
+import { OrderEvents } from "./order-events.js";
 import { byTicketTypeId } from "./order-expiry.js";
 import { INVENTORY, type Inventory } from "./ports/inventory.js";
 import {
@@ -20,7 +21,7 @@ import {
  * way an order becomes PAID. The order row is locked first, so the expiration and the buyer
  * canceling wait for it, or it sees what they did:
  *
- * - PENDING → PAID: the held tickets become sold.
+ * - PENDING → PAID: the held tickets become sold, and the tickets are issued.
  * - EXPIRED (a late payment): the tickets are sold again if they are still there → PAID;
  *   otherwise → REFUNDED, and a job refunds the payment.
  * - CANCELED (paid after giving up) → REFUNDED, refunded by the same job.
@@ -34,6 +35,7 @@ export class SettlePayment {
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly outbox: Outbox,
     private readonly audit: AuditLog,
+    private readonly events: OrderEvents,
     @InjectPinoLogger(SettlePayment.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -85,7 +87,20 @@ export class SettlePayment {
         await this.inventory.sell(item.ticketTypeId, item.quantity, tx);
       }
     }
-    await this.outbox.publish({ type: "orders.paid", payload: { orderId: order.id } }, tx);
+    // The tickets are issued in this same transaction (V5): a paid order always has them.
+    await this.events.orderPaid(
+      {
+        orderId: order.id,
+        eventId: order.eventId,
+        buyerName: order.buyerName,
+        lines: order.items.map((item) => ({
+          orderItemId: item.id,
+          ticketTypeId: item.ticketTypeId,
+          quantity: item.quantity,
+        })),
+      },
+      tx,
+    );
     const paymentIntentId = order.paymentIntentId ?? "";
     return () =>
       this.audit.record(

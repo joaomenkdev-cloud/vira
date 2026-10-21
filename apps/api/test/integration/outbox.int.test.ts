@@ -88,7 +88,7 @@ describe.skipIf(!dockerAvailable)("transactional outbox (PostgreSQL + Redis)", (
   it("dispatches a committed message to its queue exactly once", async () => {
     const orderId = newOrderId();
     await transactions.run((tx) =>
-      outbox.publish({ type: "orders.paid", payload: { orderId } }, tx),
+      outbox.publish({ type: "tickets.issued", payload: { orderId } }, tx),
     );
 
     expect(await dispatch.execute()).toEqual({ dispatched: 1, failed: 0 });
@@ -97,11 +97,11 @@ describe.skipIf(!dockerAvailable)("transactional outbox (PostgreSQL + Redis)", (
     expect(row).toMatchObject({ attempts: 1, lastError: null });
     expect(row?.dispatchedAt).toEqual(clock.current);
 
-    const job = await queues.queue("tickets").getJob(row?.id ?? "");
-    expect(job?.name).toBe("orders.paid");
+    const job = await queues.queue("email").getJob(row?.id ?? "");
+    expect(job?.name).toBe("tickets.issued");
     expect(outboxJobDataSchema.parse(job?.data)).toEqual({
       messageId: row?.id,
-      type: "orders.paid",
+      type: "tickets.issued",
       payload: { orderId },
     });
 
@@ -116,7 +116,7 @@ describe.skipIf(!dockerAvailable)("transactional outbox (PostgreSQL + Redis)", (
 
     await expect(
       transactions.run(async (tx) => {
-        await outbox.publish({ type: "orders.paid", payload: { orderId } }, tx);
+        await outbox.publish({ type: "tickets.issued", payload: { orderId } }, tx);
         throw new Error("payment could not be recorded");
       }),
     ).rejects.toThrow("payment could not be recorded");
@@ -129,7 +129,7 @@ describe.skipIf(!dockerAvailable)("transactional outbox (PostgreSQL + Redis)", (
   it("rejects a message with an invalid payload before touching the database", async () => {
     const before = await prisma.outboxMessage.count();
     await expect(
-      outbox.publish({ type: "orders.paid", payload: { orderId: "not-a-uuid" } }),
+      outbox.publish({ type: "tickets.issued", payload: { orderId: "not-a-uuid" } }),
     ).rejects.toThrow(/Invalid outbox event/);
     expect(await prisma.outboxMessage.count()).toBe(before);
   });
@@ -184,7 +184,7 @@ describe.skipIf(!dockerAvailable)("transactional outbox (PostgreSQL + Redis)", (
     await prisma.outboxMessage.create({
       data: {
         id: uuidv7(),
-        type: "orders.paid",
+        type: "tickets.issued",
         payload: { orderId },
         createdAt: new Date("2026-10-01T00:00:00Z"),
         availableAt: new Date("2026-10-01T00:00:00Z"),
@@ -230,12 +230,12 @@ describe.skipIf(!dockerAvailable)("transactional outbox (PostgreSQL + Redis)", (
     ).rejects.toThrow(/outbox_messages_type_format/);
     await expect(
       prisma.outboxMessage.create({
-        data: { ...base, id: uuidv7(), type: "orders.paid", payload: [] },
+        data: { ...base, id: uuidv7(), type: "tickets.issued", payload: [] },
       }),
     ).rejects.toThrow(/outbox_messages_payload_is_object/);
     await expect(
       prisma.outboxMessage.create({
-        data: { ...base, id: uuidv7(), type: "orders.paid", dispatchedAt: clock.current },
+        data: { ...base, id: uuidv7(), type: "tickets.issued", dispatchedAt: clock.current },
       }),
     ).rejects.toThrow(/outbox_messages_dispatched_after_attempt/);
   });

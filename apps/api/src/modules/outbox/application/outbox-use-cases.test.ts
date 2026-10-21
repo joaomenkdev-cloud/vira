@@ -49,12 +49,12 @@ describe("Outbox", () => {
     const repository = new InMemoryOutboxRepository();
     const outbox = new Outbox(repository, clock, ids());
 
-    await outbox.publish({ type: "orders.paid", payload: { orderId } }, tx);
+    await outbox.publish({ type: "tickets.issued", payload: { orderId } }, tx);
 
     expect(repository.messages).toEqual([
       {
         id: "0192a0e4-0000-7000-8000-000000000001",
-        type: "orders.paid",
+        type: "tickets.issued",
         payload: { orderId },
         createdAt: now,
         attempts: 0,
@@ -68,7 +68,7 @@ describe("Outbox", () => {
     const outbox = new Outbox(repository, clock, ids());
 
     await expect(
-      outbox.publish({ type: "orders.paid", payload: { orderId: "nope" } }),
+      outbox.publish({ type: "tickets.issued", payload: { orderId: "nope" } }),
     ).rejects.toBeInstanceOf(InvalidOutboxEventError);
     expect(repository.messages).toEqual([]);
   });
@@ -79,7 +79,7 @@ describe("DispatchOutbox", () => {
     const repository = new InMemoryOutboxRepository();
     const outbox = new Outbox(repository, clock, ids());
     for (let i = 0; i < count; i++) {
-      await outbox.publish({ type: "orders.paid", payload: { orderId } });
+      await outbox.publish({ type: "tickets.issued", payload: { orderId } });
     }
     return repository;
   }

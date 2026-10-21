@@ -18,10 +18,10 @@ const orderId = "0192a0e4-0000-7000-8000-0000000000bb";
 
 describe("buildOutboxMessage", () => {
   it("builds an immutable message that has not been attempted", () => {
-    const message = buildOutboxMessage({ type: "orders.paid", payload: { orderId } }, stamp);
+    const message = buildOutboxMessage({ type: "tickets.issued", payload: { orderId } }, stamp);
     expect(message).toEqual({
       id: stamp.id,
-      type: "orders.paid",
+      type: "tickets.issued",
       payload: { orderId },
       createdAt: stamp.createdAt,
       attempts: 0,
@@ -40,7 +40,7 @@ describe("buildOutboxMessage", () => {
 
   it("rejects malformed ids without echoing the value", () => {
     const event = {
-      type: "orders.paid",
+      type: "tickets.issued",
       payload: { orderId: "maria@example.com" },
     } as unknown as OutboxEvent;
     try {

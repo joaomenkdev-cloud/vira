@@ -64,7 +64,7 @@ describe.skipIf(!dockerAvailable)("worker modes (PostgreSQL + Redis)", () => {
     const testApp = await createTestApp({ env: { ...env, WORKER_MODE: "embedded" } });
     try {
       const orderId = uuidv7();
-      await testApp.app.get(Outbox).publish({ type: "orders.paid", payload: { orderId } });
+      await testApp.app.get(Outbox).publish({ type: "tickets.issued", payload: { orderId } });
 
       const row = await eventually(() => dispatched(testApp.app.get(PrismaService), orderId));
       expect(row.attempts).toBe(1);
@@ -77,7 +77,7 @@ describe.skipIf(!dockerAvailable)("worker modes (PostgreSQL + Redis)", () => {
     const testApp = await createTestApp({ env });
     try {
       const orderId = uuidv7();
-      await testApp.app.get(Outbox).publish({ type: "orders.paid", payload: { orderId } });
+      await testApp.app.get(Outbox).publish({ type: "tickets.issued", payload: { orderId } });
       await new Promise((resolve) => setTimeout(resolve, 1_000));
 
       expect(await dispatched(testApp.app.get(PrismaService), orderId)).toBeNull();
@@ -90,7 +90,7 @@ describe.skipIf(!dockerAvailable)("worker modes (PostgreSQL + Redis)", () => {
     // An API in separate mode only records the message; the worker has to deliver it.
     const api = await createTestApp({ env });
     const orderId = uuidv7();
-    await api.app.get(Outbox).publish({ type: "orders.paid", payload: { orderId } });
+    await api.app.get(Outbox).publish({ type: "tickets.issued", payload: { orderId } });
 
     const config = loadConfig({
       NODE_ENV: "test",
