@@ -96,3 +96,13 @@ export const orderSchema = z
 export type CreateOrderRequest = z.infer<typeof createOrderRequestSchema>;
 export type OrderBody = z.infer<typeof orderSchema>;
 export type OrderItemBody = z.infer<typeof orderItemSchema>;
+
+/** What the browser needs to show the Payment Element: never the PaymentIntent's id. */
+export const paymentSessionSchema = z
+  .strictObject({
+    clientSecret: z.string(),
+    publishableKey: z.string().startsWith("pk_test_"),
+  })
+  .meta({ id: "PaymentSession" });
+
+export type PaymentSessionBody = z.infer<typeof paymentSessionSchema>;

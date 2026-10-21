@@ -4,6 +4,10 @@ import {
   RateLimitExceededError,
 } from "../../../platform/rate-limit/rate-limiter.js";
 import {
+  PaymentGatewayError,
+  PaymentsUnavailableError,
+} from "../../payments/application/public-api.js";
+import {
   BuyerNotFoundError,
   EventNotFoundError,
   IdempotencyKeyReusedError,
@@ -60,6 +64,11 @@ export async function asProblem<T>(work: () => Promise<T>): Promise<T> {
     if (error instanceof InvalidOrderError) {
       throw new ProblemException("validation-failed", {
         errors: [{ path: error.path, message: error.detail }],
+      });
+    }
+    if (error instanceof PaymentsUnavailableError || error instanceof PaymentGatewayError) {
+      throw new ProblemException("payments-unavailable", {
+        detail: "Não foi possível iniciar o pagamento agora. Tente de novo em instantes.",
       });
     }
     if (error instanceof RateLimitExceededError) {

@@ -31,6 +31,7 @@ type OrderRow = Omit<NewOrder, "expiresAt"> & {
   extensionCount: number;
   expiredAt: Date | null;
   canceledAt: Date | null;
+  paymentIntentId: string | null;
 };
 
 /** Remembers what was scheduled, as `{orderId} @ {ISO end}`. */
@@ -102,6 +103,7 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
       extensionCount: 0,
       expiredAt: null,
       canceledAt: null,
+      paymentIntentId: null,
     });
     return Promise.resolve("created");
   }
@@ -148,6 +150,12 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
     return Promise.resolve(true);
   }
 
+  attachPaymentIntent(orderId: string, paymentIntentId: string): Promise<void> {
+    const row = this.orders.get(orderId);
+    if (row?.paymentIntentId === null) row.paymentIntentId = paymentIntentId;
+    return Promise.resolve();
+  }
+
   findOverdue(now: Date, limit: number): Promise<string[]> {
     return Promise.resolve(
       [...this.orders.values()]
@@ -178,6 +186,7 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
       extensionCount: row.extensionCount,
       createdAt: row.createdAt,
       paidAt: null,
+      paymentIntentId: row.paymentIntentId,
     });
   }
 

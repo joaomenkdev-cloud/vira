@@ -1,10 +1,12 @@
-import { orderSchema, problemDetailsSchema } from "@vira/shared";
+import { orderSchema, paymentSessionSchema, problemDetailsSchema } from "@vira/shared";
 import request, { type Response } from "supertest";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ExpireOrder } from "../../src/modules/orders/application/expire-order.js";
 import { OrderSweeper } from "../../src/modules/orders/infra/order-sweeper.js";
+import { InMemoryPaymentGateway } from "../../src/modules/payments/application/in-memory-payment-gateway.fakes.js";
+import { PAYMENT_GATEWAY } from "../../src/modules/payments/application/ports/payment-gateway.js";
 import { PrismaService } from "../../src/platform/database/prisma.service.js";
 import { problemTypeUri, type ProblemType } from "../../src/platform/errors/problem-types.js";
 import type { RateLimiter } from "../../src/platform/rate-limit/rate-limiter.js";
@@ -55,6 +57,7 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
   let infrastructure: Infrastructure;
   let testApp: TestApp;
   let prisma: PrismaService;
+  const gateway = new InMemoryPaymentGateway();
   const api = () => request(testApp.app.getHttpServer());
 
   /** A signed-in buyer: an account and the bearer header of a session of theirs. */
@@ -174,13 +177,18 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
         DATABASE_URL: infrastructure.databaseUrl,
         REDIS_URL: infrastructure.redisUrl,
         WORKER_MODE: "embedded",
+        // Fake keys (.gitleaks.toml): Stripe itself is replaced by the in-memory gateway.
+        STRIPE_SECRET_KEY: "sk_test_viraFakeSecret000000",
+        STRIPE_PUBLISHABLE_KEY: "pk_test_viraFakePublishable0",
       },
       override: (builder) =>
         builder
           .overrideProvider(CLOCK)
           .useValue(clock)
           .overrideProvider(RATE_LIMITER)
-          .useValue(unlimited),
+          .useValue(unlimited)
+          .overrideProvider(PAYMENT_GATEWAY)
+          .useValue(gateway),
     });
     prisma = testApp.app.get(PrismaService);
     // Listening once: concurrent requests would otherwise each start the server.
@@ -673,6 +681,84 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
         await ana.post(`/orders/${order.id}/extend`).expect(409),
         "invalid-state-transition",
       );
+    });
+  });
+
+  describe("starting the payment (V3)", () => {
+    it("opens one PaymentIntent with the total stored in the order, whatever the price is now", async () => {
+      const {
+        eventId,
+        ticketTypeIds: [pista],
+      } = await publishedEvent([{ name: "Pista", priceCents: 8000, capacity: 10 }]);
+      const ana = await buyer();
+      const order = orderSchema.parse(
+        (await ana.order({ eventId, items: [{ ticketTypeId: pista, quantity: 2 }] }).expect(201))
+          .body,
+      );
+      // The organizer raises the price after the reservation: the order keeps its own.
+      await prisma.ticketType.update({ where: { id: pista }, data: { priceCents: 9900 } });
+
+      const responses = await Promise.all(
+        Array.from({ length: 3 }, () => ana.post(`/orders/${order.id}/payment`)),
+      );
+      const sessions = responses.map((r) => {
+        expect(r.status).toBe(200);
+        return paymentSessionSchema.parse(r.body);
+      });
+      expect(new Set(sessions.map((s) => s.clientSecret)).size).toBe(1);
+      expect(sessions[0]?.publishableKey).toBe("pk_test_viraFakePublishable0");
+      const created = gateway.created.filter((intent) => intent.orderId === order.id);
+      expect(created).toEqual([
+        {
+          orderId: order.id,
+          amountCents: 16000,
+          currency: "BRL",
+          idempotencyKey: `pi:${order.id}`,
+        },
+      ]);
+      const row = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+      expect(row.stripePaymentIntentId).toMatch(/^pi_fake/);
+      // Paying is only started: nothing but Stripe's webhook marks it paid (V4).
+      expect(row.status).toBe("PENDING");
+
+      advance(1);
+      const again = paymentSessionSchema.parse(
+        (await ana.post(`/orders/${order.id}/payment`).expect(200)).body,
+      );
+      expect(again).toEqual(sessions[0]);
+    });
+
+    it("refuses what cannot be paid and what is someone else's", async () => {
+      const {
+        eventId,
+        ticketTypeIds: [pista],
+      } = await publishedEvent([{ name: "Pista", capacity: 10 }]);
+      const ana = await buyer();
+      const order = orderSchema.parse(
+        (await ana.order({ eventId, items: [{ ticketTypeId: pista, quantity: 1 }] }).expect(201))
+          .body,
+      );
+      expectProblem(
+        await (await buyer()).post(`/orders/${order.id}/payment`).expect(404),
+        "not-found",
+      );
+
+      gateway.down = true;
+      try {
+        expectProblem(
+          await ana.post(`/orders/${order.id}/payment`).expect(503),
+          "payments-unavailable",
+        );
+      } finally {
+        gateway.down = false;
+      }
+
+      advance(10);
+      expectProblem(
+        await ana.post(`/orders/${order.id}/payment`).expect(409),
+        "invalid-state-transition",
+      );
+      expect(gateway.created.some((intent) => intent.orderId === order.id)).toBe(false);
     });
   });
 });

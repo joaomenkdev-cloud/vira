@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
+import type { AppConfig } from "../../../platform/config/config.schema.js";
+import type { RateLimiter } from "../../../platform/rate-limit/rate-limiter.js";
+import { RateLimitExceededError } from "../../../platform/rate-limit/rate-limiter.js";
 import { AuditLog } from "../../audit/application/public-api.js";
+import {
+  PaymentGatewayError,
+  PaymentIntents,
+  PaymentsUnavailableError,
+} from "../../payments/application/public-api.js";
 import type { Caller } from "./buyer.js";
 import { CancelOrder } from "./cancel-order.js";
 import { OrderNotFoundError, OrderStateError } from "./errors.js";
@@ -8,6 +16,7 @@ import { ExpireOrder } from "./expire-order.js";
 import { ExtendOrder } from "./extend-order.js";
 import { InMemoryOrderStore, RecordingScheduler } from "./in-memory-orders.fakes.js";
 import { OrderExpiry } from "./order-expiry.js";
+import { StartPayment } from "./start-payment.js";
 import { SweepExpiredOrders } from "./sweep-expired-orders.js";
 
 const ana: Caller = { id: "0192a0e4-0000-7000-8000-00000000a0a0", role: "BUYER" };
@@ -16,6 +25,46 @@ const EVENT = "0192a0e4-0000-7000-8000-0000000e0001";
 const PISTA = "0192a0e4-0000-7000-8000-0000000f0002";
 const CAMAROTE = "0192a0e4-0000-7000-8000-0000000f0001";
 const T0 = new Date("2026-11-01T12:00:00Z");
+// A fake key: it names no Stripe account (.gitleaks.toml).
+const PUBLISHABLE_KEY = "pk_test_viraFakePublishable0";
+
+type Gateway = ConstructorParameters<typeof PaymentIntents>[0];
+type NewIntent = Parameters<Gateway["createPaymentIntent"]>[0];
+
+/** Stripe as the orders see it: one PaymentIntent per idempotency key. */
+class FakeGateway implements Gateway {
+  readonly created: NewIntent[] = [];
+  down = false;
+
+  createPaymentIntent(intent: NewIntent) {
+    if (this.down) return Promise.reject(new PaymentGatewayError("unreachable"));
+    let index = this.created.findIndex((c) => c.idempotencyKey === intent.idempotencyKey);
+    if (index < 0) index = this.created.push(intent) - 1;
+    return this.retrievePaymentIntent(`pi_fake${String(index + 1).padStart(4, "0")}`);
+  }
+
+  retrievePaymentIntent(id: string) {
+    if (this.down) return Promise.reject(new PaymentGatewayError("unreachable"));
+    const intent = this.created[Number(id.slice(-4)) - 1];
+    if (!intent) return Promise.reject(new PaymentGatewayError("invalid_request_error"));
+    return Promise.resolve({
+      id,
+      clientSecret: `${id}_secret_fake`,
+      amountCents: intent.amountCents,
+      status: "requires_payment_method",
+    });
+  }
+}
+
+const paymentsConfig = (stripe: boolean) =>
+  ({
+    payments: {
+      mode: "test",
+      stripe: stripe
+        ? { secretKey: "sk_test_viraFakeSecret000000", publishableKey: PUBLISHABLE_KEY }
+        : undefined,
+    },
+  }) as AppConfig;
 
 function setup() {
   const clock = { current: T0, now: () => clock.current };
@@ -63,6 +112,21 @@ function setup() {
     ids,
   );
   const scheduler = new RecordingScheduler();
+  const gateway = new FakeGateway();
+  let paymentHits = 0;
+  const limiter: RateLimiter = {
+    hit: (rule) => {
+      paymentHits++;
+      return Promise.resolve({
+        allowed: paymentHits <= rule.limit,
+        limit: rule.limit,
+        remaining: Math.max(0, rule.limit - paymentHits),
+        resetSeconds: 60,
+      });
+    },
+  };
+  const startPayment = (stripe = true) =>
+    new StartPayment(store, limiter, clock, new PaymentIntents(gateway, paymentsConfig(stripe)));
   const expireOrder = new ExpireOrder(store, clock, new OrderExpiry(store, store), audit);
 
   /** A pending order of `buyer` made now, holding 2 "Pista" and 1 "Camarote". */
@@ -105,6 +169,8 @@ function setup() {
     sweep: new SweepExpiredOrders(store, clock, expireOrder),
     extend: new ExtendOrder(store, scheduler, clock),
     cancel: new CancelOrder(store, store, store, clock, audit),
+    gateway,
+    startPayment,
     held: () => [store.stock.get(PISTA)?.reserved, store.stock.get(CAMAROTE)?.reserved],
     statusOf: (id: string) => store.orders.get(id)?.status,
   };
@@ -259,5 +325,62 @@ describe("canceling an order", () => {
     await expect(s.cancel.execute(bia, id)).rejects.toThrow(OrderNotFoundError);
     expect(s.statusOf(id)).toBe("PENDING");
     expect(s.held()).toEqual([2, 1]);
+  });
+});
+
+describe("starting the payment", () => {
+  it("creates one PaymentIntent for the order's stored total, and answers it again", async () => {
+    const s = setup();
+    const id = await s.pendingOrder();
+    const first = await s.startPayment().execute(ana, id);
+    expect(first).toEqual({
+      paymentIntentId: "pi_fake0001",
+      clientSecret: "pi_fake0001_secret_fake",
+      publishableKey: PUBLISHABLE_KEY,
+    });
+    expect(s.gateway.created).toEqual([
+      { orderId: id, amountCents: 24000, currency: "BRL", idempotencyKey: `pi:${id}` },
+    ]);
+    expect(s.store.orders.get(id)?.paymentIntentId).toBe("pi_fake0001");
+
+    s.advance(2);
+    expect(await s.startPayment().execute(ana, id)).toEqual(first);
+    expect(s.gateway.created).toHaveLength(1);
+    expect(s.statusOf(id)).toBe("PENDING");
+  });
+
+  it("refuses an order that is no longer pending or whose time is up", async () => {
+    const s = setup();
+    const canceled = await s.pendingOrder(ana);
+    await s.cancel.execute(ana, canceled);
+    await expect(s.startPayment().execute(ana, canceled)).rejects.toThrow(OrderStateError);
+
+    const overdue = await s.pendingOrder(bia);
+    s.advance(10);
+    await expect(s.startPayment().execute(bia, overdue)).rejects.toThrow(OrderStateError);
+    expect(s.gateway.created).toEqual([]);
+  });
+
+  it("does not find someone else's order", async () => {
+    const s = setup();
+    const id = await s.pendingOrder(ana);
+    await expect(s.startPayment().execute(bia, id)).rejects.toThrow(OrderNotFoundError);
+    expect(s.gateway.created).toEqual([]);
+  });
+
+  it("says payments are off without Stripe keys, and when Stripe fails", async () => {
+    const s = setup();
+    const id = await s.pendingOrder();
+    await expect(s.startPayment(false).execute(ana, id)).rejects.toThrow(PaymentsUnavailableError);
+    s.gateway.down = true;
+    await expect(s.startPayment().execute(ana, id)).rejects.toThrow(PaymentGatewayError);
+    expect(s.store.orders.get(id)?.paymentIntentId).toBeNull();
+  });
+
+  it("counts the calls against the account's budget", async () => {
+    const s = setup();
+    const id = await s.pendingOrder();
+    for (let i = 0; i < 10; i++) await s.startPayment().execute(ana, id);
+    await expect(s.startPayment().execute(ana, id)).rejects.toThrow(RateLimitExceededError);
   });
 });
