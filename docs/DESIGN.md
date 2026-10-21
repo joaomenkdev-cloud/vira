@@ -668,7 +668,7 @@ Fluxo: **seleção na página do evento → reserva (10 min) → dados → pagam
 │ vira●       Explorar   Meus ingressos                          [Avatar]    │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ ‹ Meus ingressos                                                           │
-│ ┌────────────────────────────────────┐   Pedido VIRA-ORD-3F8A              │
+│ ┌────────────────────────────────────┐   Pedido VIRA-ORD-3F8A-K2QX         │
 │ │ ▓▓▓▓▓▓▓▓ faixa da imagem ▓▓▓▓▓▓▓▓▓ │   Pago em 10/03/2026 · R$ 160,00    │
 │ │ SÁB, 14 MAR 2026                   │                                     │
 │ │ Nome do Evento                     │   Ingressos deste pedido            │
