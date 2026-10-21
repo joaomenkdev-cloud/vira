@@ -45,6 +45,16 @@ function oauthClient(
 /** S3 credentials: opaque strings issued by the storage provider (R2 API token, SeaweedFS). */
 const storageCredentialSchema = z.string().trim().min(1).max(512);
 
+/**
+ * Stripe keys (ADR-0006). Only test-mode keys are accepted: the demo must never move real
+ * money. A live key is refused by name, so the error says why.
+ */
+const STRIPE_KEY_PATTERN = {
+  STRIPE_SECRET_KEY: /^sk_test_[A-Za-z0-9]{10,255}$/,
+  STRIPE_PUBLISHABLE_KEY: /^pk_test_[A-Za-z0-9]{10,255}$/,
+} as const;
+const stripeKeySchema = z.string().trim().max(300).optional();
+
 function usesTls(databaseUrl: string): boolean {
   const sslMode = new URL(databaseUrl).searchParams.get("sslmode");
   return sslMode !== null && ENCRYPTED_SSL_MODES.has(sslMode);
@@ -83,6 +93,9 @@ export const envSchema = z
     S3_BUCKET: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/),
     S3_ACCESS_KEY_ID: storageCredentialSchema,
     S3_SECRET_ACCESS_KEY: storageCredentialSchema,
+    PAYMENTS_MODE: z.enum(["test"]).default("test"),
+    STRIPE_SECRET_KEY: stripeKeySchema,
+    STRIPE_PUBLISHABLE_KEY: stripeKeySchema,
   })
   .superRefine((env, ctx) => {
     // One key per purpose: a CSRF token must never verify as a JWT signature, or vice versa.
@@ -102,7 +115,34 @@ export const envSchema = z
         });
       }
     }
+    for (const [variable, pattern] of Object.entries(STRIPE_KEY_PATTERN)) {
+      const key = env[variable as keyof typeof STRIPE_KEY_PATTERN];
+      if (key === undefined || pattern.test(key)) continue;
+      ctx.addIssue({
+        code: "custom",
+        path: [variable],
+        message: /^(sk|pk|rk)_live_/.test(key)
+          ? "live keys are refused: PAYMENTS_MODE=test accepts only test-mode keys"
+          : `must be a test-mode key (${variable === "STRIPE_SECRET_KEY" ? "sk_test_" : "pk_test_"}...)`,
+      });
+    }
+    if ((env.STRIPE_SECRET_KEY === undefined) !== (env.STRIPE_PUBLISHABLE_KEY === undefined)) {
+      ctx.addIssue({
+        code: "custom",
+        path: [
+          env.STRIPE_SECRET_KEY === undefined ? "STRIPE_SECRET_KEY" : "STRIPE_PUBLISHABLE_KEY",
+        ],
+        message: "STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY must be set together",
+      });
+    }
     if (env.NODE_ENV !== "production") return;
+    if (env.STRIPE_SECRET_KEY === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["STRIPE_SECRET_KEY"],
+        message: "is required in production",
+      });
+    }
     // Every hop is encrypted in production (docs/SECURITY_MODEL.md, ASVS V12).
     if (!env.WEB_ORIGIN.startsWith("https://")) {
       ctx.addIssue({
@@ -176,6 +216,17 @@ export const envSchema = z
       bucket: env.S3_BUCKET,
       accessKeyId: env.S3_ACCESS_KEY_ID,
       secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+    },
+    /**
+     * Stripe, in test mode only (ADR-0006). Without keys (development, tests) payments are
+     * off: starting one answers `503`.
+     */
+    payments: {
+      mode: env.PAYMENTS_MODE,
+      stripe:
+        env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY
+          ? { secretKey: env.STRIPE_SECRET_KEY, publishableKey: env.STRIPE_PUBLISHABLE_KEY }
+          : undefined,
     },
     worker: { mode: env.WORKER_MODE, outboxPollIntervalMs: env.OUTBOX_POLL_INTERVAL_MS },
     auth: {

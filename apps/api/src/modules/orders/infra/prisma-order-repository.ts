@@ -45,6 +45,7 @@ function orderOf(row: OrderRow): Order {
     extensionCount: row.extensionCount,
     createdAt: row.createdAt,
     paidAt: row.paidAt,
+    paymentIntentId: row.stripePaymentIntentId,
   };
 }
 
@@ -173,6 +174,14 @@ export class PrismaOrderRepository implements OrderRepository {
       data: { expiresAt: newExpiresAt, extensionCount: 1 },
     });
     return count === 1;
+  }
+
+  async attachPaymentIntent(orderId: string, paymentIntentId: string): Promise<void> {
+    // Only the first one sticks; the Stripe idempotency key makes any other call answer it.
+    await this.prisma.order.updateMany({
+      where: { id: orderId, stripePaymentIntentId: null },
+      data: { stripePaymentIntentId: paymentIntentId },
+    });
   }
 
   async findOverdue(now: Date, limit: number): Promise<string[]> {

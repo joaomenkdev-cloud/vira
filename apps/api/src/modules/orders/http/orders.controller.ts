@@ -17,6 +17,8 @@ import {
   idempotencyKeySchema,
   type OrderBody,
   orderSchema,
+  type PaymentSessionBody,
+  paymentSessionSchema,
   problemDetailsSchema,
   resourceIdSchema,
 } from "@vira/shared";
@@ -30,6 +32,7 @@ import { CancelOrder } from "../application/cancel-order.js";
 import { CreateOrder } from "../application/create-order.js";
 import { ExtendOrder } from "../application/extend-order.js";
 import { GetOrder } from "../application/get-order.js";
+import { StartPayment } from "../application/start-payment.js";
 import { ORDERS_RATE_LIMITS } from "../application/rate-limits.js";
 import { orderBody } from "./bodies.js";
 import { asProblem } from "./problems.js";
@@ -59,6 +62,7 @@ export class OrdersController {
     private readonly getOrder: GetOrder,
     private readonly extendOrder: ExtendOrder,
     private readonly cancelOrder: CancelOrder,
+    private readonly startPayment: StartPayment,
   ) {}
 
   @Post()
@@ -116,6 +120,29 @@ export class OrdersController {
     @Req() request: Request,
   ): Promise<OrderBody> {
     return orderBody(await asProblem(() => this.getOrder.execute(callerOf(request), id)));
+  }
+
+  @Post(":id/payment")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Inicia o pagamento do pedido (PaymentIntent do Stripe, modo de teste)",
+    description:
+      "Devolve o `clientSecret` do PaymentIntent do pedido e a chave publicável para o " +
+      "Payment Element. O valor é o total gravado no pedido. Chamar de novo devolve o " +
+      "mesmo PaymentIntent. O pedido só vira `PAID` pelo webhook do Stripe.",
+  })
+  @ApiResponse({ status: HttpStatus.OK, standardSchema: paymentSessionSchema })
+  @problem(HttpStatus.UNAUTHORIZED)
+  @problem(HttpStatus.NOT_FOUND)
+  @problem(HttpStatus.CONFLICT)
+  @problem(HttpStatus.TOO_MANY_REQUESTS)
+  @problem(HttpStatus.SERVICE_UNAVAILABLE)
+  async payment(
+    @Param("id", { schema: resourceIdSchema }) id: string,
+    @Req() request: Request,
+  ): Promise<PaymentSessionBody> {
+    const session = await asProblem(() => this.startPayment.execute(callerOf(request), id));
+    return { clientSecret: session.clientSecret, publishableKey: session.publishableKey };
   }
 
   @Post(":id/extend")

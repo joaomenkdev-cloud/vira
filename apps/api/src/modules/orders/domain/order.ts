@@ -34,6 +34,8 @@ export interface Order {
   readonly extensionCount: number;
   readonly createdAt: Date;
   readonly paidAt: Date | null;
+  /** Its Stripe PaymentIntent, once payment started (never shown to the buyer as such). */
+  readonly paymentIntentId: string | null;
 }
 
 export function subtotalCents(item: Pick<OrderItem, "quantity" | "unitPriceCents">): number {

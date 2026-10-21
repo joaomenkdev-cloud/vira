@@ -6,11 +6,14 @@ useDefault = true
 description = "Documentation placeholders and local-only development credentials"
 paths = ['''\.env\.example$''']
 # Exact local-only values from docker-compose.yml and infra/seaweedfs/s3.json, and the
-# signing keys the API tests use (apps/api/test/support/create-test-app.ts).
+# signing keys the API tests use (apps/api/test/support/create-test-app.ts), and the fake
+# Stripe keys of the tests (they name no Stripe account).
 # Never add real credentials here.
 regexes = [
   '''vira-local-secret''',
   '''vira_local''',
   '''test-jwt-secret-0123456789-abcdefghijklmnopqrstuvwxyz''',
   '''test-csrf-secret-0123456789-abcdefghijklmnopqrstuvwxyz''',
+  '''(sk|pk|rk)_(test|live)_viraFake[A-Za-z0-9]*''',
+  '''pi_[A-Za-z0-9]+_secret_viraFake[A-Za-z0-9]*''',
 ]

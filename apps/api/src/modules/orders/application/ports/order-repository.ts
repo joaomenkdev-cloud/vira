@@ -95,6 +95,9 @@ export interface OrderRepository {
     tx?: TransactionContext,
   ): Promise<boolean>;
 
+  /** Records the order's PaymentIntent, unless it already has one. */
+  attachPaymentIntent(orderId: string, paymentIntentId: string): Promise<void>;
+
   /** Pending orders whose time is up at `now`, the most overdue first. */
   findOverdue(now: Date, limit: number): Promise<string[]>;
 

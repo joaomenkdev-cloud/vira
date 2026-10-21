@@ -27,6 +27,7 @@ export const PROBLEM_TYPES = {
   "sales-closed": { status: 422, title: "Vendas encerradas" },
   "rate-limited": { status: 429, title: "Muitas requisições" },
   "internal-error": { status: 500, title: "Erro interno" },
+  "payments-unavailable": { status: 503, title: "Pagamentos indisponíveis no momento" },
 } as const satisfies Record<string, { status: number; title: string }>;
 
 export type ProblemType = keyof typeof PROBLEM_TYPES;

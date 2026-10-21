@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { AuditModule } from "../audit/audit.module.js";
+import { PaymentsModule } from "../payments/payments.module.js";
 import { UsersModule } from "../users/users.module.js";
 import { CancelOrder } from "./application/cancel-order.js";
 import { CreateOrder } from "./application/create-order.js";
@@ -8,6 +9,7 @@ import { ExpireOrder } from "./application/expire-order.js";
 import { ExtendOrder } from "./application/extend-order.js";
 import { GetOrder } from "./application/get-order.js";
 import { OrderExpiry } from "./application/order-expiry.js";
+import { StartPayment } from "./application/start-payment.js";
 import { EXPIRATION_SCHEDULER } from "./application/ports/expiration-scheduler.js";
 import { INVENTORY } from "./application/ports/inventory.js";
 import { ORDER_REPOSITORY } from "./application/ports/order-repository.js";
@@ -25,12 +27,16 @@ const persistence = [
   { provide: INVENTORY, useClass: PrismaInventory },
 ];
 
-/** The buyer's orders: the reservation of tickets (V1), its extension and cancellation (V2). */
+/**
+ * The buyer's orders: the reservation of tickets (V1), its extension and cancellation (V2)
+ * and the start of its payment (V3).
+ */
 @Module({
-  imports: [AuditModule, UsersModule],
+  imports: [AuditModule, UsersModule, PaymentsModule],
   controllers: [OrdersController],
   providers: [
     CreateOrder,
+    StartPayment,
     GetOrder,
     ExtendOrder,
     CancelOrder,

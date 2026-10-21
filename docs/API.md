@@ -117,6 +117,7 @@ Todo erro é `application/problem+json`:
 | <a id="unsupported-media-type"></a>`unsupported-media-type` | 415 | `Content-Type` não aceito pela rota |
 | <a id="rate-limited"></a>`rate-limited` | 429 | Limite excedido |
 | <a id="internal-error"></a>`internal-error` | 500 | Falha inesperada |
+| <a id="payments-unavailable"></a>`payments-unavailable` | 503 | Não deu para iniciar o pagamento: o Stripe não respondeu ou recusou a chamada, ou o ambiente não tem chaves do Stripe (desenvolvimento e testes) |
 
 ## Endpoints
 
@@ -338,13 +339,13 @@ Publicar, editar e mexer em tipos de ingresso travam a linha do evento (`SELECT 
 | GET | `/orders` | BUYER | `limit`, `cursor` | `200 { data: OrderSummary[], page }` — **só os próprios** | 401 | — |
 | GET | `/orders/{id}` | OWNER | — | `200 Order` | 404 | — |
 | PUT | `/orders/{id}/holders` | OWNER | `{ holders: [{ orderItemId, names: string[] }] }` | `200 Order` | 400, 404, 409 (não PENDING) | — |
-| POST | `/orders/{id}/payment` | OWNER | — | `200 { clientSecret, publishableKey }` | 404, 409 (não PENDING ou titulares faltando) | 10/min/conta |
+| POST | `/orders/{id}/payment` | OWNER | — | `200 { clientSecret, publishableKey }` | 404, 409 (não PENDING ou titulares faltando), 429, 503 | 10/min/conta |
 | POST | `/orders/{id}/extend` | OWNER | — | `200 Order` (novo `expiresAt`) | 404, 409 (já estendido, fora da janela de 2 min) | — |
 | POST | `/orders/{id}/cancel` | OWNER | — | `200 Order` (CANCELED) | 404, 409 | — |
 
 `Order`: `{ id, publicCode, status, event: { id, slug, title, startsAt, endsAt, timezone }, items: [{ id, ticketTypeId, name, quantity, unitPrice: Money, subtotal: Money }], total: Money, expiresAt, extensionAvailable, createdAt, paidAt }`. Os titulares (`holders`) entram com `PUT /orders/{id}/holders`. O pedido nunca mostra as cópias do nome e do e-mail do comprador nem a `Idempotency-Key`.
 
-Entregue na V1: `POST /orders` e `GET /orders/{id}`; na V2, `POST /orders/{id}/extend` e `POST /orders/{id}/cancel`. As outras rotas chegam com o pagamento (V3) e o checkout (V6).
+Entregue na V1: `POST /orders` e `GET /orders/{id}`; na V2, `POST /orders/{id}/extend` e `POST /orders/{id}/cancel`; na V3, `POST /orders/{id}/payment`. As outras rotas chegam com o checkout (V6).
 
 | `POST /orders` | Regra |
 | --- | --- |
@@ -362,6 +363,8 @@ Entregue na V1: `POST /orders` e `GET /orders/{id}`; na V2, `POST /orders/{id}/e
 | `POST /orders/{id}/extend` | Só `PENDING`, uma vez por pedido e nos 2 minutos finais: `expiresAt` ganha +10 min e `extensionAvailable` vira `false`; os ingressos continuam segurados. Cedo demais, já estendido ou reserva vencida (mesmo antes de o job rodar): `409 invalid-state-transition`, com o motivo em `detail`. Requisições simultâneas estendem uma vez só |
 | `POST /orders/{id}/cancel` | `PENDING` → `CANCELED` (mesmo com o prazo vencido), estoque devolvido na mesma transação; audita `order.canceled`. Repetir devolve o pedido cancelado (`200`). Pago, expirado ou reembolsado: `409 invalid-state-transition` |
 | De outro comprador | `404`, como nas outras rotas |
+
+`POST /orders/{id}/payment` (V3, ADR-0006): só `PENDING` com a reserva em andamento (senão `409 invalid-state-transition`). Na primeira chamada cria o PaymentIntent do pedido no Stripe (modo de teste) com o **total gravado no pedido**, `metadata.orderId` e a idempotency key `pi:{orderId}`, e grava o id em `orders.stripe_payment_intent_id`; as seguintes devolvem o mesmo PaymentIntent. A resposta traz só o `clientSecret` e a chave publicável, para o Payment Element. Pagar não muda o pedido: ele só vira `PAID` pelo webhook (V4). Sem as chaves do Stripe no ambiente, ou com o Stripe fora do ar, `503 payments-unavailable`. A verificação dos titulares entra com `PUT /orders/{id}/holders` (V6).
 
 A reserva termina sozinha: um job com delay até `expiresAt` passa o pedido para `EXPIRED` e devolve o estoque, com uma varredura a cada minuto como rede de segurança (ARCHITECTURE, seção 6). A expiração é auditada (`order.expired`, ator `SYSTEM`).
 

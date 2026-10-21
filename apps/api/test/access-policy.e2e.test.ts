@@ -128,6 +128,7 @@ describe("every application route declares an access policy", () => {
     expect(Object.fromEntries(orderRoutes.map((route) => [route.name, route.policy]))).toEqual({
       "POST OrdersController.create": buyer,
       "GET OrdersController.get": buyer,
+      "POST OrdersController.payment": buyer,
       "POST OrdersController.extend": buyer,
       "POST OrdersController.cancel": buyer,
     });
