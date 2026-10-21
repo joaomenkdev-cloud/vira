@@ -3,11 +3,14 @@ import request, { type Response } from "supertest";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { ExpireOrder } from "../../src/modules/orders/application/expire-order.js";
+import { OrderSweeper } from "../../src/modules/orders/infra/order-sweeper.js";
 import { PrismaService } from "../../src/platform/database/prisma.service.js";
 import { problemTypeUri, type ProblemType } from "../../src/platform/errors/problem-types.js";
 import type { RateLimiter } from "../../src/platform/rate-limit/rate-limiter.js";
 import { RATE_LIMITER } from "../../src/platform/rate-limit/rate-limiter.js";
 import { CLOCK } from "../../src/platform/runtime/runtime.js";
+import { QueueService } from "../../src/platform/queue/queue.module.js";
 import { AccessTokens } from "../../src/platform/security/access-token.js";
 import { createTestApp, type TestApp } from "../support/create-test-app.js";
 import {
@@ -23,6 +26,20 @@ const clock = { current: new Date("2026-11-01T12:00:00Z"), now: () => clock.curr
 const advance = (minutes: number) => {
   clock.current = new Date(clock.current.getTime() + minutes * 60_000);
 };
+
+/** Polls until `check` returns a value, or fails after `timeoutMs`. */
+async function eventually<T>(
+  check: () => Promise<T | null | undefined>,
+  timeoutMs = 15_000,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await check();
+    if (value) return value;
+    if (Date.now() > deadline) throw new Error("condition not met in time");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
 
 /** Every request comes from 127.0.0.1: the budgets have suites of their own. */
 const unlimited: RateLimiter = {
@@ -65,6 +82,7 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
           .set("Idempotency-Key", key)
           .send(body),
       get: (path: string) => api().get(`/api/v1${path}`).set("Authorization", auth()),
+      post: (path: string) => api().post(`/api/v1${path}`).set("Authorization", auth()),
     };
   }
 
@@ -151,7 +169,12 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
   beforeAll(async () => {
     infrastructure = await startInfrastructure();
     testApp = await createTestApp({
-      env: { DATABASE_URL: infrastructure.databaseUrl, REDIS_URL: infrastructure.redisUrl },
+      // Embedded: the expiration jobs and the sweep run in this same process.
+      env: {
+        DATABASE_URL: infrastructure.databaseUrl,
+        REDIS_URL: infrastructure.redisUrl,
+        WORKER_MODE: "embedded",
+      },
       override: (builder) =>
         builder
           .overrideProvider(CLOCK)
@@ -500,5 +523,156 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
     await expect(
       prisma.ticketType.update({ where: { id: pista }, data: { reserved: 3 } }),
     ).rejects.toThrow(/ticket_types_inventory/);
+  });
+
+  describe("expiration, extension and cancellation (V2)", () => {
+    const expirations = () => testApp.app.get(QueueService).queue("orders");
+    const jobOf = (orderId: string, expiresAt: string) =>
+      expirations().getJob(`expire-${orderId}-${new Date(expiresAt).getTime()}`);
+    const statusOf = async (orderId: string) =>
+      (await prisma.order.findUniqueOrThrow({ where: { id: orderId } })).status;
+
+    /** A buyer with a pending order of 2 tickets of a 5-ticket type. */
+    async function reservation() {
+      const {
+        eventId,
+        ticketTypeIds: [pista],
+      } = await publishedEvent([{ name: "Pista", capacity: 5 }]);
+      const ana = await buyer();
+      const order = orderSchema.parse(
+        (await ana.order({ eventId, items: [{ ticketTypeId: pista, quantity: 2 }] }).expect(201))
+          .body,
+      );
+      return { eventId, pista, ana, order };
+    }
+
+    it("schedules a job for the end of the reservation, which expires it and frees the tickets", async () => {
+      const { pista, order } = await reservation();
+      const job = await jobOf(order.id, order.expiresAt);
+      expect(job?.data).toMatchObject({ type: "orders.expire", payload: { orderId: order.id } });
+      expect(job?.opts.delay).toBe(10 * 60_000);
+      expect(await job?.getState()).toBe("delayed");
+
+      advance(10);
+      await job?.promote();
+      await eventually(async () => (await statusOf(order.id)) === "EXPIRED");
+      expect(await stockOf(pista)).toMatchObject({ reserved: 0, sold: 0 });
+      expect(
+        await prisma.auditLog.findMany({
+          where: { entityId: order.id, action: "order.expired" },
+          select: { actorRole: true },
+        }),
+      ).toEqual([{ actorRole: "SYSTEM" }]);
+    });
+
+    it("does nothing when the job runs before the end, or after the order was canceled", async () => {
+      const early = await reservation();
+      const earlyJob = await jobOf(early.order.id, early.order.expiresAt);
+      await earlyJob?.promote();
+      await eventually(async () => (await earlyJob?.getState()) === "completed");
+      expect(await statusOf(early.order.id)).toBe("PENDING");
+      expect(await stockOf(early.pista)).toMatchObject({ reserved: 2 });
+
+      const canceled = await reservation();
+      await canceled.ana.post(`/orders/${canceled.order.id}/cancel`).expect(200);
+      advance(10);
+      const job = await jobOf(canceled.order.id, canceled.order.expiresAt);
+      await job?.promote();
+      await eventually(async () => (await job?.getState()) === "completed");
+      expect(await statusOf(canceled.order.id)).toBe("CANCELED");
+      // Given back once: a second release would have gone below zero.
+      expect(await stockOf(canceled.pista)).toMatchObject({ reserved: 0 });
+    });
+
+    it("sweeps an overdue order whose job was lost", async () => {
+      const { pista, order } = await reservation();
+      await (await jobOf(order.id, order.expiresAt))?.remove();
+
+      advance(10);
+      await testApp.app.get(OrderSweeper).tick();
+      expect(await statusOf(order.id)).toBe("EXPIRED");
+      expect(await stockOf(pista)).toMatchObject({ reserved: 0 });
+    });
+
+    it("frees the tickets once when the buyer cancels while the reservation expires", async () => {
+      const { pista, ana, order } = await reservation();
+      advance(10);
+
+      const [canceled, expired] = await Promise.all([
+        ana.post(`/orders/${order.id}/cancel`),
+        testApp.app.get(ExpireOrder).execute(order.id),
+      ]);
+      const status = await statusOf(order.id);
+      expect(status).toBe(expired ? "EXPIRED" : "CANCELED");
+      expect(canceled.status).toBe(expired ? 409 : 200);
+      expect(await stockOf(pista)).toMatchObject({ reserved: 0 });
+    });
+
+    it("extends a reservation once, in its last 2 minutes, and moves its job", async () => {
+      const { pista, ana, order } = await reservation();
+
+      advance(7);
+      const early = await ana.post(`/orders/${order.id}/extend`).expect(409);
+      expectProblem(early, "invalid-state-transition");
+      expect(problemDetailsSchema.parse(early.body).detail).toBe(
+        "A reserva só pode ser estendida nos 2 minutos finais.",
+      );
+
+      advance(1.5);
+      const responses = await Promise.all(
+        Array.from({ length: 5 }, () => ana.post(`/orders/${order.id}/extend`)),
+      );
+      expect(responses.map((r) => r.status).sort()).toEqual([200, 409, 409, 409, 409]);
+      const extended = orderSchema.parse(responses.find((r) => r.status === 200)?.body);
+      expect(extended).toMatchObject({
+        status: "PENDING",
+        expiresAt: new Date(new Date(order.expiresAt).getTime() + 10 * 60_000).toISOString(),
+        extensionAvailable: false,
+      });
+      expect(await jobOf(order.id, extended.expiresAt)).toBeDefined();
+
+      // The job of the first end finds time left.
+      advance(1.5);
+      const oldJob = await jobOf(order.id, order.expiresAt);
+      await oldJob?.promote();
+      await eventually(async () => (await oldJob?.getState()) === "completed");
+      expect(await statusOf(order.id)).toBe("PENDING");
+      expect(await stockOf(pista)).toMatchObject({ reserved: 2 });
+
+      advance(10);
+      await (await jobOf(order.id, extended.expiresAt))?.promote();
+      await eventually(async () => (await statusOf(order.id)) === "EXPIRED");
+      expect(await stockOf(pista)).toMatchObject({ reserved: 0 });
+    });
+
+    it("lets the buyer cancel, then order again right away", async () => {
+      const { eventId, pista, ana, order } = await reservation();
+
+      const canceled = orderSchema.parse(
+        (await ana.post(`/orders/${order.id}/cancel`).expect(200)).body,
+      );
+      expect(canceled).toMatchObject({ status: "CANCELED", extensionAvailable: false });
+      expect(await stockOf(pista)).toMatchObject({ reserved: 0 });
+      // Asking again is harmless.
+      await ana.post(`/orders/${order.id}/cancel`).expect(200);
+      expect(await stockOf(pista)).toMatchObject({ reserved: 0 });
+      expect(
+        await prisma.auditLog.count({ where: { entityId: order.id, action: "order.canceled" } }),
+      ).toBe(1);
+
+      expectProblem(
+        await (await buyer()).post(`/orders/${order.id}/cancel`).expect(404),
+        "not-found",
+      );
+      expectProblem(
+        await (await buyer()).post(`/orders/${order.id}/extend`).expect(404),
+        "not-found",
+      );
+      await ana.order({ eventId, items: [{ ticketTypeId: pista, quantity: 5 }] }).expect(201);
+      expectProblem(
+        await ana.post(`/orders/${order.id}/extend`).expect(409),
+        "invalid-state-transition",
+      );
+    });
   });
 });

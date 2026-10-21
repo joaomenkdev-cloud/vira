@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Headers, HttpStatus, Param, Post, Req, Res } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Req,
+  Res,
+} from "@nestjs/common";
 import { ApiHeader, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import {
   type CreateOrderRequest,
@@ -15,7 +26,9 @@ import { ProblemException } from "../../../platform/errors/problem.exception.js"
 import { RateLimit } from "../../../platform/rate-limit/rate-limit.guard.js";
 import { type AuthenticatedUser, RequireRole } from "../../../platform/security/access-policy.js";
 import type { RequestContext } from "../application/buyer.js";
+import { CancelOrder } from "../application/cancel-order.js";
 import { CreateOrder } from "../application/create-order.js";
+import { ExtendOrder } from "../application/extend-order.js";
 import { GetOrder } from "../application/get-order.js";
 import { ORDERS_RATE_LIMITS } from "../application/rate-limits.js";
 import { orderBody } from "./bodies.js";
@@ -44,6 +57,8 @@ export class OrdersController {
   constructor(
     private readonly createOrder: CreateOrder,
     private readonly getOrder: GetOrder,
+    private readonly extendOrder: ExtendOrder,
+    private readonly cancelOrder: CancelOrder,
   ) {}
 
   @Post()
@@ -101,5 +116,45 @@ export class OrdersController {
     @Req() request: Request,
   ): Promise<OrderBody> {
     return orderBody(await asProblem(() => this.getOrder.execute(callerOf(request), id)));
+  }
+
+  @Post(":id/extend")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Estende a reserva uma única vez (+10 min)",
+    description:
+      "Só com o pedido `PENDING`, nos 2 minutos finais da reserva e uma vez por pedido " +
+      "(WCAG 2.2.1). Os ingressos continuam segurados; muda só o `expiresAt`.",
+  })
+  @ApiResponse({ status: HttpStatus.OK, standardSchema: orderSchema })
+  @problem(HttpStatus.UNAUTHORIZED)
+  @problem(HttpStatus.NOT_FOUND)
+  @problem(HttpStatus.CONFLICT)
+  async extend(
+    @Param("id", { schema: resourceIdSchema }) id: string,
+    @Req() request: Request,
+  ): Promise<OrderBody> {
+    return orderBody(await asProblem(() => this.extendOrder.execute(callerOf(request), id)));
+  }
+
+  @Post(":id/cancel")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Cancela a reserva e libera os ingressos",
+    description:
+      "Só pedidos `PENDING`. Repetir o pedido de cancelamento devolve o pedido já " +
+      "cancelado (`200`); pago, expirado ou reembolsado é `409`.",
+  })
+  @ApiResponse({ status: HttpStatus.OK, standardSchema: orderSchema })
+  @problem(HttpStatus.UNAUTHORIZED)
+  @problem(HttpStatus.NOT_FOUND)
+  @problem(HttpStatus.CONFLICT)
+  async cancel(
+    @Param("id", { schema: resourceIdSchema }) id: string,
+    @Req() request: Request,
+  ): Promise<OrderBody> {
+    return orderBody(
+      await asProblem(() => this.cancelOrder.execute(callerOf(request), id, contextOf(request))),
+    );
   }
 }

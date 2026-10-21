@@ -130,17 +130,24 @@ Exemplo do módulo `orders`:
 modules/orders/
 ├── domain/
 │   ├── order.ts                  # pedido, total em centavos, hash do corpo, código público
-│   └── reservation-policy.ts     # 10 min, janela de vendas
+│   └── reservation-policy.ts     # 10 min, janela de vendas, regras da extensão
 ├── application/
 │   ├── ports/
 │   │   ├── order-repository.ts
-│   │   └── inventory.ts          # reserve/release atômicos
+│   │   ├── inventory.ts          # reserve/release atômicos
+│   │   └── expiration-scheduler.ts # agenda o job de expiração (nunca lança)
 │   ├── create-order.ts           # caso de uso (V1)
 │   ├── get-order.ts
-│   └── order-expiry.ts           # PENDING → EXPIRED devolvendo o estoque (V2 reaproveita)
+│   ├── extend-order.ts / cancel-order.ts # extensão única e cancelamento (V2)
+│   ├── expire-order.ts           # o que o job e a varredura executam
+│   ├── sweep-expired-orders.ts   # rede de segurança: pendentes vencidos
+│   └── order-expiry.ts           # PENDING → EXPIRED devolvendo o estoque, uma vez
 ├── infra/
 │   ├── prisma-order-repository.ts
-│   └── prisma-inventory.ts       # UPDATE condicional
+│   ├── prisma-inventory.ts       # UPDATE condicional
+│   ├── bullmq-expiration-scheduler.ts # job com delay até expires_at
+│   ├── orders-job-handlers.ts    # consome a fila `orders`
+│   └── order-sweeper.ts          # timer em processo, a cada minuto
 └── http/
     ├── orders.controller.ts      # schemas de packages/shared
     ├── bodies.ts
@@ -272,8 +279,8 @@ O resultado do check-in é uma resposta de negócio, por isso volta com `200` e 
 
 | Fila | Produtor | Consumidor | Garantias |
 | --- | --- | --- | --- |
-| `orders.expire` | API (ao reservar/estender) | worker | Job com `jobId = orderId:expiresAt` (deduplicado), idempotente pelo `UPDATE` condicional |
-| `orders.sweep` | agendamento repetível (1 min) | worker | Rede de segurança da expiração |
+| `orders.expire` (fila `orders`) | API, depois do commit (ao reservar e ao estender) | worker | Job com delay até `expires_at` e `jobId = expire-{orderId}-{expiresAt em ms}` (deduplicado; o BullMQ não aceita `:` no id); idempotente pelo `UPDATE` condicional. Agendar nunca falha o pedido: sem Redis, a varredura cobre |
+| varredura da expiração | timer em processo (1 min, e uma vez ao subir) | worker | Rede de segurança: expira os `PENDING` vencidos cujo job se perdeu, em lotes de 100 pelo índice parcial de `expires_at` |
 | `outbox.dispatch` | poller em processo (a cada `OUTBOX_POLL_INTERVAL_MS`, 5 s por padrão) | worker | Lê `outbox_messages` devidas com `FOR UPDATE SKIP LOCKED`, publica no BullMQ e marca como despachada na mesma transação |
 | `email.send` | outbox | worker | Retentativas exponenciais (5×), chave de idempotência por mensagem |
 | `payments.refund` | webhook (pagamento tardio) | worker | Idempotency key do Stripe = `refund:{orderId}` |
@@ -281,6 +288,8 @@ O resultado do check-in é uma resposta de negócio, por isso volta com `200` e 
 **Poller, não job repetível.** O despacho da outbox roda num poller em processo (`OutboxPoller`), não num job repetível do BullMQ: assim a outbox não depende do Redis para ser lida, e uma queda do Redis só faz as mensagens esperarem. As rodadas **nunca se sobrepõem** (uma rodada lenta faz a seguinte ser ignorada) e várias instâncias podem rodar juntas, porque `SKIP LOCKED` entrega cada mensagem a um só despachante. O poller também apaga mensagens entregues há mais de 7 dias, uma vez por hora. Substitui o "agendamento repetível + gatilho pós-commit" do desenho inicial; o gatilho foi dispensado porque 5 s de latência bastam.
 
 **Publicação e retentativas.** O id da mensagem é o `jobId` do BullMQ, então publicar de novo (por exemplo depois de uma queda entre publicar e registrar a entrega) não cria um segundo job. Falha ao publicar registra o erro (classe e mensagem truncada, sem dados pessoais), incrementa `attempts` e adia a próxima tentativa com backoff exponencial (5 s, 10 s, 20 s... até 15 min). Após 10 tentativas a mensagem fica parada para inspeção, em vez de ser tentada para sempre.
+
+**Expiração (V2).** Como o poller da outbox, a varredura é um timer em processo e não um job repetível do BullMQ: a rede de segurança dos jobs perdidos não pode depender do próprio Redis. O job, a varredura, o novo pedido do mesmo comprador e o cancelamento disputam a mesma transição condicional (`WHERE status = 'PENDING'`), então o estoque volta uma única vez, seja quem chegar primeiro. A API sempre carrega o `QueueClientModule` (só enfileira); quem consome as filas é o `QueueModule`, no worker ou na API em modo embutido. O job usa o mesmo envelope dos jobs da outbox (`messageId`, `type`, `payload`), para os consumidores roteá-lo pelo tipo.
 
 **Processos.** O worker é o mesmo código da API com outro entrypoint (`main.worker.ts`, `WorkerModule`). Com `WORKER_MODE=embedded` o poller sobe dentro da API (para hospedagem sem background worker, ADR-0011); com `separate` (padrão) só o worker despacha.
 

@@ -136,6 +136,56 @@ export class PrismaOrderRepository implements OrderRepository {
     });
   }
 
+  async markCanceled(
+    orderId: string,
+    buyerId: string,
+    now: Date,
+    tx: TransactionContext,
+  ): Promise<HeldTickets[] | null> {
+    const client = clientFor(this.prisma, tx);
+    const { count } = await client.order.updateMany({
+      where: { id: orderId, buyerId, status: "PENDING" },
+      data: { status: "CANCELED", canceledAt: now },
+    });
+    if (count === 0) return null;
+    return client.orderItem.findMany({
+      where: { orderId },
+      select: { ticketTypeId: true, quantity: true },
+    });
+  }
+
+  async extend(
+    orderId: string,
+    buyerId: string,
+    expiresAt: Date,
+    newExpiresAt: Date,
+    now: Date,
+    tx?: TransactionContext,
+  ): Promise<boolean> {
+    const { count } = await clientFor(this.prisma, tx).order.updateMany({
+      where: {
+        id: orderId,
+        buyerId,
+        status: "PENDING",
+        extensionCount: 0,
+        expiresAt: { equals: expiresAt, gt: now },
+      },
+      data: { expiresAt: newExpiresAt, extensionCount: 1 },
+    });
+    return count === 1;
+  }
+
+  async findOverdue(now: Date, limit: number): Promise<string[]> {
+    // Served by the partial index on the pending orders' `expires_at`.
+    const rows = await this.prisma.order.findMany({
+      where: { status: "PENDING", expiresAt: { lte: now } },
+      orderBy: { expiresAt: "asc" },
+      take: limit,
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
   async findOwned(
     orderId: string,
     buyerId: string,

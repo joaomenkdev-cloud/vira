@@ -10,6 +10,7 @@ import {
   InsufficientInventoryError,
   InvalidOrderError,
   OrderNotFoundError,
+  OrderStateError,
   PendingOrderExistsError,
   RequestInProgressError,
   SalesClosedError,
@@ -31,6 +32,9 @@ export async function asProblem<T>(work: () => Promise<T>): Promise<T> {
     if (error instanceof BuyerNotFoundError) throw new ProblemException("unauthenticated");
     if (error instanceof SalesClosedError) {
       throw new ProblemException("sales-closed", { detail: error.detail });
+    }
+    if (error instanceof OrderStateError) {
+      throw new ProblemException("invalid-state-transition", { detail: error.detail });
     }
     if (error instanceof InsufficientInventoryError) {
       throw new ProblemException("insufficient-inventory", {

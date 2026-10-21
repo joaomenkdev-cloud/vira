@@ -4,6 +4,7 @@ import type {
 } from "../../../platform/database/transaction.js";
 import type { Order, OrderEvent } from "../domain/order.js";
 import type { SaleEvent } from "../domain/reservation-policy.js";
+import type { ExpirationScheduler } from "./ports/expiration-scheduler.js";
 import type { Inventory, Reservation } from "./ports/inventory.js";
 import type { HeldTickets, NewOrder, OrderRepository } from "./ports/order-repository.js";
 
@@ -24,10 +25,23 @@ export interface EventRow extends OrderEvent {
   readonly status: "DRAFT" | "PUBLISHED" | "CANCELED";
 }
 
-type OrderRow = NewOrder & {
+type OrderRow = Omit<NewOrder, "expiresAt"> & {
   status: Order["status"];
+  expiresAt: Date;
+  extensionCount: number;
   expiredAt: Date | null;
+  canceledAt: Date | null;
 };
+
+/** Remembers what was scheduled, as `{orderId} @ {ISO end}`. */
+export class RecordingScheduler implements ExpirationScheduler {
+  readonly scheduled: string[] = [];
+
+  schedule(orderId: string, expiresAt: Date): Promise<void> {
+    this.scheduled.push(`${orderId} @ ${expiresAt.toISOString()}`);
+    return Promise.resolve();
+  }
+}
 
 /**
  * Orders and the stock they hold, in memory, with the conditional writes of the real
@@ -82,7 +96,13 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
     ) {
       return Promise.resolve("pending-exists");
     }
-    this.orders.set(order.id, { ...order, status: "PENDING", expiredAt: null });
+    this.orders.set(order.id, {
+      ...order,
+      status: "PENDING",
+      extensionCount: 0,
+      expiredAt: null,
+      canceledAt: null,
+    });
     return Promise.resolve("created");
   }
 
@@ -93,6 +113,48 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
     row.expiredAt = now;
     return Promise.resolve(
       row.items.map(({ ticketTypeId, quantity }) => ({ ticketTypeId, quantity })),
+    );
+  }
+
+  markCanceled(orderId: string, buyerId: string, now: Date): Promise<HeldTickets[] | null> {
+    const row = this.orders.get(orderId);
+    if (row?.buyerId !== buyerId || row.status !== "PENDING") return Promise.resolve(null);
+    row.status = "CANCELED";
+    row.canceledAt = now;
+    return Promise.resolve(
+      row.items.map(({ ticketTypeId, quantity }) => ({ ticketTypeId, quantity })),
+    );
+  }
+
+  extend(
+    orderId: string,
+    buyerId: string,
+    expiresAt: Date,
+    newExpiresAt: Date,
+    now: Date,
+  ): Promise<boolean> {
+    const row = this.orders.get(orderId);
+    if (
+      row?.buyerId !== buyerId ||
+      row.status !== "PENDING" ||
+      row.extensionCount !== 0 ||
+      row.expiresAt.getTime() !== expiresAt.getTime() ||
+      row.expiresAt <= now
+    ) {
+      return Promise.resolve(false);
+    }
+    row.expiresAt = newExpiresAt;
+    row.extensionCount = 1;
+    return Promise.resolve(true);
+  }
+
+  findOverdue(now: Date, limit: number): Promise<string[]> {
+    return Promise.resolve(
+      [...this.orders.values()]
+        .filter((o) => o.status === "PENDING" && o.expiresAt <= now)
+        .sort((a, b) => a.expiresAt.getTime() - b.expiresAt.getTime())
+        .slice(0, limit)
+        .map((o) => o.id),
     );
   }
 
@@ -113,7 +175,7 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
       })),
       totalCents: row.totalCents,
       expiresAt: row.expiresAt,
-      extensionCount: 0,
+      extensionCount: row.extensionCount,
       createdAt: row.createdAt,
       paidAt: null,
     });

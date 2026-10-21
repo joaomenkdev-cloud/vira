@@ -83,3 +83,11 @@ export class InvalidOrderError extends Error {
     this.name = "InvalidOrderError";
   }
 }
+
+/** The order is not in a state that allows it (already ended, extended, too early...). */
+export class OrderStateError extends Error {
+  constructor(readonly detail: string) {
+    super(detail);
+    this.name = "OrderStateError";
+  }
+}

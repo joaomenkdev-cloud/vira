@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 2 — MVP público v1.0 (o Marco 1 terminou com a N13).
-- **Concluído (mergeado):** F1 a F7 e N1 a N13 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#35) e Dependabot (#4–#7, #9 CodeQL v4). V1 no PR da reserva de estoque (`feat/orders-reservation`).
-- **Entregas abertas:** nenhuma além da V1.
-- **Próximo passo:** V2 — Expiração e extensão (`feat/orders-expiry`).
+- **Concluído (mergeado):** F1 a F7, N1 a N13 e V1 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#36) e Dependabot (#4–#7, #9 CodeQL v4). V2 no PR da expiração (`feat/orders-expiry`).
+- **Entregas abertas:** V2.
+- **Próximo passo:** V3 — Pagamento (`feat/payments-intents`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,27 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-21 — V2: expiração, extensão e cancelamento
+
+Auditoria (antes de codar): a V1 deixou `OrderExpiry` (transição condicional + devolução do estoque), o índice parcial de pendentes por `expires_at`, `extension_count` com `CHECK` de 0 a 1, `canceled_at` amarrado ao status e as ações `order.expired`/`order.canceled` no catálogo de auditoria. Não havia fila nem job de pedidos.
+
+Feito (API e docs; não mexe no web):
+
+- **Job com delay:** depois do commit do pedido (e de cada extensão), a API agenda `orders.expire` na fila nova `orders`, com delay até `expires_at` e id `expire-{orderId}-{expiresAt}`. O handler roda `ExpireOrder`: transação com a transição condicional, estoque devolvido, `order.expired` auditado com ator `SYSTEM`. Pago, cancelado, estendido ou já expirado: o job só termina.
+- **Varredura:** `OrderSweeper`, timer em processo a cada minuto (e ao subir), expira em lotes de 100 os pendentes vencidos cujo job se perdeu.
+- **`POST /orders/{id}/extend`:** uma vez, nos 2 minutos finais, +10 min; `UPDATE` com compare-and-set no `expires_at` antigo, então requisições simultâneas estendem uma vez. O job antigo encontra o pedido com prazo e não faz nada.
+- **`POST /orders/{id}/cancel`:** `PENDING` → `CANCELED` com o estoque devolvido na mesma transação; repetir devolve `200`.
+- `platform/queue` dividido em `QueueClientModule` (só enfileira; sempre na API) e `QueueModule` (consome; worker ou modo embutido).
+- Testes: unitários (expiração antes e depois do prazo, depois de pago ou cancelado, varredura, extensão com janela e limite, cancelamento repetido, BOLA) e integração com Postgres e Redis reais e relógio controlado: job agendado com delay de 10 min → relógio avança → job promovido expira e devolve o estoque; job adiantado ou depois do cancelamento não muda nada; varredura com job perdido; **cancelamento e expiração simultâneos devolvem o estoque uma vez**; 5 extensões simultâneas → uma `200`; cancelar e pedir de novo na hora.
+
+Decisões tomadas por conta própria:
+
+- **Varredura em processo, não job repetível:** como o poller da outbox; a rede de segurança dos jobs perdidos não pode depender do Redis.
+- **Agendar nunca falha o pedido:** sem Redis, o pedido é criado e a varredura o expira até um minuto depois do prazo.
+- **O pedido novo continua expirando o vencido na hora** (comportamento da V1): o comprador não espera o job nem a varredura para comprar de novo.
+- **Mesmo envelope dos jobs da outbox** (`messageId`, `type`, `payload`) para a fila `orders`, para reaproveitar o roteamento e os logs dos consumidores.
+- **Cancelar um pendente já vencido vale** (vira `CANCELED`); cancelar de novo devolve `200` em vez de `409`, para uma repetição de rede não parecer erro.
 
 ### 2026-10-21 — V1: reserva de estoque
 

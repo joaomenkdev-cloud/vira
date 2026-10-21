@@ -46,7 +46,10 @@ export function totalCents(
   return items.reduce((sum, item) => sum + subtotalCents(item), 0);
 }
 
-/** The single extension (+10 min) is still there to use; V2 opens it in the last 2 minutes. */
+/**
+ * The single extension (+10 min) is still there to use. It can be asked for only in the
+ * last 2 minutes (`extensionRefusal`); the client shows the button then.
+ */
 export function extensionAvailable(order: Pick<Order, "status" | "extensionCount">): boolean {
   return order.status === "PENDING" && order.extensionCount === 0;
 }

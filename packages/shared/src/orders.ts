@@ -13,6 +13,8 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 /** How long a reservation holds the tickets (ADR-0007). */
 export const RESERVATION_MINUTES = 10;
+/** The single extension (+10 min) can be asked for only this close to the end (WCAG 2.2.1). */
+export const EXTENSION_WINDOW_MINUTES = 2;
 /** An event has at most 20 ticket types, so an order never needs more lines. */
 export const ORDER_ITEMS_MAX = 20;
 /** Stripe's ceiling for one BRL payment (R$ 999.999,99); an order never asks for more. */
