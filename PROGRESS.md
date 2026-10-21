@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 2 — MVP público v1.0 (o Marco 1 terminou com a N13).
-- **Concluído (mergeado):** F1 a F7, N1 a N13 e V1 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#36) e Dependabot (#4–#7, #9 CodeQL v4). V2 no PR da expiração (`feat/orders-expiry`).
-- **Entregas abertas:** V2.
-- **Próximo passo:** V3 — Pagamento (`feat/payments-intents`).
+- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 e V2 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#37) e Dependabot (#4–#7, #9 CodeQL v4). V3 no PR do pagamento (`feat/payments-intents`).
+- **Entregas abertas:** V3.
+- **Próximo passo:** V4 — Webhook do Stripe (`feat/payments-webhook`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,25 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-21 — V3: pagamento (PaymentIntents)
+
+Auditoria (antes de codar): `orders.stripe_payment_intent_id` (único) já existia desde a V1, o catálogo de auditoria já tinha `order.paid` e a outbox já tinha `orders.paid`/`orders.refund_requested` (para a V4). Não existiam o módulo `payments`, a configuração do Stripe nem o SDK.
+
+Feito (API e docs; não mexe no web):
+
+- Configuração: `PAYMENTS_MODE` (só `test`), `STRIPE_SECRET_KEY` e `STRIPE_PUBLISHABLE_KEY`, juntas ou nenhuma, só `sk_test_`/`pk_test_`; chave live (`sk_live_`, `pk_live_`, `rk_live_`) **impede o processo de subir**, com a mensagem dizendo por quê e sem ecoar o valor; obrigatórias em produção.
+- Módulo `payments`: porta `PaymentGateway`, adaptador com o SDK oficial (`stripe` 23, timeout de 10 s, 2 retentativas de rede, sem telemetria) que valida a resposta com Zod (`pi_...`, `client_secret`, `brl`, `livemode: false`) e reporta erros só pela classe; `PaymentIntents` na API pública.
+- `POST /orders/{id}/payment`: só o dono, só `PENDING` com a reserva em andamento; cria o PaymentIntent com o total gravado no pedido, `metadata.orderId` e idempotency key `pi:{orderId}`, grava o id no pedido e devolve `{ clientSecret, publishableKey }`; chamadas seguintes devolvem o mesmo. 10/min por conta. `503 payments-unavailable` sem chaves ou com o Stripe fora.
+- Testes: configuração (chaves live recusadas no boot, trocadas, sozinhas, exigidas em produção), adaptador contra um servidor HTTP falso no lugar da API do Stripe (corpo, `Idempotency-Key`, `Authorization`, resposta inesperada, erro do Stripe, Stripe fora), caso de uso com fakes e integração com Postgres: **o valor vem do pedido mesmo depois de o organizador mudar o preço**, 3 chamadas simultâneas → um PaymentIntent, outro comprador → `404`, reserva vencida → `409`, Stripe fora → `503`.
+
+Decisões tomadas por conta própria:
+
+- **Sem chaves, pagamentos desligados (`503`)** em vez de chaves obrigatórias em todo ambiente: desenvolvimento e testes sobem sem conta no Stripe; produção exige as chaves.
+- **A resposta não traz o id do PaymentIntent**, só o `clientSecret` e a chave publicável, que é o que o Payment Element usa.
+- **Titulares não são exigidos ainda:** `PUT /orders/{id}/holders` entra com o checkout (V6), junto com a regra "titulares faltando → `409`".
+- **Cancelar o PaymentIntent quando a reserva expira** fica para a V4, com o pagamento tardio.
+- Nada de nome ou e-mail vai para o Stripe: só `metadata.orderId`.
 
 ### 2026-10-21 — V2: expiração, extensão e cancelamento
 
