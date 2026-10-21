@@ -6,7 +6,7 @@ import { AuthJobsModule, AuthModule } from "../modules/auth/auth.module.js";
 import { CatalogModule } from "../modules/catalog/catalog.module.js";
 import { EventsJobsModule, EventsModule } from "../modules/events/events.module.js";
 import { HealthModule } from "../modules/health/health.module.js";
-import { OrdersModule } from "../modules/orders/orders.module.js";
+import { OrdersJobsModule, OrdersModule } from "../modules/orders/orders.module.js";
 import { OutboxModule, OutboxPollerModule } from "../modules/outbox/outbox.module.js";
 import { UsersModule } from "../modules/users/users.module.js";
 import type { AppConfig } from "../platform/config/config.schema.js";
@@ -17,7 +17,7 @@ import { createValidationPipe } from "../platform/errors/validation.js";
 import { LoggingModule, type LoggingOptions } from "../platform/logging/logging.module.js";
 import { MailModule } from "../platform/mail/mail.module.js";
 import { PaginationModule } from "../platform/pagination/pagination.module.js";
-import { QueueModule } from "../platform/queue/queue.module.js";
+import { QueueClientModule, QueueModule } from "../platform/queue/queue.module.js";
 import { RateLimitModule } from "../platform/rate-limit/rate-limit.module.js";
 import { RedisModule } from "../platform/redis/redis.module.js";
 import { RuntimeModule } from "../platform/runtime/runtime.module.js";
@@ -46,6 +46,8 @@ export class AppModule {
         RuntimeModule,
         PaginationModule,
         StorageModule,
+        // Orders schedule their expiration from the API, whatever the worker mode.
+        QueueClientModule,
         SecurityModule,
         AuditModule,
         OutboxModule,
@@ -57,7 +59,7 @@ export class AppModule {
         HealthModule,
         // Embedded mode runs the background work inside the API process (ADR-0011).
         ...(config.worker.mode === "embedded"
-          ? [QueueModule, OutboxPollerModule, AuthJobsModule, EventsJobsModule]
+          ? [QueueModule, OutboxPollerModule, AuthJobsModule, EventsJobsModule, OrdersJobsModule]
           : []),
       ],
       providers: [

@@ -36,7 +36,7 @@ describe("who consumes the authentication e-mail messages", () => {
 
       const registry = embedded.app.get(JobHandlerRegistry);
       for (const type of AUTH_MESSAGES) expect(registry.find("email", type)).toBeDefined();
-      expect(registry.queues()).toEqual(["email"]);
+      expect(registry.queues()).toEqual(["email", "orders"]);
     } finally {
       await separate.app.close();
       await embedded.app.close();
