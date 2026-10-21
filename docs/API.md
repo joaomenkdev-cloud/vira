@@ -306,7 +306,7 @@ Implementadas na N8 todas as rotas acima menos as de imagem (N9, abaixo) e `/sal
 | `POST /organizer/events/{id}/cancel` | Só `PUBLISHED` que não terminou; `reason` de 3 a 500 caracteres, mostrado a quem comprou. Definitivo. Audita `event.canceled` (sem o motivo, que é texto livre). |
 | `POST /organizer/events/{id}/ticket-types` | Entra no fim da lista (`sortOrder`). Preço de R$ 1,00 a R$ 100.000,00 em centavos inteiros, capacidade 1–100 000, `maxPerOrder` 1–20 (padrão 10), janela de vendas que termina até o fim do evento. No máximo 20 tipos por evento (`409`). |
 | `PATCH /organizer/ticket-types/{id}` | Campos parciais e `sortOrder`. Capacidade abaixo de vendidos + reservados: `409 conflict` (comparado no mesmo `UPDATE`). |
-| `DELETE /organizer/ticket-types/{id}` | Só sem vendas nem reservas (`409`); o último tipo de um evento publicado fica (`409`). |
+| `DELETE /organizer/ticket-types/{id}` | Só sem vendas nem reservas, e se nunca esteve num pedido (`409`; o pedido continua mostrando o nome dele); o último tipo de um evento publicado fica (`409`). |
 
 `Event` (visão do organizador): `{ id, slug, title, status, startsAt, endsAt, timezone, venue, isDemo, descriptionMd, descriptionHtml, image: { url, alt, width, height, blurDataUrl } | null, publishedAt, canceledAt, cancelReason, ticketTypes, createdAt, updatedAt }`. `TicketType`: `{ id, name, description, price: Money, capacity, sold, reserved, maxPerOrder, salesStartAt, salesEndAt, sortOrder }`. A imagem aparece só por um endereço assinado (`url`, `GET` válido por 1 hora; o bucket é privado), nunca como campo de chave.
 
@@ -342,7 +342,22 @@ Publicar, editar e mexer em tipos de ingresso travam a linha do evento (`SELECT 
 | POST | `/orders/{id}/extend` | OWNER | — | `200 Order` (novo `expiresAt`) | 404, 409 (já estendido, fora da janela de 2 min) | — |
 | POST | `/orders/{id}/cancel` | OWNER | — | `200 Order` (CANCELED) | 404, 409 | — |
 
-`Order`: `{ id, publicCode, status, event: EventSummary, items: [{ ticketTypeId, name, quantity, unitPrice: Money, subtotal: Money }], total: Money, expiresAt, extensionAvailable, holders, paidAt }`.
+`Order`: `{ id, publicCode, status, event: { id, slug, title, startsAt, endsAt, timezone }, items: [{ id, ticketTypeId, name, quantity, unitPrice: Money, subtotal: Money }], total: Money, expiresAt, extensionAvailable, createdAt, paidAt }`. Os titulares (`holders`) entram com `PUT /orders/{id}/holders`. O pedido nunca mostra as cópias do nome e do e-mail do comprador nem a `Idempotency-Key`.
+
+Entregue na V1: `POST /orders` e `GET /orders/{id}`; as outras rotas chegam com a expiração (V2), o pagamento (V3) e o checkout (V6).
+
+| `POST /orders` | Regra |
+| --- | --- |
+| Sem `Idempotency-Key`, ou não é um UUID | `400 validation-failed` (`errors[0].path = "Idempotency-Key"`) |
+| Evento inexistente ou rascunho; tipo de ingresso de outro evento | `404` |
+| Evento cancelado ou encerrado; tipo fora da janela de vendas (sem fim próprio, as vendas vão até o fim do evento) | `422 sales-closed`, com o motivo em `detail` |
+| Mais que o `maxPerOrder` do tipo | `400 validation-failed` apontando `items.N.quantity` |
+| Total acima de R$ 999.999,99 (teto de um pagamento no Stripe) | `400 validation-failed` apontando `items` |
+| Já existe pedido `PENDING` do comprador para o evento | `409 pending-order-exists`. Um pendente cujo prazo já venceu é expirado na hora (estoque devolvido) e não impede o novo |
+| Estoque insuficiente em qualquer tipo | `409 insufficient-inventory` ("Restam N ingresso(s) de …" ou "… esgotaram"); nada fica reservado |
+| Mesmo tipo de ingresso em dois itens | `400 validation-failed` (some as quantidades num item só) |
+
+A resposta `201` traz `Location: /api/v1/orders/{id}`. O preço de cada item é lido da mesma linha que a reserva atualiza, então o pedido guarda o preço vigente no instante da reserva.
 
 O cliente **nunca envia preço ou total**. Qualquer campo extra no corpo é rejeitado (`strict` no Zod), o que também cobre OWASP API3 (mass assignment).
 
@@ -400,14 +415,19 @@ Location: /api/v1/orders/01929e80-...
 
 {
   "id": "01929e80-...",
-  "publicCode": "VIRA-ORD-3F8A",
+  "publicCode": "VIRA-ORD-3F8A-K2QX",
   "status": "PENDING",
-  "items": [{ "ticketTypeId": "01929e7b-...", "name": "Pista – Lote 1", "quantity": 2,
+  "event": { "id": "01929e7a-...", "slug": "noite-de-forro-a1b2c3", "title": "Noite de forró",
+             "startsAt": "2026-03-14T22:00:00Z", "endsAt": "2026-03-15T03:00:00Z",
+             "timezone": "America/Sao_Paulo" },
+  "items": [{ "id": "01929e81-...", "ticketTypeId": "01929e7b-...", "name": "Pista – Lote 1", "quantity": 2,
               "unitPrice": { "amountCents": 8000, "currency": "BRL" },
               "subtotal": { "amountCents": 16000, "currency": "BRL" } }],
   "total": { "amountCents": 16000, "currency": "BRL" },
   "expiresAt": "2026-03-10T18:10:00Z",
-  "extensionAvailable": true
+  "extensionAvailable": true,
+  "createdAt": "2026-03-10T18:00:00Z",
+  "paidAt": null
 }
 ```
 

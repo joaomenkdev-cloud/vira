@@ -3,6 +3,7 @@ export * from "./auth.js";
 export * from "./catalog.js";
 export * from "./events.js";
 export * from "./health.js";
+export * from "./orders.js";
 export * from "./problem-details.js";
 export * from "./queues.js";
 export * from "./roles.js";

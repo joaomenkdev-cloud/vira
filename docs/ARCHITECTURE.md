@@ -93,7 +93,7 @@ Ferramentas: pnpm workspaces + Turborepo ([ADR-0001](adr/0001-monorepo.md)). `pa
 | `users` | Perfil (`/me`), papéis (BUYER, ORGANIZER, ADMIN), perfil de organizador; depois, exportação e anonimização de conta (LGPD). Dono de `organizer_profiles` e das colunas `name` e `role` de `users`. | `audit` |
 | `events` | Lado do organizador: rascunho, edição, publicação e cancelamento de eventos; tipos de ingresso; upload de imagem. | `users`, `audit` |
 | `catalog` | Lado público (somente leitura): listagem, busca e detalhe de eventos publicados, paginação por cursor. | — (lê projeções de `events`) |
-| `orders` | Reserva de estoque, pedidos, expiração, extensão única da reserva, idempotência. | `catalog` (leitura), `payments`, `audit` |
+| `orders` | Reserva de estoque, pedidos, expiração, extensão única da reserva, idempotência. | `users` (nome e e-mail do comprador), `audit`, `payments` (a partir da V3); lê o evento e reserva o estoque direto em `events`/`ticket_types`, como o `catalog` lê suas projeções |
 | `payments` | PaymentIntents, webhook do Stripe, registro de eventos recebidos, reembolso de pagamento tardio. | `orders` (via eventos de domínio), `audit` |
 | `tickets` | Emissão de ingressos para pedidos pagos, token do QR (HMAC), envio por e-mail. | `orders` (via eventos de domínio) |
 | `checkin` | Validação do QR/código na entrada, transição única VALID → USED, registro de tentativas. | `tickets`, `events` (autorização), `audit` |
@@ -129,27 +129,22 @@ Exemplo do módulo `orders`:
 ```text
 modules/orders/
 ├── domain/
-│   ├── order.ts                  # entidade + máquina de estados
-│   ├── money.ts                  # value object em centavos (inteiro)
-│   ├── reservation-policy.ts     # 10 min, extensão única, limite por pedido
-│   └── events.ts                 # OrderPaid, OrderExpired...
+│   ├── order.ts                  # pedido, total em centavos, hash do corpo, código público
+│   └── reservation-policy.ts     # 10 min, janela de vendas
 ├── application/
 │   ├── ports/
 │   │   ├── order-repository.ts
-│   │   ├── inventory.ts          # reserve/release atômicos
-│   │   ├── payment-gateway.ts    # interface implementada em payments/infra
-│   │   └── clock.ts
-│   ├── create-order.ts           # caso de uso
-│   ├── expire-order.ts
-│   ├── extend-reservation.ts
-│   └── public-api.ts
+│   │   └── inventory.ts          # reserve/release atômicos
+│   ├── create-order.ts           # caso de uso (V1)
+│   ├── get-order.ts
+│   └── order-expiry.ts           # PENDING → EXPIRED devolvendo o estoque (V2 reaproveita)
 ├── infra/
 │   ├── prisma-order-repository.ts
-│   ├── prisma-inventory.ts       # UPDATE condicional
-│   └── expire-order.processor.ts # consumidor BullMQ
+│   └── prisma-inventory.ts       # UPDATE condicional
 └── http/
-    ├── orders.controller.ts
-    └── dto.ts                    # reexporta schemas de packages/shared
+    ├── orders.controller.ts      # schemas de packages/shared
+    ├── bodies.ts
+    └── problems.ts
 ```
 
 Integrações externas (`PaymentGateway`, `Mailer`, `ObjectStorage`, `Clock`, `IdGenerator`) são **portas** com um adaptador real e um adaptador falso em memória. Os testes de `application` e a maior parte dos de integração rodam **sem rede**.

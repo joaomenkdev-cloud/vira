@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { AuditModule } from "../audit/audit.module.js";
+import { AccountContacts } from "./application/account-contacts.js";
 import { BecomeOrganizer } from "./application/become-organizer.js";
 import { GetAccount } from "./application/get-account.js";
 import { OrganizerProfiles } from "./application/organizer-profiles.js";
@@ -18,8 +19,9 @@ import { PrismaAccountRepository } from "./infra/prisma-account-repository.js";
     UpdateProfile,
     BecomeOrganizer,
     OrganizerProfiles,
+    AccountContacts,
     { provide: ACCOUNT_REPOSITORY, useClass: PrismaAccountRepository },
   ],
-  exports: [OrganizerProfiles],
+  exports: [OrganizerProfiles, AccountContacts],
 })
 export class UsersModule {}

@@ -288,27 +288,29 @@ UPDATE ticket_types
 RETURNING id;
 ```
 
-`capacity` não pode ser reduzida abaixo de `sold + reserved` (o `UPDATE` da capacidade compara no mesmo comando); um tipo com vendas ou reservas não pode ser excluído (ocultar fica para quando houver vendas). Excluir um rascunho leva os tipos junto (`ON DELETE CASCADE`); um evento publicado nunca é excluído. Índice: `(event_id, sort_order)`.
+`capacity` não pode ser reduzida abaixo de `sold + reserved` (o `UPDATE` da capacidade compara no mesmo comando); um tipo com vendas, reservas ou que já esteve num pedido não pode ser excluído (ocultar fica para quando houver vendas). Excluir um rascunho leva os tipos junto (`ON DELETE CASCADE`); um evento publicado nunca é excluído. Índice: `(event_id, sort_order)`.
 
 ### `orders`
 
 | Campo | Tipo | Regras | Dado pessoal |
 | --- | --- | --- | --- |
-| `public_code` | text | `VIRA-ORD-XXXX`, aleatório, `UNIQUE` | Não |
+| `public_code` | text | `VIRA-ORD-XXXX-XXXX`, Crockford Base32 aleatório (40 bits), `UNIQUE` | Não |
 | `buyer_id` | uuid | FK → users | — |
 | `event_id` | uuid | FK → events (um pedido = um evento) | — |
 | `status` | enum `OrderStatus` | ver máquina de estados | Não |
-| `total_cents` | int | Soma dos itens calculada no servidor; `CHECK (total_cents > 0)` | Não |
+| `total_cents` | int | Soma dos itens calculada no servidor; `CHECK (total_cents BETWEEN 1 AND 99999999)` (teto de um pagamento em BRL no Stripe) | Não |
 | `currency` | char(3) | `BRL` | Não |
 | `expires_at` | timestamptz | `created_at + 10 min` (+10 min se estendido) | Não |
-| `extension_count` | smallint | `CHECK (extension_count <= 1)` | Não |
+| `extension_count` | smallint | `CHECK (extension_count BETWEEN 0 AND 1)` | Não |
 | `idempotency_key` | text | Enviado pelo cliente; `UNIQUE(buyer_id, idempotency_key)` | Não |
-| `request_hash` | bytea | SHA-256 do corpo normalizado, para detectar reuso da chave com outro corpo | Não |
+| `request_hash` | bytea | SHA-256 do corpo normalizado (itens em ordem de `ticketTypeId`, ids em minúsculas), para detectar reuso da chave com outro corpo | Não |
 | `stripe_payment_intent_id` | text | `UNIQUE`, nullable | Não |
 | `buyer_name`, `buyer_email` | text, citext | Cópia no momento da compra (para o comprovante) | **Sim** |
-| `paid_at`, `expired_at`, `canceled_at`, `refunded_at` | timestamptz | Carimbos das transições | Não |
+| `paid_at`, `expired_at`, `canceled_at`, `refunded_at` | timestamptz | Carimbos das transições; um `CHECK` amarra cada status aos seus (um `PAID` tardio pode ter `expired_at`) | Não |
 
-Índices: `UNIQUE(public_code)`, `UNIQUE(buyer_id, idempotency_key)`, `UNIQUE(stripe_payment_intent_id)`, `(buyer_id, created_at DESC)` para "meus pedidos", `(status, expires_at) WHERE status = 'PENDING'` para a varredura de expiração, `(event_id, status)`.
+Índices: `UNIQUE(public_code)`, `UNIQUE(buyer_id, idempotency_key)`, `UNIQUE(stripe_payment_intent_id)`, `(buyer_id, created_at DESC)` para "meus pedidos", `(expires_at) WHERE status = 'PENDING'` para a varredura de expiração, `(event_id, status)`. `buyer_id` e `event_id` são `ON DELETE RESTRICT`: contas são anonimizadas, não apagadas, e evento publicado nunca é excluído.
+
+**Criação (V1), numa transação só:** trava consultiva da chave (`pg_try_advisory_xact_lock` sobre comprador + `Idempotency-Key`; ocupada → `409 request-in-progress`), busca da chave (repetição ou `422`), `FOR KEY SHARE` na linha do evento (cancelar o evento ou editar seus tipos espera o pedido terminar, mas pedidos simultâneos não esperam uns aos outros), checagens de venda, expiração na hora de um pendente vencido do mesmo comprador e evento, `UPDATE` condicional de cada tipo em ordem de `id` e `INSERT ... ON CONFLICT DO NOTHING` (o conflito com o índice parcial de pendente vira `409 pending-order-exists` sem abortar a transação).
 
 Regra anti-açambarcamento: no máximo **1 pedido `PENDING` por comprador por evento** (`UNIQUE (buyer_id, event_id) WHERE status = 'PENDING'`).
 
@@ -316,12 +318,12 @@ Regra anti-açambarcamento: no máximo **1 pedido `PENDING` por comprador por ev
 
 | Campo | Tipo | Regras |
 | --- | --- | --- |
-| `order_id` | uuid | FK → orders |
-| `ticket_type_id` | uuid | FK → ticket_types |
+| `order_id` | uuid | FK → orders (`ON DELETE CASCADE`) |
+| `ticket_type_id` | uuid | FK → ticket_types (`ON DELETE RESTRICT`: um tipo que já esteve num pedido não é excluído) |
 | `quantity` | int | `CHECK (quantity BETWEEN 1 AND 20)`, ≤ `max_per_order` |
-| `unit_price_cents` | int | Cópia do preço no momento da reserva |
+| `unit_price_cents` | int | Cópia do preço no momento da reserva (lido na mesma linha que o `UPDATE` da reserva atualiza) |
 
-`UNIQUE(order_id, ticket_type_id)`.
+`UNIQUE(order_id, ticket_type_id)`; índice `(ticket_type_id)`.
 
 ### `tickets`
 

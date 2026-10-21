@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 2 — MVP público v1.0 (o Marco 1 terminou com a N13).
-- **Concluído (mergeado):** F1 a F7 e N1 a N12 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#34) e Dependabot (#4–#7, #9 CodeQL v4). N13 no PR do seed de demonstração (`feat/demo-seed`).
-- **Entregas abertas:** nenhuma além da N13.
-- **Próximo passo:** V1 — Reserva de estoque (`feat/orders-reservation`).
+- **Concluído (mergeado):** F1 a F7 e N1 a N13 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#35) e Dependabot (#4–#7, #9 CodeQL v4). V1 no PR da reserva de estoque (`feat/orders-reservation`).
+- **Entregas abertas:** nenhuma além da V1.
+- **Próximo passo:** V2 — Expiração e extensão (`feat/orders-expiry`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,27 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-21 — V1: reserva de estoque
+
+Auditoria (antes de codar): `ticket_types` já tinha `sold`, `reserved` e o `CHECK (sold + reserved <= capacity)` (N8), o catálogo de auditoria já tinha `order.created` e os tipos de problema dos pedidos já estavam na API.md; não existiam as tabelas de pedidos nem o módulo `orders`.
+
+Feito (API e docs; não mexe no web):
+
+- Migration `orders` e `order_items` conforme o DATA_MODEL: índice único parcial de um `PENDING` por comprador e evento, `UNIQUE(buyer_id, idempotency_key)`, `request_hash` de 32 bytes, `CHECK` que amarra cada status aos seus carimbos, total entre R$ 0,01 e R$ 999.999,99, cópia do nome e do e-mail do comprador, chaves estrangeiras `RESTRICT` para conta, evento e tipo de ingresso.
+- Módulo `orders` (domain/application/infra/http): `POST /orders` com `Idempotency-Key` (UUID) e `GET /orders/{id}` (só o dono; de outro é `404`). Numa transação: trava consultiva da chave (`409 request-in-progress`), repetição com o mesmo corpo devolve o mesmo pedido (`200`, `Idempotent-Replayed: true`) e com outro corpo `422`, `FOR KEY SHARE` no evento, janela de vendas, `max_per_order`, um pendente por evento (`409`), `UPDATE` condicional em ordem de id com o preço lido na mesma linha, `INSERT ... ON CONFLICT DO NOTHING` (conflito com o pendente de uma requisição concorrente não aborta a transação). Auditoria `order.created`.
+- Rate limit: 30/min por IP (guard, antes do corpo) e 10/min por conta (caso de uso).
+- `users` ganhou `AccountContacts` na API pública (nome e e-mail para a cópia do pedido).
+- Excluir tipo de ingresso: agora também recusa (`409`) um tipo que já esteve num pedido, que a FK impediria de qualquer forma.
+- Testes: unitários do domínio e do caso de uso (com rollback simulado), e2e sem banco (sessão, `Idempotency-Key`, mass assignment, `429` antes da validação, política de acesso) e integração com Postgres: **25 compradores simultâneos pela última vaga → 1 `201` e 24 `409`**, pedidos concorrentes de vários tipos em ordens invertidas sem deadlock nem estouro, 8 repetições simultâneas da mesma chave → um pedido só, 6 pedidos simultâneos do mesmo comprador → um pendente, expiração na hora devolvendo o estoque uma vez, `CHECK` do banco recusando overbooking.
+
+Decisões tomadas por conta própria:
+
+- **Pendente vencido expira na hora:** sem a V2 (job de expiração), o índice de um pendente por evento prenderia o comprador; o novo pedido expira o vencido na mesma transação, com o `UPDATE` condicional que a V2 vai reaproveitar (`OrderExpiry`).
+- **Código público com 8 caracteres (`VIRA-ORD-XXXX-XXXX`)**, como o dos ingressos, em vez de 4: com 4 (cerca de um milhão de códigos) as colisões ficariam frequentes cedo; docs e o mock do DESIGN atualizados.
+- **Teto de R$ 999.999,99 por pedido** (limite do Stripe para BRL), checado na API e no banco; evita também estourar o `int` do total.
+- **Pedido não mostra nome nem e-mail do comprador:** a resposta não carrega dado pessoal.
+- **`GET /orders/{id}` entrou já:** o `Location` do `201` aponta para ele, e o checkout (V6) vai precisar.
 
 ### 2026-10-20 — N13: seed de demonstração
 
