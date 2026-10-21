@@ -306,7 +306,7 @@ RETURNING id;
 | `request_hash` | bytea | SHA-256 do corpo normalizado (itens em ordem de `ticketTypeId`, ids em minúsculas), para detectar reuso da chave com outro corpo | Não |
 | `stripe_payment_intent_id` | text | `UNIQUE`, nullable | Não |
 | `buyer_name`, `buyer_email` | text, citext | Cópia no momento da compra (para o comprovante) | **Sim** |
-| `paid_at`, `expired_at`, `canceled_at`, `refunded_at` | timestamptz | Carimbos das transições; um `CHECK` amarra cada status aos seus (um `PAID` tardio pode ter `expired_at`) | Não |
+| `paid_at`, `expired_at`, `canceled_at`, `refunded_at` | timestamptz | Carimbos das transições; um `CHECK` amarra cada status aos seus (um `PAID` tardio pode ter `expired_at`; um `REFUNDED` pode ter `expired_at` ou `canceled_at`) | Não |
 
 Índices: `UNIQUE(public_code)`, `UNIQUE(buyer_id, idempotency_key)`, `UNIQUE(stripe_payment_intent_id)`, `(buyer_id, created_at DESC)` para "meus pedidos", `(expires_at) WHERE status = 'PENDING'` para a varredura de expiração, `(event_id, status)`. `buyer_id` e `event_id` são `ON DELETE RESTRICT`: contas são anonimizadas, não apagadas, e evento publicado nunca é excluído.
 
@@ -360,9 +360,9 @@ Registro de toda tentativa de validação (válida ou não), para auditoria e de
 
 | Campo | Tipo | Regras |
 | --- | --- | --- |
-| `id` | text | PK = `event.id` do Stripe (`evt_...`) |
-| `type` | text | Ex.: `payment_intent.succeeded` |
-| `processed_at` | timestamptz | |
+| `id` | text | PK = `event.id` do Stripe; `CHECK` no formato `evt_...` |
+| `type` | text | Ex.: `payment_intent.succeeded`; `CHECK` no formato `area.evento` |
+| `processed_at` | timestamptz | Índice, para a limpeza de retenção |
 
 Não guardamos o payload (pode conter dados de cobrança). O `INSERT` acontece na mesma transação do efeito: se a transação falhar, o Stripe reenvia e o evento é processado de novo; se tiver sucesso, reenvios conflitam na PK e são ignorados. Retenção: 90 dias (o Stripe só reenvia por até 3 dias).
 
@@ -428,6 +428,7 @@ stateDiagram-v2
     PENDING --> PENDING: extensão única (+10 min)
     EXPIRED --> PAID: pagamento tardio<br/>e estoque re-reservado
     EXPIRED --> REFUNDED: pagamento tardio<br/>sem estoque → reembolso
+    CANCELED --> REFUNDED: pagamento depois<br/>do cancelamento → reembolso
     PAID --> REFUNDED: evento cancelado<br/>(marco Evolução: pelo organizador)
     PAID --> [*]
     EXPIRED --> [*]
@@ -443,6 +444,7 @@ stateDiagram-v2
 | `PENDING` → `CANCELED` | `POST /orders/{id}/cancel` | `reserved -= q`; cancela PaymentIntent | Dono do pedido |
 | `EXPIRED` → `PAID` | webhook tardio com estoque | `sold += q` (condicional) | Somente o webhook |
 | `EXPIRED` → `REFUNDED` | webhook tardio sem estoque | — ; job de reembolso | Somente o webhook/worker |
+| `CANCELED` → `REFUNDED` | webhook depois do cancelamento | — ; job de reembolso | Somente o webhook/worker |
 | `PAID` → `REFUNDED` | cancelamento do evento | `sold -= q`; tickets → `CANCELED` | Organizador/Admin (Evolução) |
 
 Toda transição é um `UPDATE ... WHERE status = <origem>`; zero linhas afetadas significa que outra transição venceu, e a operação é tratada como idempotente.

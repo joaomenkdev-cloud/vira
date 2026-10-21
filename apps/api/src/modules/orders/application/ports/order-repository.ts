@@ -24,6 +24,15 @@ export interface NewOrderItem {
   readonly unitPriceCents: number;
 }
 
+/** An order as a payment finds it, locked until the transaction ends. */
+export interface PayableOrder {
+  readonly id: string;
+  readonly status: Order["status"];
+  readonly totalCents: number;
+  readonly paymentIntentId: string | null;
+  readonly items: readonly HeldTickets[];
+}
+
 /** What a pending order held, to give it back. */
 export interface HeldTickets {
   readonly ticketTypeId: string;
@@ -94,6 +103,15 @@ export interface OrderRepository {
     now: Date,
     tx?: TransactionContext,
   ): Promise<boolean>;
+
+  /** The order a payment is for, locked `FOR UPDATE`; `null` when there is none. */
+  findForPayment(orderId: string, tx: TransactionContext): Promise<PayableOrder | null>;
+
+  /** PENDING or EXPIRED → PAID; answers whether it changed. */
+  markPaid(orderId: string, now: Date, tx: TransactionContext): Promise<boolean>;
+
+  /** EXPIRED or CANCELED → REFUNDED (a payment that cannot be honoured); answers whether it changed. */
+  markRefunded(orderId: string, now: Date, tx: TransactionContext): Promise<boolean>;
 
   /** Records the order's PaymentIntent, unless it already has one. */
   attachPaymentIntent(orderId: string, paymentIntentId: string): Promise<void>;

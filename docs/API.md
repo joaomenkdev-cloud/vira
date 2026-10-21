@@ -12,7 +12,7 @@ Este documento é o contrato planejado. Mudanças incompatíveis exigem `/api/v2
 - Datas em ISO 8601 UTC (`2026-03-14T00:00:00Z`); eventos também retornam `timezone` (IANA).
 - Dinheiro como objeto: `{ "amountCents": 8000, "currency": "BRL" }`.
 - IDs são UUID v7 em texto.
-- Corpo máximo: 100 kB (o webhook aceita até 1 MB, body bruto).
+- Corpo máximo: 100 kB, inclusive no webhook do Stripe (que é verificado sobre o body bruto; eventos de PaymentIntent têm poucos kB).
 
 ### Autenticação
 
@@ -117,7 +117,8 @@ Todo erro é `application/problem+json`:
 | <a id="unsupported-media-type"></a>`unsupported-media-type` | 415 | `Content-Type` não aceito pela rota |
 | <a id="rate-limited"></a>`rate-limited` | 429 | Limite excedido |
 | <a id="internal-error"></a>`internal-error` | 500 | Falha inesperada |
-| <a id="payments-unavailable"></a>`payments-unavailable` | 503 | Não deu para iniciar o pagamento: o Stripe não respondeu ou recusou a chamada, ou o ambiente não tem chaves do Stripe (desenvolvimento e testes) |
+| <a id="payments-unavailable"></a>`payments-unavailable` | 503 | Não deu para iniciar o pagamento: o Stripe não respondeu ou recusou a chamada, ou o ambiente não tem chaves do Stripe (desenvolvimento e testes); no webhook, o ambiente não tem `STRIPE_WEBHOOK_SECRET` |
+| <a id="invalid-signature"></a>`invalid-signature` | 400 | Webhook do Stripe sem `Stripe-Signature`, com assinatura que não confere com o body bruto ou com timestamp a mais de 5 minutos |
 
 ## Endpoints
 
@@ -376,9 +377,14 @@ O cliente **nunca envia preço ou total**. Qualquer campo extra no corpo é reje
 
 | Método | Rota | Papel | Corpo | Sucesso | Erros |
 | --- | --- | --- | --- | --- | --- |
-| POST | `/payments/stripe/webhook` | STRIPE | Evento do Stripe (body bruto) + `Stripe-Signature` | `200` (inclusive para evento repetido ou não tratado) | `400` assinatura inválida/timestamp fora da tolerância |
+| POST | `/payments/stripe/webhook` | STRIPE | Evento do Stripe (body bruto) + `Stripe-Signature` | `200 { received: true }` (inclusive para evento repetido ou não tratado) | `400 invalid-signature` (sem assinatura, assinatura errada ou timestamp a mais de 5 min), `503 payments-unavailable` (sem `STRIPE_WEBHOOK_SECRET`) |
 
-Eventos tratados: `payment_intent.succeeded`, `payment_intent.payment_failed` (só registro), `charge.refunded` (confirma reembolso). Fica fora do proxy do web, sem CSRF e sem cookies; protegido exclusivamente pela assinatura.
+Fica fora do proxy do web, sem CSRF e sem cookies, e fora do OpenAPI; protegido exclusivamente pela assinatura, verificada com o SDK oficial sobre o body bruto antes de qualquer leitura (V4, ADR-0006).
+
+- `payment_intent.succeeded`: o PaymentIntent precisa trazer `metadata.orderId`, `currency: brl`, e ser **o do pedido e do total gravado nele**; senão o evento é registrado e o pedido não muda (log de aviso). Com o pedido travado (`FOR UPDATE`): `PENDING → PAID` (os ingressos reservados viram vendidos); `EXPIRED` (pagamento tardio) volta a vender os ingressos se ainda houver, tudo ou nada → `PAID`, senão `REFUNDED`; `CANCELED` (pagou depois de desistir) → `REFUNDED`. O reembolso é pedido ao Stripe por um job (`refund:{orderId}` como idempotency key). Pedido já `PAID`/`REFUNDED`: nada.
+- `payment_intent.payment_failed` e `charge.refunded`: só registrados (o Payment Element mostra a falha; a confirmação do reembolso não muda o pedido).
+- Outros tipos, eventos `livemode: true` ou com formato inesperado: `200` sem registro.
+- Cada evento tratado é gravado em `processed_webhook_events` na mesma transação do efeito: reenvios (inclusive simultâneos) respondem `200` sem efeito; se o efeito falhar, a resposta é `500` e o Stripe reenvia.
 
 ### Ingressos (`tickets`)
 

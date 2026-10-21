@@ -69,6 +69,33 @@ export class PrismaInventory implements Inventory {
     };
   }
 
+  async sell(ticketTypeId: string, quantity: number, tx: TransactionContext): Promise<void> {
+    await clientFor(this.prisma, tx).$executeRaw`
+      UPDATE "ticket_types"
+         SET "reserved" = "reserved" - ${quantity}, "sold" = "sold" + ${quantity}, "updated_at" = now()
+       WHERE "id" = ${ticketTypeId}::uuid`;
+  }
+
+  async sellUnheld(
+    ticketTypeId: string,
+    quantity: number,
+    tx: TransactionContext,
+  ): Promise<boolean> {
+    // The same conditional UPDATE as a reservation: never more than the capacity.
+    const sold = await clientFor(this.prisma, tx).$executeRaw`
+      UPDATE "ticket_types"
+         SET "sold" = "sold" + ${quantity}, "updated_at" = now()
+       WHERE "id" = ${ticketTypeId}::uuid AND "sold" + "reserved" + ${quantity} <= "capacity"`;
+    return sold === 1;
+  }
+
+  async unsell(ticketTypeId: string, quantity: number, tx: TransactionContext): Promise<void> {
+    await clientFor(this.prisma, tx).$executeRaw`
+      UPDATE "ticket_types"
+         SET "sold" = "sold" - ${quantity}, "updated_at" = now()
+       WHERE "id" = ${ticketTypeId}::uuid`;
+  }
+
   async release(ticketTypeId: string, quantity: number, tx: TransactionContext): Promise<void> {
     // The CHECK on `reserved >= 0` refuses giving back more than was held.
     await clientFor(this.prisma, tx).$executeRaw`

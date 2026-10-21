@@ -1,4 +1,5 @@
 import { orderSchema, paymentSessionSchema, problemDetailsSchema } from "@vira/shared";
+import Stripe from "stripe";
 import request, { type Response } from "supertest";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -41,6 +42,36 @@ async function eventually<T>(
     if (Date.now() > deadline) throw new Error("condition not met in time");
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+}
+
+// A fake signing secret (.gitleaks.toml): the tests sign the events Stripe would send.
+const WEBHOOK_SECRET = "whsec_viraFakeWebhook000000";
+let eventSequence = 0;
+
+/** A `payment_intent.succeeded` event, signed as Stripe signs it (raw body + header). */
+function succeededEvent(
+  orderId: string,
+  paymentIntentId: string,
+  amountCents: number,
+  eventId = `evt_viraTest${String(++eventSequence).padStart(6, "0")}`,
+) {
+  const payload = JSON.stringify({
+    id: eventId,
+    object: "event",
+    type: "payment_intent.succeeded",
+    livemode: false,
+    data: {
+      object: {
+        id: paymentIntentId,
+        object: "payment_intent",
+        amount: amountCents,
+        currency: "brl",
+        metadata: { orderId },
+      },
+    },
+  });
+  const signature = Stripe.webhooks.generateTestHeaderString({ payload, secret: WEBHOOK_SECRET });
+  return { eventId, payload, signature };
 }
 
 /** Every request comes from 127.0.0.1: the budgets have suites of their own. */
@@ -180,6 +211,9 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
         // Fake keys (.gitleaks.toml): Stripe itself is replaced by the in-memory gateway.
         STRIPE_SECRET_KEY: "sk_test_viraFakeSecret000000",
         STRIPE_PUBLISHABLE_KEY: "pk_test_viraFakePublishable0",
+        STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+        // The refunds of V4 go through the outbox: dispatch it quickly.
+        OUTBOX_POLL_INTERVAL_MS: "200",
       },
       override: (builder) =>
         builder
@@ -759,6 +793,144 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
         "invalid-state-transition",
       );
       expect(gateway.created.some((intent) => intent.orderId === order.id)).toBe(false);
+    });
+  });
+
+  describe("the Stripe webhook (V4)", () => {
+    const deliver = ({ payload, signature }: { payload: string; signature: string }) =>
+      api()
+        .post("/api/v1/payments/stripe/webhook")
+        .set("Content-Type", "application/json")
+        .set("Stripe-Signature", signature)
+        .send(payload);
+    const orderRow = (id: string) => prisma.order.findUniqueOrThrow({ where: { id } });
+    const outboxOf = async (orderId: string) =>
+      (await prisma.outboxMessage.findMany({ orderBy: { createdAt: "asc" } }))
+        .filter((m) => (m.payload as { orderId?: string }).orderId === orderId)
+        .map((m) => m.type);
+
+    /** A pending order of 2 tickets of a `capacity`-ticket type, with its PaymentIntent. */
+    async function payable(capacity = 5) {
+      const {
+        eventId,
+        ticketTypeIds: [pista],
+      } = await publishedEvent([{ name: "Pista", priceCents: 8000, capacity }]);
+      const ana = await buyer();
+      const order = orderSchema.parse(
+        (await ana.order({ eventId, items: [{ ticketTypeId: pista, quantity: 2 }] }).expect(201))
+          .body,
+      );
+      await ana.post(`/orders/${order.id}/payment`).expect(200);
+      const { stripePaymentIntentId } = await orderRow(order.id);
+      if (!stripePaymentIntentId) throw new Error("no PaymentIntent");
+      return { eventId, pista, ana, order, paymentIntentId: stripePaymentIntentId };
+    }
+
+    it("marks the order paid and sells its tickets once, even for concurrent redeliveries", async () => {
+      const { pista, ana, order, paymentIntentId } = await payable();
+      const event = succeededEvent(order.id, paymentIntentId, 16000);
+
+      const responses = await Promise.all(Array.from({ length: 4 }, () => deliver(event)));
+      for (const response of responses) {
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ received: true });
+      }
+
+      const paid = orderSchema.parse((await ana.get(`/orders/${order.id}`).expect(200)).body);
+      expect(paid).toMatchObject({ status: "PAID", paidAt: clock.current.toISOString() });
+      expect(await stockOf(pista)).toMatchObject({ reserved: 0, sold: 2 });
+      expect((await outboxOf(order.id)).filter((t) => t === "orders.paid")).toHaveLength(1);
+      expect(await prisma.processedWebhookEvent.count({ where: { id: event.eventId } })).toBe(1);
+      const audit = await prisma.auditLog.findMany({
+        where: { action: { in: ["order.paid", "payment.webhook_processed"] } },
+      });
+      expect(audit.filter((r) => r.entityId === order.id).map((r) => r.action)).toEqual([
+        "order.paid",
+      ]);
+      expect(
+        audit.filter(
+          (r) => (r.metadata as { stripeEventId?: string }).stripeEventId === event.eventId,
+        ),
+      ).toHaveLength(1);
+
+      // The expiration job of the reservation finds it paid.
+      advance(10);
+      expect(await testApp.app.get(ExpireOrder).execute(order.id)).toBe(false);
+      expect(await stockOf(pista)).toMatchObject({ reserved: 0, sold: 2 });
+    });
+
+    it("refuses a missing, wrong or old signature without changing anything", async () => {
+      const { pista, order, paymentIntentId } = await payable();
+      const event = succeededEvent(order.id, paymentIntentId, 16000);
+
+      const tampered = { ...event, payload: event.payload.replace("16000", "1") };
+      expectProblem(await deliver(tampered).expect(400), "invalid-signature");
+      const old = Stripe.webhooks.generateTestHeaderString({
+        payload: event.payload,
+        secret: WEBHOOK_SECRET,
+        timestamp: Math.floor(Date.now() / 1000) - 600,
+      });
+      expectProblem(await deliver({ ...event, signature: old }).expect(400), "invalid-signature");
+      expectProblem(
+        await api()
+          .post("/api/v1/payments/stripe/webhook")
+          .set("Content-Type", "application/json")
+          .send(event.payload)
+          .expect(400),
+        "invalid-signature",
+      );
+
+      expect((await orderRow(order.id)).status).toBe("PENDING");
+      expect(await stockOf(pista)).toMatchObject({ reserved: 2, sold: 0 });
+      expect(await prisma.processedWebhookEvent.count({ where: { id: event.eventId } })).toBe(0);
+    });
+
+    it("ignores a payment that is not the order's PaymentIntent or not its total", async () => {
+      const { pista, order, paymentIntentId } = await payable();
+      await deliver(succeededEvent(order.id, paymentIntentId, 100)).expect(200);
+      await deliver(succeededEvent(order.id, "pi_somebodyElse0001", 16000)).expect(200);
+      expect((await orderRow(order.id)).status).toBe("PENDING");
+      expect(await stockOf(pista)).toMatchObject({ reserved: 2, sold: 0 });
+    });
+
+    it("honours a late payment while the tickets are still there", async () => {
+      const { pista, order, paymentIntentId } = await payable();
+      advance(10);
+      expect(await testApp.app.get(ExpireOrder).execute(order.id)).toBe(true);
+      expect(await stockOf(pista)).toMatchObject({ reserved: 0, sold: 0 });
+
+      await deliver(succeededEvent(order.id, paymentIntentId, 16000)).expect(200);
+      expect(await orderRow(order.id)).toMatchObject({ status: "PAID" });
+      expect(await stockOf(pista)).toMatchObject({ reserved: 0, sold: 2 });
+    });
+
+    it("refunds a late payment when the tickets were sold meanwhile", async () => {
+      const { eventId, pista, order, paymentIntentId } = await payable(3);
+      advance(10);
+      await testApp.app.get(ExpireOrder).execute(order.id);
+      // Someone else buys what was left.
+      const bia = await buyer();
+      await bia.order({ eventId, items: [{ ticketTypeId: pista, quantity: 2 }] }).expect(201);
+
+      await deliver(succeededEvent(order.id, paymentIntentId, 16000)).expect(200);
+      const row = await orderRow(order.id);
+      expect(row).toMatchObject({ status: "REFUNDED", refundedAt: clock.current });
+      expect(await stockOf(pista)).toMatchObject({ reserved: 2, sold: 0 });
+      await eventually(() =>
+        Promise.resolve(gateway.refunds.includes(`${paymentIntentId} refund:${order.id}`)),
+      );
+    });
+
+    it("refunds a payment that arrives after the buyer canceled", async () => {
+      const { pista, ana, order, paymentIntentId } = await payable();
+      await ana.post(`/orders/${order.id}/cancel`).expect(200);
+
+      await deliver(succeededEvent(order.id, paymentIntentId, 16000)).expect(200);
+      expect(await orderRow(order.id)).toMatchObject({ status: "REFUNDED" });
+      expect(await stockOf(pista)).toMatchObject({ reserved: 0, sold: 0 });
+      await eventually(() =>
+        Promise.resolve(gateway.refunds.includes(`${paymentIntentId} refund:${order.id}`)),
+      );
     });
   });
 });

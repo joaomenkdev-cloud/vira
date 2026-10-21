@@ -26,6 +26,18 @@ export interface Inventory {
 
   /** Gives back tickets a pending order held. */
   release(ticketTypeId: string, quantity: number, tx: TransactionContext): Promise<void>;
+
+  /** Turns tickets a pending order held into sold ones (it was paid). */
+  sell(ticketTypeId: string, quantity: number, tx: TransactionContext): Promise<void>;
+
+  /**
+   * Sells `quantity` tickets that were not held, if that many are left: a late payment of
+   * an order whose reservation ended. Answers whether it did.
+   */
+  sellUnheld(ticketTypeId: string, quantity: number, tx: TransactionContext): Promise<boolean>;
+
+  /** Undoes `sellUnheld`, in the same transaction, when another line of the order fell short. */
+  unsell(ticketTypeId: string, quantity: number, tx: TransactionContext): Promise<void>;
 }
 
 export const INVENTORY = Symbol("INVENTORY");
