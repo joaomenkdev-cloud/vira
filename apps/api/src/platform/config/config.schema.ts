@@ -96,6 +96,12 @@ export const envSchema = z
     PAYMENTS_MODE: z.enum(["test"]).default("test"),
     STRIPE_SECRET_KEY: stripeKeySchema,
     STRIPE_PUBLISHABLE_KEY: stripeKeySchema,
+    // The signing secret of the webhook endpoint (Stripe dashboard or `stripe listen`).
+    STRIPE_WEBHOOK_SECRET: z
+      .string()
+      .trim()
+      .regex(/^whsec_[A-Za-z0-9]{10,255}$/, "must be a webhook signing secret (whsec_...)")
+      .optional(),
   })
   .superRefine((env, ctx) => {
     // One key per purpose: a CSRF token must never verify as a JWT signature, or vice versa.
@@ -136,12 +142,9 @@ export const envSchema = z
       });
     }
     if (env.NODE_ENV !== "production") return;
-    if (env.STRIPE_SECRET_KEY === undefined) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["STRIPE_SECRET_KEY"],
-        message: "is required in production",
-      });
+    for (const variable of ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] as const) {
+      if (env[variable] !== undefined) continue;
+      ctx.addIssue({ code: "custom", path: [variable], message: "is required in production" });
     }
     // Every hop is encrypted in production (docs/SECURITY_MODEL.md, ASVS V12).
     if (!env.WEB_ORIGIN.startsWith("https://")) {
@@ -227,6 +230,8 @@ export const envSchema = z
         env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY
           ? { secretKey: env.STRIPE_SECRET_KEY, publishableKey: env.STRIPE_PUBLISHABLE_KEY }
           : undefined,
+      /** Without it the webhook refuses every event (`503`): nothing can be verified. */
+      webhookSecret: env.STRIPE_WEBHOOK_SECRET,
     },
     worker: { mode: env.WORKER_MODE, outboxPollIntervalMs: env.OUTBOX_POLL_INTERVAL_MS },
     auth: {

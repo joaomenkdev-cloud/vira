@@ -16,4 +16,5 @@ regexes = [
   '''test-csrf-secret-0123456789-abcdefghijklmnopqrstuvwxyz''',
   '''(sk|pk|rk)_(test|live)_viraFake[A-Za-z0-9]*''',
   '''pi_[A-Za-z0-9]+_secret_viraFake[A-Za-z0-9]*''',
+  '''whsec_viraFake[A-Za-z0-9]*''',
 ]

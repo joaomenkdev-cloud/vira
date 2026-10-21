@@ -19,6 +19,7 @@ const validEnv = {
 const stripeTestKeys = {
   STRIPE_SECRET_KEY: "sk_test_viraFakeSecret000000",
   STRIPE_PUBLISHABLE_KEY: "pk_test_viraFakePublishable0",
+  STRIPE_WEBHOOK_SECRET: "whsec_viraFakeWebhook000000",
 };
 
 const productionEnv = {
@@ -64,7 +65,7 @@ describe("loadConfig", () => {
         accessKeyId: "vira-local",
         secretAccessKey: "vira-local-secret",
       },
-      payments: { mode: "test", stripe: undefined },
+      payments: { mode: "test", stripe: undefined, webhookSecret: undefined },
       worker: { mode: "separate", outboxPollIntervalMs: 5_000 },
       auth: {
         jwtSecret: validEnv.JWT_SECRET,
@@ -212,7 +213,16 @@ describe("loadConfig", () => {
           secretKey: stripeTestKeys.STRIPE_SECRET_KEY,
           publishableKey: stripeTestKeys.STRIPE_PUBLISHABLE_KEY,
         },
+        webhookSecret: stripeTestKeys.STRIPE_WEBHOOK_SECRET,
       });
+      expect(
+        captureError({ ...validEnv, STRIPE_WEBHOOK_SECRET: "sk_test_viraFakeSecret000000" }).issues,
+      ).toEqual([
+        {
+          variable: "STRIPE_WEBHOOK_SECRET",
+          message: "must be a webhook signing secret (whsec_...)",
+        },
+      ]);
     });
 
     it("refuses to start with live keys", () => {
@@ -311,14 +321,16 @@ describe("loadConfig", () => {
       ]);
     });
 
-    it("requires the Stripe keys", () => {
+    it("requires the Stripe keys and the webhook secret", () => {
       const {
         STRIPE_SECRET_KEY: _secret,
         STRIPE_PUBLISHABLE_KEY: _publishable,
+        STRIPE_WEBHOOK_SECRET: _webhook,
         ...withoutStripe
       } = productionEnv;
       expect(captureError(withoutStripe).issues).toEqual([
         { variable: "STRIPE_SECRET_KEY", message: "is required in production" },
+        { variable: "STRIPE_WEBHOOK_SECRET", message: "is required in production" },
       ]);
     });
 

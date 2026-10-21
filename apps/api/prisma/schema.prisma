@@ -356,6 +356,18 @@ model Order {
   @@map("orders")
 }
 
+/// Stripe events already applied (docs/DATA_MODEL.md#processed_webhook_events). Inserted in
+/// the transaction of the event's effect, so a redelivery changes nothing. No payload.
+model ProcessedWebhookEvent {
+  /// Stripe's event id (`evt_...`).
+  id          String   @id
+  type        String
+  processedAt DateTime @map("processed_at") @db.Timestamptz(3)
+
+  @@index([processedAt])
+  @@map("processed_webhook_events")
+}
+
 /// The lines of an order (docs/DATA_MODEL.md#order_items), one per ticket type.
 model OrderItem {
   id             String @id @db.Uuid
