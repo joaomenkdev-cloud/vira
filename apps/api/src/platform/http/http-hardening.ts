@@ -8,6 +8,13 @@ import { DOCS_PATH } from "../openapi/setup-openapi.js";
 /** Maximum JSON body accepted by the API (docs/API.md). */
 export const JSON_BODY_LIMIT = "100kb";
 
+/**
+ * Longest a client may take to send a whole request, headers included. Bodies are at
+ * most 100 kB (pictures go straight to the bucket), so a slow sender is holding a
+ * connection open on purpose.
+ */
+export const REQUEST_TIMEOUT_MS = 10_000;
+
 /** The API only returns JSON: nothing may be loaded, framed or submitted from it. */
 const apiHeaders = helmet({
   contentSecurityPolicy: {
@@ -45,6 +52,9 @@ function noStore(_req: Request, res: Response, next: NextFunction): void {
 }
 
 export function applyHttpHardening(app: NestExpressApplication, config: AppConfig): void {
+  const server = app.getHttpServer();
+  server.requestTimeout = REQUEST_TIMEOUT_MS;
+  server.headersTimeout = REQUEST_TIMEOUT_MS;
   app.set("trust proxy", config.http.trustProxyHops);
   app.disable("x-powered-by");
   app.use(securityHeaders, noStore);

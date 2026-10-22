@@ -3,6 +3,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { problemTypeUri } from "../src/platform/errors/problem-types.js";
+import { REQUEST_TIMEOUT_MS } from "../src/platform/http/http-hardening.js";
 import { createTestApp, TEST_WEB_ORIGIN, type TestApp } from "./support/create-test-app.js";
 import { FixturesModule, LEAKY_ERROR_MESSAGE } from "./support/fixtures.controller.js";
 
@@ -116,6 +117,12 @@ describe("problem details (RFC 9457)", () => {
       .post("/api/v1/__test/echo")
       .send({ title: "x".repeat(110 * 1024), quantity: 1 });
     expectProblem(response, 413, problemTypeUri("payload-too-large"));
+  });
+
+  it("gives a client a bounded time to send the whole request", () => {
+    const http = server();
+    expect(http.requestTimeout).toBe(REQUEST_TIMEOUT_MS);
+    expect(http.headersTimeout).toBe(REQUEST_TIMEOUT_MS);
   });
 
   it("hides internal details of unexpected errors", async () => {
