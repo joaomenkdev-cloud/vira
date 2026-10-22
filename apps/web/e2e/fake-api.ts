@@ -12,10 +12,12 @@
 //   POST /__test/orders/pay?id=       Stripe's webhook: the order is paid (fixtures/orders.ts)
 //   POST /__test/orders/expire-in?id=&seconds= moves the reservation's deadline
 //   POST /__test/tickets/issue?email=&slug= a paid order with its tickets
+//   POST /__test/checkin/event?email=&holders= an event on tonight with tickets for the door
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 import { catalogPhoto, handleCatalog } from "./fixtures/catalog.ts";
+import { handleCheckin, handleCheckinTestRoute } from "./fixtures/checkin.ts";
 import { handleOrders, handleOrdersTestRoute } from "./fixtures/orders.ts";
 import { handleOrganizer, publishedEventDetail } from "./fixtures/organizer.ts";
 import { startStorage } from "./fixtures/storage.ts";
@@ -292,6 +294,20 @@ async function handle(
   ) {
     return "answered";
   }
+  const testOrganizer = (email: string) => {
+    const user = users.get(email);
+    return user?.organizer ? { id: user.id, displayName: user.organizer.displayName } : undefined;
+  };
+  if (
+    handleCheckinTestRoute(
+      method,
+      url,
+      (status, answer) => send(response, status, answer),
+      testOrganizer,
+    )
+  ) {
+    return "answered";
+  }
 
   if (path === "/api/v1/health/live") {
     return send(response, 200, { status: "ok" }, { "x-fake-api": "1" });
@@ -300,8 +316,8 @@ async function handle(
   const route = `${method} ${path.replace(/^\/api\/v1/, "")}`;
   const body = method === "GET" || method === "DELETE" ? {} : await readBody(request);
 
-  const organizerRoute = handleOrganizer(method, path.replace(/^\/api\/v1/, ""), url, body, {
-    organizer: ({ csrf }) => {
+  const organizerContext = {
+    organizer: ({ csrf }: { csrf: boolean }) => {
       const auth = guard(request, response, { csrf });
       if (!auth) return undefined;
       if (!auth.user.organizer) {
@@ -310,9 +326,21 @@ async function handle(
       }
       return { id: auth.user.id, displayName: auth.user.organizer.displayName };
     },
-    send: (status, answer) => send(response, status, answer),
-    problem: (status, code, extra) => problem(response, status, code, extra),
-  });
+    send: (status: number, answer?: unknown) => send(response, status, answer),
+    problem: (status: number, code: string, extra?: Record<string, unknown>) =>
+      problem(response, status, code, extra),
+  };
+  // Before the organizer routes, which answer 404 for any /organizer/ path they lack.
+  if (handleCheckin(method, path.replace(/^\/api\/v1/, ""), body, organizerContext)) {
+    return "answered";
+  }
+  const organizerRoute = handleOrganizer(
+    method,
+    path.replace(/^\/api\/v1/, ""),
+    url,
+    body,
+    organizerContext,
+  );
   if (organizerRoute) return "answered";
 
   const key = request.headers["idempotency-key"];

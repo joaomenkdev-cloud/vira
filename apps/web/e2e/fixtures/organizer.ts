@@ -444,6 +444,51 @@ export function handleOrganizer(
   return true;
 }
 
+/**
+ * A published event of `owner` that started an hour ago, as if built in the panel, for
+ * the check-in tests (the door opens on the night of the event).
+ */
+export function seedPublishedEvent(
+  owner: { id: string; displayName: string },
+  title: string,
+): OrganizerEvent {
+  const id = randomUUID();
+  const created = now();
+  const hour = 60 * 60 * 1000;
+  const event: OrganizerEvent = {
+    id,
+    slug: `evento-${id.slice(0, 8)}`,
+    title,
+    status: "PUBLISHED",
+    startsAt: new Date(Date.now() - hour).toISOString(),
+    endsAt: new Date(Date.now() + 4 * hour).toISOString(),
+    timezone: "America/Sao_Paulo",
+    venue: {
+      name: "Circo Voador",
+      address: "Rua dos Arcos, s/n",
+      city: "Rio de Janeiro",
+      state: "RJ",
+    },
+    isDemo: false,
+    descriptionMd: "",
+    descriptionHtml: "",
+    image: null,
+    publishedAt: created,
+    canceledAt: null,
+    cancelReason: null,
+    ticketTypes: [],
+    createdAt: created,
+    updatedAt: created,
+  };
+  events.set(id, { ownerId: owner.id, organizerName: owner.displayName, imageKey: null, event });
+  return event;
+}
+
+/** Who owns an event of the panel, for the check-in routes. */
+export function organizerEventOwner(id: string): string | undefined {
+  return events.get(id)?.ownerId;
+}
+
 /** The public page of an event published through the panel (GET /api/v1/events/{slug}). */
 export function publishedEventDetail(slug: string): CatalogEventDetail | undefined {
   const stored = [...events.values()].find(
