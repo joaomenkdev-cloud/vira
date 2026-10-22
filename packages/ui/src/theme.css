@@ -206,6 +206,11 @@
 }
 
 /* Exits run faster and accelerate out (docs/DESIGN.md, 2.6). */
+/* A bar fixed to the bottom keeps its padding clear of the phone's home indicator. */
+@utility pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
 @utility ease-exit {
   transition-timing-function: var(--vira-ease-exit);
 }

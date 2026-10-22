@@ -1,6 +1,8 @@
 import type { CatalogEventDetail, PublicTicketType } from "@vira/shared";
-import { Alert, Badge, cn, EmptyState } from "@vira/ui";
+import { Badge, cn, EmptyState } from "@vira/ui";
 
+import { TicketPicker } from "@/components/checkout/ticket-picker";
+import type { Selection } from "@/lib/checkout/selection";
 import { formatDayAndTime, formatPrice } from "@/lib/format";
 
 /** Below this many tickets left, a type on sale says "Últimos ingressos". */
@@ -8,10 +10,18 @@ export const FEW_LEFT = 10;
 
 /**
  * The ticket types of the event page (docs/DESIGN.md, 3.11): rows, not cards, each with
- * its name, price and where its sales stand, in words. Choosing and buying arrive with
- * the checkout (V6); until then the list informs and says the purchase is not open.
+ * its name, price and where its sales stand, in words. While some type is on sale they
+ * become the selector of the purchase (`TicketPicker`).
  */
-export function TicketList({ event, closed }: { event: CatalogEventDetail; closed: boolean }) {
+export function TicketList({
+  event,
+  closed,
+  selection,
+}: {
+  event: CatalogEventDetail;
+  closed: boolean;
+  selection: Selection | null;
+}) {
   if (closed) {
     return (
       <p className="mt-4 text-body text-ink-muted">
@@ -31,14 +41,7 @@ export function TicketList({ event, closed }: { event: CatalogEventDetail; close
       </>
     );
   }
-  return (
-    <>
-      <Rows event={event} />
-      <Alert title="A compra pelo site ainda não está aberta" className="mt-6">
-        Por enquanto, esta página mostra os tipos de ingresso e os preços.
-      </Alert>
-    </>
-  );
+  return <TicketPicker event={event} initial={selection} />;
 }
 
 function Rows({ event }: { event: CatalogEventDetail }) {
@@ -76,7 +79,13 @@ function TicketRow({ ticketType, timeZone }: { ticketType: PublicTicketType; tim
   );
 }
 
-function SalesStatus({ ticketType, timeZone }: { ticketType: PublicTicketType; timeZone: string }) {
+export function SalesStatus({
+  ticketType,
+  timeZone,
+}: {
+  ticketType: PublicTicketType;
+  timeZone: string;
+}) {
   switch (ticketType.salesStatus) {
     case "ON_SALE":
       return ticketType.available <= FEW_LEFT ? (
