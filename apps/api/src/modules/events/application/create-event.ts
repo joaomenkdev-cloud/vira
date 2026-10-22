@@ -2,6 +2,11 @@ import { Inject, Injectable } from "@nestjs/common";
 import type { CreateEventRequest } from "@vira/shared";
 
 import {
+  RATE_LIMITER,
+  type RateLimiter,
+  RateLimitExceededError,
+} from "../../../platform/rate-limit/rate-limiter.js";
+import {
   CLOCK,
   type Clock,
   ID_GENERATOR,
@@ -12,6 +17,7 @@ import { eventSlug } from "../domain/event-slug.js";
 import { type Caller, OrganizerScope, slugSuffix } from "./organizer-scope.js";
 import { EVENT_REPOSITORY, type EventRepository } from "./ports/event-repository.js";
 import { MARKDOWN_RENDERER, type MarkdownRenderer } from "./ports/markdown-renderer.js";
+import { EVENTS_RATE_LIMITS } from "./rate-limits.js";
 
 /** A random suffix collides about once in 16 million; three tries are plenty. */
 const SLUG_ATTEMPTS = 3;
@@ -25,14 +31,20 @@ export class CreateEvent {
   constructor(
     @Inject(EVENT_REPOSITORY) private readonly events: EventRepository,
     @Inject(MARKDOWN_RENDERER) private readonly markdown: MarkdownRenderer,
+    @Inject(RATE_LIMITER) private readonly limiter: RateLimiter,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(ID_GENERATOR) private readonly ids: IdGenerator,
     private readonly scope: OrganizerScope,
   ) {}
 
-  /** @throws NotOrganizerError when the caller has no organizer profile. */
+  /**
+   * @throws NotOrganizerError when the caller has no organizer profile.
+   * @throws RateLimitExceededError past the account's budget of new drafts.
+   */
   async execute(caller: Caller, request: CreateEventRequest): Promise<Event> {
     const organizerId = await this.scope.organizerIdOf(caller);
+    const budget = await this.limiter.hit(EVENTS_RATE_LIMITS.createAccount, caller.id);
+    if (!budget.allowed) throw new RateLimitExceededError(budget);
     const id = this.ids.next();
     const fields = {
       id,

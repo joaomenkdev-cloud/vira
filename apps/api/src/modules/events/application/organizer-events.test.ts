@@ -5,6 +5,11 @@ import type {
   TransactionContext,
   TransactionRunner,
 } from "../../../platform/database/transaction.js";
+import {
+  type RateLimiter,
+  RateLimitExceededError,
+  type RateLimitRule,
+} from "../../../platform/rate-limit/rate-limiter.js";
 import { AuditLog } from "../../audit/application/public-api.js";
 import type { OrganizerProfiles } from "../../users/application/public-api.js";
 import { CancelEvent } from "./cancel-event.js";
@@ -73,6 +78,19 @@ function setup() {
     clock,
     ids,
   );
+  const hits = new Map<string, number>();
+  const limiter: RateLimiter = {
+    hit: (rule: RateLimitRule, subject: string) => {
+      const count = (hits.get(`${rule.name}:${subject}`) ?? 0) + 1;
+      hits.set(`${rule.name}:${subject}`, count);
+      return Promise.resolve({
+        allowed: count <= rule.limit,
+        limit: rule.limit,
+        remaining: Math.max(0, rule.limit - count),
+        resetSeconds: rule.windowSeconds,
+      });
+    },
+  };
   // The real renderer has tests of its own (infra); here it only has to be called.
   const markdown = { render: (md: string) => `<rendered>${md}</rendered>` };
   const s = {
@@ -80,7 +98,7 @@ function setup() {
     events,
     auditEntries,
     list: new ListOrganizerEvents(events, scope),
-    create: new CreateEvent(events, markdown, clock, ids, scope),
+    create: new CreateEvent(events, markdown, limiter, clock, ids, scope),
     get: new GetOrganizerEvent(events, scope),
     update: new UpdateEvent(events, markdown, transactions, clock, scope),
     remove: new DeleteDraftEvent(events, scope),
@@ -123,6 +141,13 @@ describe("drafts", () => {
     const s = setup();
     await expect(s.create.execute(semPerfil, draft)).rejects.toThrow(NotOrganizerError);
     await expect(s.list.execute(semPerfil, { limit: 10 })).rejects.toThrow(NotOrganizerError);
+  });
+
+  it("refuses new drafts past the account's budget, each account on its own", async () => {
+    const s = setup();
+    for (let i = 0; i < 30; i++) await s.create.execute(ana, draft);
+    await expect(s.create.execute(ana, draft)).rejects.toBeInstanceOf(RateLimitExceededError);
+    await expect(s.create.execute(bia, draft)).resolves.toMatchObject({ status: "DRAFT" });
   });
 
   it("renders the description again when it changes, and keeps it when it does not", async () => {
