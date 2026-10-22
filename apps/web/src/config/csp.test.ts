@@ -20,8 +20,14 @@ describe("generateNonce", () => {
 describe("buildCsp (production)", () => {
   const csp = buildCsp({ nonce: "abc123", isDevelopment: false, storageOrigin: STORAGE });
 
-  it("only runs scripts that carry the nonce", () => {
-    expect(directive(csp, "script-src")).toEqual(["'self'", "'nonce-abc123'", "'strict-dynamic'"]);
+  it("only runs scripts that carry the nonce (the Stripe origins serve browsers without strict-dynamic)", () => {
+    expect(directive(csp, "script-src")).toEqual([
+      "'self'",
+      "'nonce-abc123'",
+      "'strict-dynamic'",
+      "https://js.stripe.com",
+      "https://*.js.stripe.com",
+    ]);
   });
 
   it("never allows eval or inline scripts and styles", () => {
@@ -44,8 +50,16 @@ describe("buildCsp (production)", () => {
     expect(directive(csp, "img-src")).toEqual(["'self'", "blob:", "data:"]);
   });
 
-  it("lets scripts reach only the object storage besides this origin (picture uploads)", () => {
-    expect(directive(csp, "connect-src")).toEqual(["'self'", STORAGE]);
+  it("lets scripts reach only the object storage (picture uploads) and Stripe's API", () => {
+    expect(directive(csp, "connect-src")).toEqual(["'self'", STORAGE, "https://api.stripe.com"]);
+  });
+
+  it("frames only Stripe: the Payment Element and the bank's 3-D Secure page", () => {
+    expect(directive(csp, "frame-src")).toEqual([
+      "https://js.stripe.com",
+      "https://*.js.stripe.com",
+      "https://hooks.stripe.com",
+    ]);
   });
 
   it("upgrades insecure requests", () => {

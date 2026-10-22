@@ -6,6 +6,8 @@ import { cookies, headers } from "next/headers";
 import { CspNonce } from "@vira/ui";
 import type { ReactNode } from "react";
 
+import { CheckoutHeader } from "@/components/checkout/checkout-header";
+import { HeaderSwitch } from "@/components/checkout/header-switch";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { resolveSiteUrl } from "@/config/api-origin";
@@ -22,6 +24,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#fafaf8",
+  // Lets the checkout's fixed bar reach the bottom edge, padded by the safe area.
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
@@ -42,7 +46,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           Pular para o conteúdo
         </a>
         <SessionProvider hinted={hinted}>
-          <SiteHeader />
+          <HeaderSwitch site={<SiteHeader />} checkout={<CheckoutHeader />} />
           <main id="conteudo" tabIndex={-1} className="flex-1 focus:outline-none">
             {children}
           </main>
