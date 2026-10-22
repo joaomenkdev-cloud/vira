@@ -52,7 +52,8 @@ test.describe("home", () => {
     await page.goto("/");
     for (const target of [
       page.getByRole("link", { name: "Vira, página inicial" }),
-      page.getByRole("link", { name: "Ver no GitHub" }),
+      page.getByRole("link", { name: "Política de privacidade" }),
+      page.getByRole("link", { name: "Código aberto (MIT) no GitHub" }),
     ]) {
       const box = await target.boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);

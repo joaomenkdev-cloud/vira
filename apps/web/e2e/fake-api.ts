@@ -13,13 +13,19 @@
 //   POST /__test/orders/expire-in?id=&seconds= moves the reservation's deadline
 //   POST /__test/tickets/issue?email=&slug= a paid order with its tickets
 //   POST /__test/checkin/event?email=&holders= an event on tonight with tickets for the door
+//   POST /__test/social-only?email=   the account loses its password (social login only)
+//   POST /__test/age-sessions?email=  the account's logins were made 10 minutes ago
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 import { catalogPhoto, handleCatalog } from "./fixtures/catalog.ts";
 import { handleCheckin, handleCheckinTestRoute } from "./fixtures/checkin.ts";
 import { handleOrders, handleOrdersTestRoute } from "./fixtures/orders.ts";
-import { handleOrganizer, publishedEventDetail } from "./fixtures/organizer.ts";
+import {
+  handleOrganizer,
+  hasUpcomingPublishedEvents,
+  publishedEventDetail,
+} from "./fixtures/organizer.ts";
 import { startStorage } from "./fixtures/storage.ts";
 
 interface User {
@@ -77,6 +83,10 @@ const sessions = new Map<string, Session>();
 const accessTokens = new Map<string, { sessionId: string; expired: boolean }>();
 /** By user id. */
 const stats = new Map<string, { refreshes: number; reuseDetected: number }>();
+/** Data exports per user id (the API allows 3 a day). */
+const exports = new Map<string, number>();
+/** How fresh a login must be to delete an account without a password. */
+const RECENT_LOGIN_MS = 5 * 60 * 1000;
 
 const token43 = () => (randomUUID() + randomUUID()).replaceAll("-", "").slice(0, 43);
 const sleep = (ms: number) =>
@@ -277,6 +287,22 @@ async function handle(
     return send(response, 200, user ? statsOf(user.id) : null);
   }
 
+  if (path === "/__test/social-only" && method === "POST") {
+    const user = users.get(url.searchParams.get("email") ?? "");
+    if (!user) return send(response, 404, { error: "no user" });
+    user.password = null;
+    return send(response, 204);
+  }
+  if (path === "/__test/age-sessions" && method === "POST") {
+    const user = users.get(url.searchParams.get("email") ?? "");
+    if (!user) return send(response, 404, { error: "no user" });
+    const before = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    for (const session of sessions.values()) {
+      if (session.userId === user.id) session.authenticatedAt = before;
+    }
+    return send(response, 204);
+  }
+
   if (path === "/__test/make-organizer" && method === "POST") {
     const user = users.get(url.searchParams.get("email") ?? "");
     if (!user) return send(response, 404, { error: "no user" });
@@ -314,7 +340,7 @@ async function handle(
   }
 
   const route = `${method} ${path.replace(/^\/api\/v1/, "")}`;
-  const body = method === "GET" || method === "DELETE" ? {} : await readBody(request);
+  const body = method === "GET" ? {} : await readBody(request);
 
   const organizerContext = {
     organizer: ({ csrf }: { csrf: boolean }) => {
@@ -527,6 +553,82 @@ async function handle(
       const newEmail = emailOf(body["email"]);
       sendLink(newEmail, { kind: "email-change", userId: auth.user.id, newEmail });
       return send(response, 202, { status: "accepted" });
+    }
+
+    case "GET /me/export": {
+      const auth = guard(request, response, { csrf: false });
+      if (!auth) return;
+      const count = (exports.get(auth.user.id) ?? 0) + 1;
+      exports.set(auth.user.id, count);
+      if (count > 3) return problem(response, 429, "rate-limited", {}, { "retry-after": "3600" });
+      const { user } = auth;
+      const exportedAt = new Date().toISOString();
+      return send(
+        response,
+        200,
+        {
+          format: "vira.data-export.v1",
+          exportedAt,
+          account: {
+            id: user.id,
+            email: user.email,
+            pendingEmail: null,
+            name: user.name,
+            role: user.role,
+            hasPassword: user.password !== null,
+            emailVerifiedAt: user.verified ? exportedAt : null,
+            createdAt: exportedAt,
+          },
+          socialLogins: [],
+          sessions: [...sessions.values()]
+            .filter((session) => session.userId === user.id && !session.revoked)
+            .map((session) => ({
+              authenticatedAt: session.authenticatedAt,
+              lastRefreshedAt: session.lastRefreshedAt,
+              expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+            })),
+          organizerProfile: user.organizer
+            ? { ...user.organizer, createdAt: exportedAt, events: [] }
+            : null,
+          orders: [],
+          tickets: [],
+        },
+        {
+          "content-disposition": `attachment; filename="vira-meus-dados-${exportedAt.slice(0, 10)}.json"`,
+        },
+      );
+    }
+
+    case "DELETE /me": {
+      const auth = guard(request, response, { csrf: true });
+      if (!auth) return;
+      if (body["confirm"] !== "EXCLUIR") {
+        return problem(response, 400, "validation-failed", {
+          errors: [{ path: "confirm", message: "Invalid input" }],
+        });
+      }
+      if (auth.user.password !== null) {
+        if (body["password"] === undefined) {
+          return problem(response, 400, "validation-failed", {
+            errors: [{ path: "password", message: "Digite sua senha." }],
+          });
+        }
+        if (auth.user.password !== body["password"]) {
+          return problem(response, 400, "incorrect-password", {
+            errors: [{ path: "password", message: "Senha atual incorreta." }],
+          });
+        }
+      } else if (Date.now() - Date.parse(auth.session.authenticatedAt) > RECENT_LOGIN_MS) {
+        return problem(response, 401, "reauthentication-required");
+      }
+      if (hasUpcomingPublishedEvents(auth.user.id)) {
+        return problem(response, 409, "organizer-has-upcoming-events");
+      }
+      users.delete(auth.user.email);
+      for (const session of sessions.values()) {
+        if (session.userId === auth.user.id) session.revoked = true;
+      }
+      return send(response, 202, { status: "accepted" }, { "set-cookie": clearedCookies() });
     }
 
     case "POST /me/organizer": {

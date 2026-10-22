@@ -126,7 +126,7 @@ test.describe("my tickets", () => {
     await page.goto("/ingressos");
     await expect(page.getByRole("heading", { name: "Você ainda não tem ingressos" })).toBeVisible();
     await page.getByRole("link", { name: "Passados" }).click();
-    await expect(page.getByRole("listitem")).toHaveCount(1);
+    await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(1);
   });
 
   test("says when a ticket does not exist, and needs a session", async ({ page }, testInfo) => {
