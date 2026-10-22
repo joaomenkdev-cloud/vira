@@ -89,7 +89,7 @@ describe("every application route declares an access policy", () => {
 
   it("keeps every account route private", () => {
     const accountRoutes = collectRoutes(testApp).filter((route) =>
-      /^\S+ (MeController|AccountSecurityController)\./.test(route.name),
+      /^\S+ (MeController|AccountSecurityController|DataExportController)\./.test(route.name),
     );
     const buyer = { kind: "role", role: "BUYER" };
     expect(Object.fromEntries(accountRoutes.map((route) => [route.name, route.policy]))).toEqual({
@@ -98,6 +98,8 @@ describe("every application route declares an access policy", () => {
       "POST MeController.organizer": buyer,
       "POST AccountSecurityController.password": buyer,
       "POST AccountSecurityController.email": buyer,
+      "DELETE AccountSecurityController.remove": buyer,
+      "GET DataExportController.export": buyer,
     });
   });
 

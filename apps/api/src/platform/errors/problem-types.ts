@@ -9,6 +9,7 @@ export const PROBLEM_TYPES = {
   "invalid-signature": { status: 400, title: "Assinatura do webhook inválida" },
   unauthenticated: { status: 401, title: "Autenticação necessária" },
   "invalid-credentials": { status: 401, title: "E-mail ou senha inválidos" },
+  "reauthentication-required": { status: 401, title: "Entre de novo para confirmar" },
   forbidden: { status: 403, title: "Acesso negado" },
   "email-not-verified": { status: 403, title: "E-mail ainda não verificado" },
   "csrf-failed": { status: 403, title: "Requisição de origem não confirmada" },
@@ -16,6 +17,10 @@ export const PROBLEM_TYPES = {
   conflict: { status: 409, title: "Conflito com o estado atual do recurso" },
   "password-not-set": { status: 409, title: "A conta não tem senha" },
   "already-organizer": { status: 409, title: "A conta já tem perfil de organizador" },
+  "organizer-has-upcoming-events": {
+    status: 409,
+    title: "O organizador tem eventos publicados por acontecer",
+  },
   "invalid-state-transition": { status: 409, title: "Operação incompatível com o estado atual" },
   "insufficient-inventory": { status: 409, title: "Ingressos insuficientes" },
   "pending-order-exists": { status: 409, title: "Já existe um pedido pendente para este evento" },

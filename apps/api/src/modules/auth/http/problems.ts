@@ -14,10 +14,16 @@ import {
   InvalidCredentialsError,
   InvalidTokenError,
   PasswordNotSetError,
+  PasswordRequiredError,
+  ReauthenticationRequiredError,
   SameEmailError,
   SessionNotFoundError,
 } from "../application/errors.js";
 import type { RequestContext } from "../application/request-context.js";
+import {
+  AccountNotFoundError as ErasedAccountError,
+  OrganizerHasUpcomingEventsError,
+} from "../../privacy/application/public-api.js";
 
 export function contextOf(request: Request): RequestContext {
   return typeof request.id === "string" ? { requestId: request.id } : {};
@@ -27,6 +33,8 @@ export function contextOf(request: Request): RequestContext {
 export interface ProblemFields {
   /** The new password (`password` on sign-up and reset, `newPassword` on change). */
   readonly newPassword?: string;
+  /** The password being confirmed (`currentPassword`, but `password` when deleting the account). */
+  readonly currentPassword?: string;
 }
 
 /** The documented answer for each way a use case can refuse. */
@@ -38,7 +46,9 @@ export async function asProblem<T>(work: () => Promise<T>, fields: ProblemFields
     if (error instanceof EmailNotVerifiedError) throw new ProblemException("email-not-verified");
     if (error instanceof InvalidTokenError) throw new ProblemException("token-expired");
     if (error instanceof SessionNotFoundError) throw new ProblemException("not-found");
-    if (error instanceof AccountNotFoundError) throw new ProblemException("unauthenticated");
+    if (error instanceof AccountNotFoundError || error instanceof ErasedAccountError) {
+      throw new ProblemException("unauthenticated");
+    }
     if (error instanceof PasswordNotSetError) throw new ProblemException("password-not-set");
     if (error instanceof BreachedPasswordError) {
       throw new ProblemException("breached-password", {
@@ -52,8 +62,23 @@ export async function asProblem<T>(work: () => Promise<T>, fields: ProblemFields
     }
     if (error instanceof IncorrectPasswordError) {
       throw new ProblemException("incorrect-password", {
-        errors: [{ path: "currentPassword", message: "Senha atual incorreta." }],
+        errors: [
+          { path: fields.currentPassword ?? "currentPassword", message: "Senha atual incorreta." },
+        ],
       });
+    }
+    if (error instanceof PasswordRequiredError) {
+      throw new ProblemException("validation-failed", {
+        errors: [
+          { path: fields.currentPassword ?? "currentPassword", message: "Digite sua senha." },
+        ],
+      });
+    }
+    if (error instanceof ReauthenticationRequiredError) {
+      throw new ProblemException("reauthentication-required");
+    }
+    if (error instanceof OrganizerHasUpcomingEventsError) {
+      throw new ProblemException("organizer-has-upcoming-events");
     }
     if (error instanceof SameEmailError) {
       throw new ProblemException("validation-failed", {
