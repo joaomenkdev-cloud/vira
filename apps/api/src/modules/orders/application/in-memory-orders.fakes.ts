@@ -8,6 +8,7 @@ import type { ExpirationScheduler } from "./ports/expiration-scheduler.js";
 import type { Inventory, Reservation } from "./ports/inventory.js";
 import type {
   HeldTickets,
+  LineHolders,
   NewOrder,
   OrderRepository,
   PayableOrder,
@@ -61,6 +62,8 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
   orders = new Map<string, OrderRow>();
   /** Idempotency keys another request is holding. */
   readonly busyKeys = new Set<string>();
+  /** The holders of each order's lines, by order item id. */
+  holders = new Map<string, Map<string, string[]>>();
   /** Ticket types in the order `reserve` was called. */
   readonly reserveCalls: string[] = [];
 
@@ -159,6 +162,20 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
     return Promise.resolve(true);
   }
 
+  setHolders(
+    orderId: string,
+    buyerId: string,
+    holders: readonly LineHolders[],
+    now: Date,
+  ): Promise<boolean> {
+    const row = this.orders.get(orderId);
+    if (row?.buyerId !== buyerId || row.status !== "PENDING" || row.expiresAt <= now) {
+      return Promise.resolve(false);
+    }
+    this.holders.set(orderId, new Map(holders.map((line) => [line.orderItemId, [...line.names]])));
+    return Promise.resolve(true);
+  }
+
   attachPaymentIntent(orderId: string, paymentIntentId: string): Promise<void> {
     const row = this.orders.get(orderId);
     if (row?.paymentIntentId === null) row.paymentIntentId = paymentIntentId;
@@ -175,7 +192,12 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
       totalCents: row.totalCents,
       paymentIntentId: row.paymentIntentId,
       buyerName: row.buyerName,
-      items: row.items.map(({ id, ticketTypeId, quantity }) => ({ id, ticketTypeId, quantity })),
+      items: row.items.map(({ id, ticketTypeId, quantity }) => ({
+        id,
+        ticketTypeId,
+        quantity,
+        holderNames: this.holders.get(row.id)?.get(id) ?? [],
+      })),
     });
   }
 
@@ -219,6 +241,7 @@ export class InMemoryOrderStore implements OrderRepository, Inventory, Transacti
       items: row.items.map((item) => ({
         ...item,
         name: this.stock.get(item.ticketTypeId)?.name ?? "?",
+        holderNames: this.holders.get(row.id)?.get(item.id) ?? [],
       })),
       totalCents: row.totalCents,
       expiresAt: row.expiresAt,

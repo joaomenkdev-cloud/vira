@@ -129,6 +129,7 @@ describe("every application route declares an access policy", () => {
       "POST OrdersController.create": buyer,
       "GET OrdersController.get": buyer,
       "POST OrdersController.payment": buyer,
+      "PUT OrdersController.holders": buyer,
       "POST OrdersController.extend": buyer,
       "POST OrdersController.cancel": buyer,
     });

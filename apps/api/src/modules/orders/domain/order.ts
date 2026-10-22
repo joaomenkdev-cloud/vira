@@ -19,6 +19,8 @@ export interface OrderItem {
   readonly name: string;
   readonly quantity: number;
   readonly unitPriceCents: number;
+  /** One per ticket once the buyer gave them (V6); empty until then. */
+  readonly holderNames: readonly string[];
 }
 
 /** An order as its buyer sees it (docs/DATA_MODEL.md#orders). */
@@ -36,6 +38,11 @@ export interface Order {
   readonly paidAt: Date | null;
   /** Its Stripe PaymentIntent, once payment started (never shown to the buyer as such). */
   readonly paymentIntentId: string | null;
+}
+
+/** Every line names the holder of each of its tickets: the order can be paid. */
+export function holdersComplete(order: Pick<Order, "items">): boolean {
+  return order.items.every((item) => item.holderNames.length === item.quantity);
 }
 
 export function subtotalCents(item: Pick<OrderItem, "quantity" | "unitPriceCents">): number {

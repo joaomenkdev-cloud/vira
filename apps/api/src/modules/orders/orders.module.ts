@@ -11,6 +11,7 @@ import { ExtendOrder } from "./application/extend-order.js";
 import { GetOrder } from "./application/get-order.js";
 import { OrderEvents } from "./application/order-events.js";
 import { OrderExpiry } from "./application/order-expiry.js";
+import { SetHolders } from "./application/set-holders.js";
 import { SettlePayment } from "./application/settle-payment.js";
 import { StartPayment } from "./application/start-payment.js";
 import { EXPIRATION_SCHEDULER } from "./application/ports/expiration-scheduler.js";
@@ -41,6 +42,7 @@ const persistence = [
   providers: [
     CreateOrder,
     StartPayment,
+    SetHolders,
     SettlePayment,
     PaymentSubscriber,
     OrderEvents,

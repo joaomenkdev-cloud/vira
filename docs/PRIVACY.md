@@ -28,7 +28,7 @@ A Lei Geral de Proteção de Dados (Lei nº 13.709/2018) é tratada como **requi
 | ID da conta no Google/GitHub | Usuário | `oauth_accounts.provider_account_id` | Login social | Execução de contrato (V) | Enquanto o vínculo existir; apagado na exclusão | Google / GitHub (eles já o têm) |
 | Nome público do organizador | Organizador | `organizer_profiles.display_name` | Exibir quem organiza o evento | Execução de contrato (V) | Enquanto houver eventos publicados; anonimizado na exclusão | Público (página do evento) |
 | Nome e e-mail do comprador (cópia no pedido) | Comprador | `orders.buyer_name`, `orders.buyer_email` | Comprovante, envio dos ingressos, suporte e contestação | Execução de contrato (V); exercício regular de direitos (VI) | 5 anos após a compra; anonimizado na exclusão da conta | Resend |
-| Nome do titular do ingresso | Titular (pode ser terceiro indicado pelo comprador) | `tickets.holder_name` | Identificação na entrada do evento | Execução de contrato (V) — em favor do titular | Até 90 dias após o evento; depois anonimizado por job | Organizador do evento (só no momento do check-in) |
+| Nome do titular do ingresso | Titular (pode ser terceiro indicado pelo comprador) | `order_items.holder_names` (informado no checkout, antes de pagar) e `tickets.holder_name` | Identificação na entrada do evento | Execução de contrato (V) — em favor do titular | Até 90 dias após o evento; depois anonimizado por job | Organizador do evento (só no momento do check-in) |
 | Dados de pagamento (cartão, endereço de cobrança) | Comprador | **Somente no Stripe** | Processar o pagamento | Execução de contrato (V) | Política do Stripe | Stripe (coleta direta, via Payment Element) |
 | Endereço IP e e-mail (nas tentativas de login) | Visitante | Redis (chave de rate limit, só o hash SHA-256 do IP ou do e-mail) | Segurança: limitar abuso | Legítimo interesse (IX) — prevenção a fraude | Duração da janela (≤ 1 h) | — |
 | Cookies de sessão e CSRF | Usuário | Navegador | Manter a sessão autenticada e proteger contra CSRF | Execução de contrato (V); estritamente necessários | Acesso: 10 min; refresh: até 30 dias | — |
@@ -37,7 +37,7 @@ A Lei Geral de Proteção de Dados (Lei nº 13.709/2018) é tratada como **requi
 
 **Não coletamos:** CPF, RG, telefone, endereço residencial, data de nascimento, gênero, geolocalização, dados sensíveis (art. 5º, II), dados de crianças, cookies de analytics ou de publicidade.
 
-Sobre o titular indicado por terceiro: o comprador informa o nome de quem vai usar o ingresso. A interface avisa que esse nome será exibido ao organizador no check-in, e o dado é anonimizado 90 dias após o evento.
+Sobre o titular indicado por terceiro: o comprador informa o nome de quem vai usar o ingresso (V6: um campo por ingresso no checkout, o primeiro preenchido com o nome do próprio comprador). A interface avisa que esse nome é "conferido na entrada do evento", isto é, exibido ao organizador no check-in, e o dado é anonimizado 90 dias após o evento.
 
 ### Onde dado pessoal **não** pode aparecer
 

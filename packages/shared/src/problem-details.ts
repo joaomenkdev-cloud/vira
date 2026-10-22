@@ -19,6 +19,9 @@ export const problemDetailsSchema = z
     instance: z.string().optional(),
     requestId: z.string().optional(),
     errors: z.array(fieldErrorSchema).optional(),
+    orderId: z.uuid().optional().meta({
+      description: "Em `pending-order-exists`: o pedido em andamento, para retomá-lo",
+    }),
   })
   .meta({ id: "ProblemDetails" });
 

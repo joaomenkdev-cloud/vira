@@ -20,7 +20,7 @@ import { ApiError, toApiError } from "./errors";
 const API_PREFIX = "/api/v1";
 const REFRESH_LOCK = "vira-session-refresh";
 
-export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export interface RequestOptions {
   method?: HttpMethod;
@@ -32,6 +32,8 @@ export interface RequestOptions {
    * the routes that open a session (a `401` there means wrong credentials).
    */
   refresh?: boolean;
+  /** Extra request headers, such as the `Idempotency-Key` of a purchase. */
+  headers?: Readonly<Record<string, string>>;
 }
 
 export interface ApiClientDependencies {
@@ -123,7 +125,7 @@ export function createApiClient({ fetch, locks }: ApiClientDependencies): ApiCli
     retried: { refresh: boolean; csrf: boolean },
   ): Promise<Response> {
     const { method = "GET", body, csrf = false, refresh = true } = options;
-    const headers: Record<string, string> = { accept: "application/json" };
+    const headers: Record<string, string> = { ...options.headers, accept: "application/json" };
     if (body !== undefined) headers["content-type"] = "application/json";
     if (csrf) headers["x-csrf-token"] = await currentCsrfToken();
 

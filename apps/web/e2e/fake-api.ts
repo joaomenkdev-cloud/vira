@@ -9,10 +9,13 @@
 //   POST /__test/expire-access?email= makes the account's access tokens expire
 //   GET  /__test/stats?email=         refreshes and reuse detections of the account
 //   POST /__test/make-organizer?email= gives the account an organizer profile
+//   POST /__test/orders/pay?id=       Stripe's webhook: the order is paid (fixtures/orders.ts)
+//   POST /__test/orders/expire-in?id=&seconds= moves the reservation's deadline
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 import { catalogPhoto, handleCatalog } from "./fixtures/catalog.ts";
+import { handleOrders, handleOrdersTestRoute } from "./fixtures/orders.ts";
 import { handleOrganizer, publishedEventDetail } from "./fixtures/organizer.ts";
 import { startStorage } from "./fixtures/storage.ts";
 
@@ -279,6 +282,10 @@ async function handle(
     return send(response, 204);
   }
 
+  if (handleOrdersTestRoute(method, url, (status, answer) => send(response, status, answer))) {
+    return "answered";
+  }
+
   if (path === "/api/v1/health/live") {
     return send(response, 200, { status: "ok" }, { "x-fake-api": "1" });
   }
@@ -300,6 +307,18 @@ async function handle(
     problem: (status, code, extra) => problem(response, status, code, extra),
   });
   if (organizerRoute) return "answered";
+
+  const key = request.headers["idempotency-key"];
+  const ordersRoute = handleOrders(method, path.replace(/^\/api\/v1/, ""), body, {
+    buyer: ({ csrf }) => {
+      const auth = guard(request, response, { csrf });
+      return auth ? { id: auth.user.id, name: auth.user.name } : undefined;
+    },
+    idempotencyKey: typeof key === "string" ? key : undefined,
+    send: (status, answer) => send(response, status, answer),
+    problem: (status, code, extra) => problem(response, status, code, extra),
+  });
+  if (ordersRoute) return "answered";
 
   switch (route) {
     case "POST /auth/register": {

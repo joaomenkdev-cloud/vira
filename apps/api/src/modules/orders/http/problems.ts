@@ -51,6 +51,8 @@ export async function asProblem<T>(work: () => Promise<T>): Promise<T> {
     if (error instanceof PendingOrderExistsError) {
       throw new ProblemException("pending-order-exists", {
         detail: "Você já tem uma reserva em andamento para este evento.",
+        // The caller's own order: telling them its id reveals nothing about anyone else.
+        ...(error.orderId ? { orderId: error.orderId } : {}),
       });
     }
     if (error instanceof RequestInProgressError) {

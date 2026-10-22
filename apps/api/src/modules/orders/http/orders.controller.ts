@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Put,
   Req,
   Res,
 } from "@nestjs/common";
@@ -21,6 +22,8 @@ import {
   paymentSessionSchema,
   problemDetailsSchema,
   resourceIdSchema,
+  type SetOrderHoldersRequest,
+  setOrderHoldersRequestSchema,
 } from "@vira/shared";
 import type { Request, Response } from "express";
 
@@ -32,6 +35,7 @@ import { CancelOrder } from "../application/cancel-order.js";
 import { CreateOrder } from "../application/create-order.js";
 import { ExtendOrder } from "../application/extend-order.js";
 import { GetOrder } from "../application/get-order.js";
+import { SetHolders } from "../application/set-holders.js";
 import { StartPayment } from "../application/start-payment.js";
 import { ORDERS_RATE_LIMITS } from "../application/rate-limits.js";
 import { orderBody } from "./bodies.js";
@@ -63,6 +67,7 @@ export class OrdersController {
     private readonly extendOrder: ExtendOrder,
     private readonly cancelOrder: CancelOrder,
     private readonly startPayment: StartPayment,
+    private readonly setHolders: SetHolders,
   ) {}
 
   @Post()
@@ -120,6 +125,29 @@ export class OrdersController {
     @Req() request: Request,
   ): Promise<OrderBody> {
     return orderBody(await asProblem(() => this.getOrder.execute(callerOf(request), id)));
+  }
+
+  @Put(":id/holders")
+  @ApiOperation({
+    summary: "Informa o titular de cada ingresso, antes de pagar",
+    description:
+      "Só pedidos `PENDING` com a reserva em andamento. Todas as linhas do pedido, uma vez " +
+      "cada, com um nome por ingresso; enviar de novo substitui os nomes. O nome vai para " +
+      "o ingresso e é mostrado ao organizador no check-in.",
+  })
+  @ApiResponse({ status: HttpStatus.OK, standardSchema: orderSchema })
+  @problem(HttpStatus.BAD_REQUEST)
+  @problem(HttpStatus.UNAUTHORIZED)
+  @problem(HttpStatus.NOT_FOUND)
+  @problem(HttpStatus.CONFLICT)
+  async holders(
+    @Param("id", { schema: resourceIdSchema }) id: string,
+    @Body({ schema: setOrderHoldersRequestSchema }) body: SetOrderHoldersRequest,
+    @Req() request: Request,
+  ): Promise<OrderBody> {
+    return orderBody(
+      await asProblem(() => this.setHolders.execute(callerOf(request), id, body.holders)),
+    );
   }
 
   @Post(":id/payment")

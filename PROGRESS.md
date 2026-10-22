@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 2 — MVP público v1.0 (o Marco 1 terminou com a N13).
-- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V4 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#39) e Dependabot (#4–#7, #9 CodeQL v4). V5 no PR da emissão de ingressos (`feat/tickets-issuance`).
-- **Entregas abertas:** V5.
-- **Próximo passo:** V6 — Checkout (`feat/web-checkout`).
+- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V5 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#40) e Dependabot (#4–#7, #9 CodeQL v4). V6 no PR do checkout (`feat/web-checkout`).
+- **Entregas abertas:** V6.
+- **Próximo passo:** V7 — Meus ingressos e ingresso digital (`feat/web-tickets`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,27 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-22 — V6: checkout
+
+Auditoria (antes de codar): a página do evento só listava os tipos; o cliente da API não tinha `PUT` nem cabeçalhos próprios (a `Idempotency-Key`); a API não tinha onde guardar os titulares antes do pagamento e o `pending-order-exists` não dizia qual era o pedido.
+
+Feito:
+
+- API: `order_items.holder_names` (`CHECK` com exatamente `quantity` nomes válidos ou vazio), `PUT /orders/{id}/holders` (pedido pendente com a reserva em andamento, todas as linhas, um nome por ingresso), pagamento recusado sem os titulares (`409`), emissão com o nome de cada posição e `orderId` no `409 pending-order-exists`.
+- Web: seletor na página do evento (radio por tipo, stepper, total, "Comprar ingresso", barra fixa no mobile com área segura), login preservando a escolha no endereço (`?ingresso=&quantidade=`), reserva com `Idempotency-Key` por tentativa, retomada da reserva já existente.
+- Checkout (`/checkout/{id}`): header próprio sem navegação ("Pagamento seguro"), etapas, contador da reserva (anuncia só em 5, 2 e 1 min e no fim; em `warning` com "Manter reserva" nos 2 minutos finais), resumo fixo no desktop e recolhível no mobile, titulares (o primeiro com o nome do comprador) e Payment Element do Stripe carregado só nessa etapa (`@stripe/stripe-js/pure`).
+- Confirmação (`/checkout/{id}/confirmacao`): "Confirmando pagamento…" até o webhook marcar `PAID`, depois o pedido e os códigos dos ingressos; demora, pedido encerrado/estornado e retorno de 3-D Secure recusado têm telas próprias. Reserva expirada: modal "Sua reserva expirou" com "Tentar de novo" voltando à mesma escolha.
+- CSP: `js.stripe.com` e `*.js.stripe.com` em `script-src`/`frame-src`, `hooks.stripe.com` em `frame-src`, `api.stripe.com` em `connect-src`.
+- Testes: unidade (titulares, seleção pelo endereço, contador e anúncios, cliente com cabeçalhos, CSP); integração (titulares, recusas, `CHECK` no banco, ingressos com os nomes); E2E com a API simulada e um Stripe.js de mentira (login preservando a escolha, titulares, pagamento, webhook simulado, cartão recusado, retomada, extensão, expiração, axe); prints.
+
+Decisões tomadas por conta própria:
+
+- **Um tipo de ingresso por compra** (radio, como no wireframe); a API continua aceitando várias linhas.
+- **Nome e e-mail do comprador só leitura no checkout** (vêm da conta; mudam em "Minha conta"), e titulares numa etapa antes do pagamento, que só é criado com eles salvos.
+- **Confirmação mostra os códigos** em vez de levar ao ingresso: a página do ingresso é a V7.
+- **Resumo sem a foto do evento** (o pedido não traz a imagem; evita outra chamada).
+- Ficam para depois: página de ingressos (V7), cancelar o PaymentIntent quando a reserva expira.
 
 ### 2026-10-21 — V5: emissão de ingressos
 

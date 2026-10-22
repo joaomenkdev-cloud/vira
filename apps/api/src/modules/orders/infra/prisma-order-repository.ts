@@ -6,6 +6,7 @@ import { PrismaService } from "../../../platform/database/prisma.service.js";
 import type { TransactionContext } from "../../../platform/database/transaction.js";
 import type {
   HeldTickets,
+  LineHolders,
   NewOrder,
   OrderRepository,
   PayableOrder,
@@ -40,6 +41,7 @@ function orderOf(row: OrderRow): Order {
       name: item.ticketType.name,
       quantity: item.quantity,
       unitPriceCents: item.unitPriceCents,
+      holderNames: item.holderNames,
     })),
     totalCents: row.totalCents,
     expiresAt: row.expiresAt,
@@ -198,7 +200,7 @@ export class PrismaOrderRepository implements OrderRepository {
     if (!row) return null;
     const items = await client.orderItem.findMany({
       where: { orderId },
-      select: { id: true, ticketTypeId: true, quantity: true },
+      select: { id: true, ticketTypeId: true, quantity: true, holderNames: true },
       orderBy: { ticketTypeId: "asc" },
     });
     return {
@@ -226,6 +228,30 @@ export class PrismaOrderRepository implements OrderRepository {
       data: { status: "REFUNDED", refundedAt: now },
     });
     return count === 1;
+  }
+
+  async setHolders(
+    orderId: string,
+    buyerId: string,
+    holders: readonly LineHolders[],
+    now: Date,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      // Locked, so the payment, the expiration or a cancellation cannot happen in between.
+      const rows = await tx.$queryRaw<{ id: string }[]>`
+        SELECT "id" FROM "orders"
+         WHERE "id" = ${orderId}::uuid AND "buyer_id" = ${buyerId}::uuid
+           AND "status" = 'PENDING' AND "expires_at" > ${now}
+           FOR UPDATE`;
+      if (rows.length === 0) return false;
+      for (const line of holders) {
+        await tx.orderItem.updateMany({
+          where: { id: line.orderItemId, orderId },
+          data: { holderNames: [...line.names] },
+        });
+      }
+      return true;
+    });
   }
 
   async attachPaymentIntent(orderId: string, paymentIntentId: string): Promise<void> {

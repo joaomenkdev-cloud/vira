@@ -344,9 +344,9 @@ Publicar, editar e mexer em tipos de ingresso travam a linha do evento (`SELECT 
 | POST | `/orders/{id}/extend` | OWNER | — | `200 Order` (novo `expiresAt`) | 404, 409 (já estendido, fora da janela de 2 min) | — |
 | POST | `/orders/{id}/cancel` | OWNER | — | `200 Order` (CANCELED) | 404, 409 | — |
 
-`Order`: `{ id, publicCode, status, event: { id, slug, title, startsAt, endsAt, timezone }, items: [{ id, ticketTypeId, name, quantity, unitPrice: Money, subtotal: Money }], total: Money, expiresAt, extensionAvailable, createdAt, paidAt }`. Os titulares (`holders`) entram com `PUT /orders/{id}/holders`. O pedido nunca mostra as cópias do nome e do e-mail do comprador nem a `Idempotency-Key`.
+`Order`: `{ id, publicCode, status, event: { id, slug, title, startsAt, endsAt, timezone }, items: [{ id, ticketTypeId, name, quantity, unitPrice: Money, subtotal: Money, holderNames: string[] }], total: Money, expiresAt, extensionAvailable, createdAt, paidAt }`. `holderNames` fica vazio até `PUT /orders/{id}/holders` e então tem um nome por ingresso da linha. O pedido nunca mostra as cópias do nome e do e-mail do comprador nem a `Idempotency-Key`.
 
-Entregue na V1: `POST /orders` e `GET /orders/{id}`; na V2, `POST /orders/{id}/extend` e `POST /orders/{id}/cancel`; na V3, `POST /orders/{id}/payment`. As outras rotas chegam com o checkout (V6).
+Entregue na V1: `POST /orders` e `GET /orders/{id}`; na V2, `POST /orders/{id}/extend` e `POST /orders/{id}/cancel`; na V3, `POST /orders/{id}/payment`; na V6, `PUT /orders/{id}/holders`.
 
 | `POST /orders` | Regra |
 | --- | --- |
@@ -355,7 +355,7 @@ Entregue na V1: `POST /orders` e `GET /orders/{id}`; na V2, `POST /orders/{id}/e
 | Evento cancelado ou encerrado; tipo fora da janela de vendas (sem fim próprio, as vendas vão até o fim do evento) | `422 sales-closed`, com o motivo em `detail` |
 | Mais que o `maxPerOrder` do tipo | `400 validation-failed` apontando `items.N.quantity` |
 | Total acima de R$ 999.999,99 (teto de um pagamento no Stripe) | `400 validation-failed` apontando `items` |
-| Já existe pedido `PENDING` do comprador para o evento | `409 pending-order-exists`. Um pendente cujo prazo já venceu é expirado na hora (estoque devolvido) e não impede o novo |
+| Já existe pedido `PENDING` do comprador para o evento | `409 pending-order-exists`, com o `orderId` desse pedido no corpo (é do próprio comprador; o web retoma a reserva). Um pendente cujo prazo já venceu é expirado na hora (estoque devolvido) e não impede o novo |
 | Estoque insuficiente em qualquer tipo | `409 insufficient-inventory` ("Restam N ingresso(s) de …" ou "… esgotaram"); nada fica reservado |
 | Mesmo tipo de ingresso em dois itens | `400 validation-failed` (some as quantidades num item só) |
 
@@ -365,7 +365,9 @@ Entregue na V1: `POST /orders` e `GET /orders/{id}`; na V2, `POST /orders/{id}/e
 | `POST /orders/{id}/cancel` | `PENDING` → `CANCELED` (mesmo com o prazo vencido), estoque devolvido na mesma transação; audita `order.canceled`. Repetir devolve o pedido cancelado (`200`). Pago, expirado ou reembolsado: `409 invalid-state-transition` |
 | De outro comprador | `404`, como nas outras rotas |
 
-`POST /orders/{id}/payment` (V3, ADR-0006): só `PENDING` com a reserva em andamento (senão `409 invalid-state-transition`). Na primeira chamada cria o PaymentIntent do pedido no Stripe (modo de teste) com o **total gravado no pedido**, `metadata.orderId` e a idempotency key `pi:{orderId}`, e grava o id em `orders.stripe_payment_intent_id`; as seguintes devolvem o mesmo PaymentIntent. A resposta traz só o `clientSecret` e a chave publicável, para o Payment Element. Pagar não muda o pedido: ele só vira `PAID` pelo webhook (V4). Sem as chaves do Stripe no ambiente, ou com o Stripe fora do ar, `503 payments-unavailable`. A verificação dos titulares entra com `PUT /orders/{id}/holders` (V6).
+`POST /orders/{id}/payment` (V3, ADR-0006): só `PENDING` com a reserva em andamento (senão `409 invalid-state-transition`). Na primeira chamada cria o PaymentIntent do pedido no Stripe (modo de teste) com o **total gravado no pedido**, `metadata.orderId` e a idempotency key `pi:{orderId}`, e grava o id em `orders.stripe_payment_intent_id`; as seguintes devolvem o mesmo PaymentIntent. A resposta traz só o `clientSecret` e a chave publicável, para o Payment Element. Pagar não muda o pedido: ele só vira `PAID` pelo webhook (V4). Sem as chaves do Stripe no ambiente, ou com o Stripe fora do ar, `503 payments-unavailable`. Sem o nome de todos os titulares, `409 invalid-state-transition` ("Informe o nome do titular de cada ingresso antes de pagar.").
+
+`PUT /orders/{id}/holders` (V6): só `PENDING` com a reserva em andamento (senão `409 invalid-state-transition`). O corpo traz todas as linhas do pedido, uma vez cada, com exatamente `quantity` nomes (1–120 caracteres, sem espaços nas pontas depois do `trim`); linha que não é do pedido, linha faltando ou contagem errada: `400 validation-failed` com o caminho (`holders.N.orderItemId`, `holders`, `holders.N.names`). Enviar de novo substitui os nomes. Na emissão (V5), cada ingresso leva o nome da sua posição na linha. O banco garante a regra com o `CHECK order_items_holder_names`.
 
 A reserva termina sozinha: um job com delay até `expiresAt` passa o pedido para `EXPIRED` e devolve o estoque, com uma varredura a cada minuto como rede de segurança (ARCHITECTURE, seção 6). A expiração é auditada (`order.expired`, ator `SYSTEM`).
 

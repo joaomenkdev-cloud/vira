@@ -25,6 +25,7 @@ export function orderBody(order: Order): OrderBody {
       quantity: item.quantity,
       unitPrice: brl(item.unitPriceCents),
       subtotal: brl(subtotalCents(item)),
+      holderNames: [...item.holderNames],
     })),
     total: brl(order.totalCents),
     expiresAt: order.expiresAt.toISOString(),

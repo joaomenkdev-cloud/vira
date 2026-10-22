@@ -17,6 +17,12 @@ export type ProblemCode =
   | "token-expired"
   | "invalid-state-transition"
   | "invalid-image"
+  | "sales-closed"
+  | "insufficient-inventory"
+  | "pending-order-exists"
+  | "request-in-progress"
+  | "idempotency-key-reused"
+  | "payments-unavailable"
   | "rate-limited"
   | "payload-too-large"
   | "internal-error"
@@ -46,6 +52,12 @@ const KNOWN_CODES = new Set<string>([
   "token-expired",
   "invalid-state-transition",
   "invalid-image",
+  "sales-closed",
+  "insufficient-inventory",
+  "pending-order-exists",
+  "request-in-progress",
+  "idempotency-key-reused",
+  "payments-unavailable",
   "rate-limited",
   "payload-too-large",
   "internal-error",

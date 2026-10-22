@@ -8,11 +8,13 @@ import { EventDescription } from "@/components/catalog/event-description";
 import { EventImage } from "@/components/catalog/event-image";
 import { TicketList } from "@/components/catalog/ticket-list";
 import { getEvent, hasEnded } from "@/lib/catalog/api";
+import { selectionFrom } from "@/lib/checkout/selection";
 import { eventJsonLd, eventMetadata } from "@/lib/catalog/seo";
 import { formatDateRange, formatShortDate, formatTimeZone } from "@/lib/format";
 
 interface EventPageProps {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export async function generateMetadata({ params }: EventPageProps): Promise<Metadata> {
@@ -25,7 +27,7 @@ export async function generateMetadata({ params }: EventPageProps): Promise<Meta
  * place, description, tickets. A canceled event still answers, so a saved link keeps
  * working, but says so first.
  */
-export default async function EventPage({ params }: EventPageProps) {
+export default async function EventPage({ params, searchParams }: EventPageProps) {
   const event = await getEvent((await params).slug);
   if (!event) notFound();
 
@@ -76,7 +78,11 @@ export default async function EventPage({ params }: EventPageProps) {
               <h2 id="ingressos" className="text-h2-sm md:text-h2">
                 Ingressos
               </h2>
-              <TicketList event={event} closed={canceled || ended} />
+              <TicketList
+                event={event}
+                closed={canceled || ended}
+                selection={selectionFrom(await searchParams, event)}
+              />
             </div>
           </aside>
         </div>

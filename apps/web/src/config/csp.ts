@@ -5,9 +5,14 @@
  * loads from them run in turn. Nothing may be framed, embedded as an object, or
  * submitted to another origin. The one other origin scripts may reach is the object
  * storage, where the organizer panel sends event pictures with a pre-signed `PUT`
- * (docs/API.md, "Imagem do evento"). When the checkout arrives (delivery V6) the
- * Stripe origins are added to `script-src`, `frame-src` and `connect-src` here.
+ * (docs/API.md, "Imagem do evento"). The checkout loads Stripe.js and its Payment
+ * Element (ADR-0006): Stripe's script, its frames (the card fields and the bank's 3-D
+ * Secure page) and its API, as Stripe documents for a Content Security Policy.
  */
+
+const STRIPE_SCRIPTS = ["https://js.stripe.com", "https://*.js.stripe.com"] as const;
+const STRIPE_FRAMES = [...STRIPE_SCRIPTS, "https://hooks.stripe.com"] as const;
+const STRIPE_API = "https://api.stripe.com";
 
 export interface CspOptions {
   /** Fresh, unpredictable value generated for every request. */
@@ -30,12 +35,14 @@ export function buildCsp({ nonce, isDevelopment, storageOrigin }: CspOptions): s
       "'self'",
       `'nonce-${nonce}'`,
       "'strict-dynamic'",
+      ...STRIPE_SCRIPTS,
       ...(isDevelopment ? ["'unsafe-eval'"] : []),
     ],
     "style-src": ["'self'", ...(isDevelopment ? ["'unsafe-inline'"] : [`'nonce-${nonce}'`])],
     "img-src": ["'self'", "blob:", "data:"],
     "font-src": ["'self'"],
-    "connect-src": ["'self'", storageOrigin],
+    "connect-src": ["'self'", storageOrigin, STRIPE_API],
+    "frame-src": [...STRIPE_FRAMES],
     "object-src": ["'none'"],
     "base-uri": ["'none'"],
     "form-action": ["'self'"],
