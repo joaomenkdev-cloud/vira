@@ -711,6 +711,8 @@ Fluxo: **seleção na página do evento → reserva (10 min) → dados → pagam
 └──────────────────────────────┘
 ```
 
+**Como ficou implementado (V7).** Ingresso como no 3.10: faixa da foto (16:6) só no desktop, linha picotada com recortes feitos por círculos na cor da página meio escondidos pelo próprio cartão (não `mask`), QR de 240 px desenhado como um `<path>` SVG com zona de silêncio de 16 px, `USED` com o QR a 25% e o selo "Utilizado em…", `CANCELED` com o alert e sem QR. Ao lado, o pedido (código, data do pagamento e total) e os ingressos dele; no mobile, "1 de 2" e links "Ingresso anterior"/"Próximo ingresso" no lugar do carrossel por gesto. "Tela cheia" é um `<dialog>` nativo em branco com o QR, o titular e o código; "Imprimir" usa `@media print` sem header, footer e botões. A lista de "Meus ingressos" tem abas Próximos/Passados e cartões sem miniatura (o resumo do ingresso na API não traz a imagem).
+
 ---
 
 ## 5. Conteúdo e dados da demo
