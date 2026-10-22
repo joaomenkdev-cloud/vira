@@ -5,6 +5,8 @@ import type {
   BecomeOrganizerRequest,
   ChangeEmailRequest,
   ChangePasswordRequest,
+  DataExport,
+  DeleteAccountRequest,
   LoginRequest,
   OrganizerProfileResponse,
   PublicUser,
@@ -127,5 +129,16 @@ export async function logout(): Promise<void> {
 
 export async function logoutAll(): Promise<void> {
   await api.request("/auth/logout-all", { method: "POST", csrf: true });
+  api.sessionChanged();
+}
+
+/** Everything the account holds (docs/PRIVACY.md, "Direitos do titular"). */
+export function exportAccountData(): Promise<DataExport> {
+  return api.request<DataExport>("/me/export");
+}
+
+/** Anonymizes the account; the API clears the session cookies on the way out. */
+export async function deleteAccount(body: DeleteAccountRequest): Promise<void> {
+  await api.request("/me", { method: "DELETE", body, csrf: true });
   api.sessionChanged();
 }

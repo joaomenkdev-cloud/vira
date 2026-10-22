@@ -7,6 +7,7 @@ export type ProblemCode =
   | "incorrect-password"
   | "unauthenticated"
   | "invalid-credentials"
+  | "reauthentication-required"
   | "csrf-failed"
   | "email-not-verified"
   | "forbidden"
@@ -14,6 +15,7 @@ export type ProblemCode =
   | "conflict"
   | "password-not-set"
   | "already-organizer"
+  | "organizer-has-upcoming-events"
   | "token-expired"
   | "invalid-state-transition"
   | "invalid-image"
@@ -42,6 +44,7 @@ const KNOWN_CODES = new Set<string>([
   "incorrect-password",
   "unauthenticated",
   "invalid-credentials",
+  "reauthentication-required",
   "csrf-failed",
   "email-not-verified",
   "forbidden",
@@ -49,6 +52,7 @@ const KNOWN_CODES = new Set<string>([
   "conflict",
   "password-not-set",
   "already-organizer",
+  "organizer-has-upcoming-events",
   "token-expired",
   "invalid-state-transition",
   "invalid-image",

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   validateCurrentPassword,
+  validateDeletionConfirmation,
   validateEmail,
   validateName,
   validateNewPassword,
@@ -31,5 +32,14 @@ describe("field validation", () => {
     // A login never reveals the policy: a short password is just sent.
     expect(validateCurrentPassword("")).toBe("Informe sua senha.");
     expect(validateCurrentPassword("123")).toBeUndefined();
+  });
+
+  it("deletes the account only with the word typed as shown", () => {
+    expect(validateDeletionConfirmation("EXCLUIR")).toBeUndefined();
+    expect(validateDeletionConfirmation(" EXCLUIR ")).toBeUndefined();
+    expect(validateDeletionConfirmation("excluir")).toBe(
+      "Digite EXCLUIR, em letras maiúsculas, para confirmar.",
+    );
+    expect(validateDeletionConfirmation("")).toBeDefined();
   });
 });

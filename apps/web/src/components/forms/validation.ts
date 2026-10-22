@@ -1,4 +1,5 @@
 import {
+  ACCOUNT_DELETION_CONFIRMATION,
   emailSchema,
   NAME_MAX_LENGTH,
   ORGANIZER_DISPLAY_NAME_MAX_LENGTH,
@@ -65,3 +66,9 @@ export const validateCurrentPassword: Validator = (value) => {
 };
 
 export const NEW_PASSWORD_HINT = `Pelo menos ${String(PASSWORD_MIN_LENGTH)} caracteres. Frases longas são fáceis de lembrar e difíceis de adivinhar.`;
+
+/** The word the deletion modal asks for, exactly as shown: a typo keeps the account. */
+export const validateDeletionConfirmation: Validator = (value) =>
+  value.trim() === ACCOUNT_DELETION_CONFIRMATION
+    ? undefined
+    : `Digite ${ACCOUNT_DELETION_CONFIRMATION}, em letras maiúsculas, para confirmar.`;

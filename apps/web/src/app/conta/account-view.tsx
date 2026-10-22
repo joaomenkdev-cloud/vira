@@ -9,6 +9,7 @@ import { useSession } from "@/lib/session/session-provider";
 import { EmailSection } from "./email-section";
 import { OrganizerSection } from "./organizer-section";
 import { PasswordSection } from "./password-section";
+import { PrivacySection } from "./privacy-section";
 import { ProfileSection } from "./profile-section";
 import { SessionsSection } from "./sessions-section";
 
@@ -64,6 +65,7 @@ export function AccountView() {
       <PasswordSection account={account} />
       <OrganizerSection account={account} />
       <SessionsSection />
+      <PrivacySection account={account} />
     </div>
   );
 }
