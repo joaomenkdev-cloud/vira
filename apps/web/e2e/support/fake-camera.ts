@@ -1,6 +1,5 @@
-import { renameSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import QRCode from "qrcode";
 
@@ -13,8 +12,20 @@ export const FAKE_CAMERA_TOKEN = "v1.e2e.camera-ticket";
 const WIDTH = 640;
 const HEIGHT = 480;
 
-/** Where the video is written: outside test-results, which Playwright empties on start. */
-export const FAKE_CAMERA_FILE = join(tmpdir(), "vira-e2e-fake-camera.y4m");
+/**
+ * Where the video is written: in the project's own cache (not the shared temp directory,
+ * where another user could plant the file), outside test-results, which Playwright
+ * empties on start.
+ */
+export const FAKE_CAMERA_FILE = join(
+  import.meta.dirname,
+  "..",
+  "..",
+  "node_modules",
+  ".cache",
+  "vira-e2e",
+  "fake-camera.y4m",
+);
 
 /**
  * Writes a one-frame Y4M video of the QR, black on white, for Chromium's fake camera
@@ -41,6 +52,7 @@ export function writeFakeCamera(path = FAKE_CAMERA_FILE): string {
   const chroma = Buffer.alloc((WIDTH / 2) * (HEIGHT / 2) * 2, 128);
   // Every worker loads the config and writes the file again: a rename swaps it whole,
   // so a browser starting meanwhile never reads half of it.
+  mkdirSync(dirname(path), { recursive: true });
   const partial = `${path}.${String(process.pid)}`;
   writeFileSync(
     partial,
