@@ -62,6 +62,7 @@ export function EmailSection({ account }: { account: Account }) {
     >
       {account.hasPassword ? (
         <form
+          method="post"
           noValidate
           onSubmit={(event) => void handleSubmit(event)}
           className="flex flex-col gap-6"

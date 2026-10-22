@@ -247,6 +247,7 @@ function Reader({ event, ended }: { event: OrganizerEvent; ended: boolean }) {
           </section>
 
           <form
+            method="post"
             noValidate
             onSubmit={(submit) => {
               void onSubmitCode(submit);

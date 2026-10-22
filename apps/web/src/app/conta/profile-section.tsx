@@ -39,6 +39,7 @@ export function ProfileSection({ account }: { account: Account }) {
   return (
     <AccountSection title="Perfil" description="O nome que aparece nos seus ingressos.">
       <form
+        method="post"
         noValidate
         onSubmit={(event) => void handleSubmit(event)}
         className="flex flex-col gap-6"
