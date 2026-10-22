@@ -28,6 +28,7 @@ const pages = [
   { name: "login", path: "/entrar" },
   { name: "sign-up", path: "/cadastro" },
   { name: "forgot-password", path: "/esqueci-a-senha" },
+  { name: "privacy", path: "/privacidade" },
   { name: "not-found", path: "/esta-pagina-nao-existe" },
   // Served by a production build only with VIRA_DESIGN_SYSTEM=true.
   { name: "design-system", path: "/dev/design-system" },
@@ -230,6 +231,27 @@ try {
       await typeCode("VIRA-0000-0000");
       await page.getByText("QR Code ou código não reconhecido. Não libere a entrada.").waitFor();
       await shoot(page, `web-checkin-invalid-${viewport.name}.png`);
+
+      // Privacy: the account's section, the deletion modal and its refusal (this
+      // organizer has an event on tonight), then the page an erased account lands on.
+      await page.goto(`${baseUrl}/conta#privacidade`);
+      const privacy = page.getByRole("region", { name: "Privacidade" });
+      await privacy.waitFor();
+      await privacy.screenshot({ path: join(outDir, `web-account-privacy-${viewport.name}.png`) });
+      await page.getByRole("button", { name: "Excluir minha conta" }).click();
+      const deletion = page.getByRole("dialog", { name: "Excluir sua conta?" });
+      await deletion.waitFor();
+      await page.waitForTimeout(500);
+      await shoot(page, `web-account-delete-${viewport.name}.png`, false);
+      await deletion.getByLabel("Sua senha").fill("uma frase longa e segura");
+      await deletion.getByLabel("Digite EXCLUIR para confirmar").fill("EXCLUIR");
+      await deletion.getByRole("button", { name: "Excluir conta" }).click();
+      await deletion.getByText("Você tem eventos publicados que ainda vão acontecer.").waitFor();
+      await shoot(page, `web-account-delete-blocked-${viewport.name}.png`, false);
+      await page.keyboard.press("Escape");
+      await page.goto(`${baseUrl}/conta-excluida`);
+      await page.getByRole("heading", { name: "Sua conta foi excluída" }).waitFor();
+      await shoot(page, `web-account-deleted-${viewport.name}.png`);
     }
 
     // Open layers cannot show in a full-page capture of the closed page: photograph them
