@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 2 — MVP público v1.0 (o Marco 1 terminou com a N13).
-- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V5 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#40) e Dependabot (#4–#7, #9 CodeQL v4). V6 no PR do checkout (`feat/web-checkout`).
-- **Entregas abertas:** V6.
-- **Próximo passo:** V7 — Meus ingressos e ingresso digital (`feat/web-tickets`).
+- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V6 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#41) e Dependabot (#4–#7, #9 CodeQL v4). V7 no PR de meus ingressos (`feat/web-tickets`).
+- **Entregas abertas:** V7.
+- **Próximo passo:** V8 — Check-in (`feat/checkin`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,26 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-22 — V7: meus ingressos e ingresso digital
+
+Auditoria (antes de codar): a API já tinha `GET /tickets` e `GET /tickets/{id}` com o `qrToken` (V5); o e-mail já apontava para `/ingressos`, que não existia; o resumo do ingresso não traz a foto do evento.
+
+Feito (só web; a API não mudou):
+
+- `/ingressos`: abas Próximos/Passados, cartões com data, evento, titular, tipo, local, código e selo "Utilizado"/"Cancelado", "Carregar mais" com o cursor, estados vazios do DESIGN.
+- `/ingressos/{id}`: o ingresso digital (faixa da foto no desktop, data com "Demonstração", horário, local, titular e tipo, linha picotada com recortes, QR de 240 px com nível M e zona de silêncio, código em mono), estados `USED` (QR a 25% com "Utilizado em…") e `CANCELED` (sem QR, alert), pedido e outros ingressos dele, "Como chegar", "Tela cheia" (`<dialog>` nativo, só QR, titular e código em branco) e "Imprimir" (`@media print` sem header, footer e botões).
+- "Meus ingressos" no header (logado) e no menu da conta; a confirmação do checkout leva aos ingressos.
+- Tokens novos: `aspect-ticket` (16:6) e `max-w-ticket` (480 px).
+- Testes: unidade do QR (padrões de localização, determinismo); E2E com a API simulada (rota de teste que emite um pedido pago): vazio, lista, detalhe, outro ingresso do pedido, tela cheia com Esc e foco de volta, impressão, usado, cancelado, passados, não encontrado, sessão exigida, axe; prints.
+
+Decisões tomadas por conta própria:
+
+- **QR gerado no navegador** (`qrcode`) e desenhado como um `<path>` SVG: nada de HTML injetado nem estilo inline, que a CSP proíbe.
+- **Foto, endereço e "Demonstração" vêm da página pública do evento** (`GET /events/{slug}`); se ela falhar, o ingresso aparece sem eles.
+- **Carrossel do mobile como links anterior/próximo** (operável por botões, WCAG 2.5.1), sem gesto.
+- **Lista sem a miniatura do evento** (a variante `compact` do card fica para quando a API trouxer a imagem no resumo do ingresso).
+- **Cancelado sem motivo**: a API ainda não guarda o motivo do cancelamento do ingresso.
 
 ### 2026-10-22 — V6: checkout
 

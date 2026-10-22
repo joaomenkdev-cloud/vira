@@ -46,11 +46,16 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           Pular para o conteúdo
         </a>
         <SessionProvider hinted={hinted}>
-          <HeaderSwitch site={<SiteHeader />} checkout={<CheckoutHeader />} />
+          {/* A printed ticket carries no header or footer (docs/DESIGN.md, 3.10). */}
+          <div className="contents print:hidden">
+            <HeaderSwitch site={<SiteHeader />} checkout={<CheckoutHeader />} />
+          </div>
           <main id="conteudo" tabIndex={-1} className="flex-1 focus:outline-none">
             {children}
           </main>
-          <SiteFooter />
+          <div className="contents print:hidden">
+            <SiteFooter />
+          </div>
         </SessionProvider>
       </body>
     </html>

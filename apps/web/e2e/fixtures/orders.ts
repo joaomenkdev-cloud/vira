@@ -9,17 +9,53 @@ import {
   idempotencyKeySchema,
   setOrderHoldersRequestSchema,
   type OrderBody,
-  type TicketSummaryBody,
+  type TicketBody,
 } from "@vira/shared";
 
-import { catalogEventById } from "./catalog.ts";
+import { catalogEventById, catalogEventBySlug } from "./catalog.ts";
 
 type Body = Record<string, unknown>;
+
+function ownTickets(buyerId: string): TicketBody[] {
+  const own = new Set(
+    [...orders.values()].filter((o) => o.buyerId === buyerId).map((o) => o.order.id),
+  );
+  return tickets.filter((ticket) => own.has(ticket.orderId));
+}
+
+/** Issues the tickets of a paid order, as the webhook does in the API (V5). */
+function issueTickets(stored: StoredOrder, status: TicketBody["status"] = "VALID"): void {
+  const { order } = stored;
+  const event = catalogEventById(order.event.id);
+  for (const item of order.items) {
+    for (let index = 0; index < item.quantity; index += 1) {
+      const id = randomUUID();
+      tickets.push({
+        id,
+        code: code("VIRA"),
+        status,
+        holderName: item.holderNames[index] ?? stored.buyerName,
+        ticketType: { name: item.name },
+        event: {
+          ...order.event,
+          venueName: event?.venue.name ?? null,
+          venueCity: event?.venue.city ?? null,
+          venueState: event?.venue.state ?? null,
+        },
+        orderId: order.id,
+        issuedAt: order.paidAt ?? new Date().toISOString(),
+        usedAt: status === "USED" ? new Date().toISOString() : null,
+        qrToken: `v1.fake.${Buffer.from(id).toString("base64url")}.${Buffer.from(order.id).toString("base64url")}`,
+      });
+    }
+  }
+}
 
 export interface OrdersContext {
   /** The signed-in buyer (valid session, CSRF checked on writes), or undefined once answered. */
   buyer: (options: { csrf: boolean }) => { id: string; name: string } | undefined;
   idempotencyKey: string | undefined;
+  query: URLSearchParams;
   send: (status: number, body?: unknown) => void;
   problem: (status: number, code: string, extra?: Body) => void;
 }
@@ -34,7 +70,7 @@ interface StoredOrder {
 
 const MINUTE = 60_000;
 const orders = new Map<string, StoredOrder>();
-const tickets: TicketSummaryBody[] = [];
+const tickets: TicketBody[] = [];
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const code = (prefix: string) => {
@@ -163,16 +199,41 @@ export function handleOrders(
     return true;
   }
 
-  if (method === "GET" && path === "/tickets") {
+  if (method === "GET" && (path === "/tickets" || path.startsWith("/tickets?"))) {
     const buyer = context.buyer({ csrf: false });
     if (!buyer) return true;
-    const own = new Set(
-      [...orders.values()].filter((o) => o.buyerId === buyer.id).map((o) => o.order.id),
-    );
+    const query = context.query;
+    const past = query.get("when") === "past";
+    const limit = Number(query.get("limit") ?? 20);
+    const offset = Number(Buffer.from(query.get("cursor") ?? "", "base64url").toString() || 0);
+    const now = Date.now();
+    const own = ownTickets(buyer.id)
+      .filter((ticket) => Date.parse(ticket.event.endsAt) <= now === past)
+      .sort((a, b) => {
+        const order = Date.parse(a.event.startsAt) - Date.parse(b.event.startsAt);
+        return past ? -order : order;
+      });
+    const page = own.slice(offset, offset + limit);
     context.send(200, {
-      data: tickets.filter((ticket) => own.has(ticket.orderId)),
-      page: { limit: 50, nextCursor: null },
+      data: page.map(({ qrToken: _qrToken, ...summary }) => summary),
+      page: {
+        limit,
+        nextCursor:
+          offset + limit < own.length
+            ? Buffer.from(String(offset + limit)).toString("base64url")
+            : null,
+      },
     });
+    return true;
+  }
+
+  const ticketRoute = /^\/tickets\/([^/?]+)$/.exec(path);
+  if (method === "GET" && ticketRoute) {
+    const buyer = context.buyer({ csrf: false });
+    if (!buyer) return true;
+    const ticket = ownTickets(buyer.id).find((t) => t.id === ticketRoute[1]);
+    if (ticket) context.send(200, ticket);
+    else context.problem(404, "not-found");
     return true;
   }
 
@@ -264,12 +325,72 @@ export function handleOrders(
  * Test-only routes (never proxied):
  *   POST /__test/orders/pay?id=          the webhook: marks the order paid, issues tickets
  *   POST /__test/orders/expire-in?id=&seconds=  moves the reservation's deadline
+ *   POST /__test/tickets/issue?email=&slug=&holders=Ana,Caio&status=  a paid order with
+ *        its tickets (VALID, USED or CANCELED), without going through the checkout
  */
 export function handleOrdersTestRoute(
   method: string,
   url: URL,
   send: (status: number, body?: unknown) => void,
+  userByEmail: (email: string) => { id: string; name: string } | undefined,
 ): boolean {
+  if (method === "POST" && url.pathname === "/__test/tickets/issue") {
+    const buyer = userByEmail(url.searchParams.get("email") ?? "");
+    const event = catalogEventBySlug(url.searchParams.get("slug") ?? "");
+    const type = event?.ticketTypes[0];
+    if (!buyer || !event || !type) {
+      send(404, { error: "no buyer or event" });
+      return true;
+    }
+    const holders = (url.searchParams.get("holders") ?? buyer.name).split(",");
+    const now = new Date().toISOString();
+    const order: OrderBody = {
+      id: randomUUID(),
+      publicCode: code("VIRA-ORD"),
+      status: "PAID",
+      event: {
+        id: event.id,
+        slug: event.slug,
+        title: event.title,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        timezone: event.timezone,
+      },
+      items: [
+        {
+          id: randomUUID(),
+          ticketTypeId: type.id,
+          name: type.name,
+          quantity: holders.length,
+          unitPrice: type.price,
+          subtotal: { amountCents: type.price.amountCents * holders.length, currency: "BRL" },
+          holderNames: holders,
+        },
+      ],
+      total: { amountCents: type.price.amountCents * holders.length, currency: "BRL" },
+      expiresAt: now,
+      extensionAvailable: false,
+      createdAt: now,
+      paidAt: now,
+    };
+    const stored = {
+      buyerId: buyer.id,
+      buyerName: buyer.name,
+      key: randomUUID(),
+      order,
+      extended: false,
+    };
+    orders.set(order.id, stored);
+    const status = url.searchParams.get("status");
+    issueTickets(stored, status === "USED" || status === "CANCELED" ? status : "VALID");
+    send(200, {
+      orderId: order.id,
+      tickets: ownTickets(buyer.id)
+        .filter((t) => t.orderId === order.id)
+        .map((t) => t.id),
+    });
+    return true;
+  }
   if (method !== "POST" || !url.pathname.startsWith("/__test/orders/")) return false;
   const stored = orders.get(url.searchParams.get("id") ?? "");
   if (!stored) {
@@ -284,27 +405,7 @@ export function handleOrdersTestRoute(
     }
     order.status = "PAID";
     order.paidAt = new Date().toISOString();
-    const event = catalogEventById(order.event.id);
-    for (const item of order.items) {
-      for (let index = 0; index < item.quantity; index += 1) {
-        tickets.push({
-          id: randomUUID(),
-          code: code("VIRA"),
-          status: "VALID",
-          holderName: item.holderNames[index] ?? stored.buyerName,
-          ticketType: { name: item.name },
-          event: {
-            ...order.event,
-            venueName: event?.venue.name ?? null,
-            venueCity: event?.venue.city ?? null,
-            venueState: event?.venue.state ?? null,
-          },
-          orderId: order.id,
-          issuedAt: order.paidAt,
-          usedAt: null,
-        });
-      }
-    }
+    issueTickets(stored);
     send(204);
     return true;
   }

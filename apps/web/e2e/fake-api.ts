@@ -11,6 +11,7 @@
 //   POST /__test/make-organizer?email= gives the account an organizer profile
 //   POST /__test/orders/pay?id=       Stripe's webhook: the order is paid (fixtures/orders.ts)
 //   POST /__test/orders/expire-in?id=&seconds= moves the reservation's deadline
+//   POST /__test/tickets/issue?email=&slug= a paid order with its tickets
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
@@ -282,7 +283,13 @@ async function handle(
     return send(response, 204);
   }
 
-  if (handleOrdersTestRoute(method, url, (status, answer) => send(response, status, answer))) {
+  const testUser = (email: string) => {
+    const user = users.get(email);
+    return user ? { id: user.id, name: user.name } : undefined;
+  };
+  if (
+    handleOrdersTestRoute(method, url, (status, answer) => send(response, status, answer), testUser)
+  ) {
     return "answered";
   }
 
@@ -315,6 +322,7 @@ async function handle(
       return auth ? { id: auth.user.id, name: auth.user.name } : undefined;
     },
     idempotencyKey: typeof key === "string" ? key : undefined,
+    query: url.searchParams,
     send: (status, answer) => send(response, status, answer),
     problem: (status, code, extra) => problem(response, status, code, extra),
   });

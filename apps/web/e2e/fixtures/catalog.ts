@@ -349,3 +349,9 @@ export function catalogEventById(id: string): CatalogEventDetail | undefined {
   const event = buildEvents(Date.now()).all.find((e) => e.id === id);
   return event ? detail(event) : undefined;
 }
+
+/** The page of a storefront event by slug (fixtures/orders.ts, test route). */
+export function catalogEventBySlug(slug: string): CatalogEventDetail | undefined {
+  const event = buildEvents(Date.now()).all.find((e) => e.slug === slug);
+  return event ? detail(event) : undefined;
+}

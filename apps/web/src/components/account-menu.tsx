@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
   Skeleton,
 } from "@vira/ui";
-import { CalendarDays, LogOut, UserRound } from "lucide-react";
+import { CalendarDays, LogOut, Ticket, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -86,6 +86,14 @@ export function AccountMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>{account.name}</DropdownMenuLabel>
+        <DropdownMenuItem
+          icon={Ticket}
+          onSelect={() => {
+            router.push("/ingressos");
+          }}
+        >
+          Meus ingressos
+        </DropdownMenuItem>
         <DropdownMenuItem
           icon={UserRound}
           onSelect={() => {

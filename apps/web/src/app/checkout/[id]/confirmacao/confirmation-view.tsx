@@ -220,7 +220,12 @@ function Paid({ order, tickets }: { order: OrderBody; tickets: TicketSummaryBody
               className="flex flex-wrap items-baseline justify-between gap-2 py-4"
             >
               <span>
-                <span className="block text-body font-semibold">{ticket.holderName}</span>
+                <Link
+                  href={`/ingressos/${ticket.id}`}
+                  className="block text-body font-semibold underline decoration-1 underline-offset-4 hover:text-accent-ink"
+                >
+                  {ticket.holderName}
+                </Link>
                 <span className="block text-body-sm text-ink-muted">{ticket.ticketType.name}</span>
               </span>
               <span className="font-mono text-body tabular-nums">{ticket.code}</span>
@@ -228,16 +233,22 @@ function Paid({ order, tickets }: { order: OrderBody; tickets: TicketSummaryBody
           ))}
         </ul>
         <p className="mt-3 text-body-sm text-ink-muted">
-          Na entrada, apresente o QR Code do ingresso ou informe o código.
+          Na entrada, apresente o QR Code de cada ingresso (toque no nome do titular para abrir) ou
+          informe o código.
         </p>
       </section>
 
-      <Link
-        href={`/eventos/${encodeURIComponent(order.event.slug)}`}
-        className={buttonClassName("secondary", "lg", "mt-10")}
-      >
-        Voltar ao evento
-      </Link>
+      <div className="mt-10 flex flex-wrap gap-3">
+        <Link href="/ingressos" className={buttonClassName("primary", "lg")}>
+          Ver meus ingressos
+        </Link>
+        <Link
+          href={`/eventos/${encodeURIComponent(order.event.slug)}`}
+          className={buttonClassName("secondary", "lg")}
+        >
+          Voltar ao evento
+        </Link>
+      </div>
     </div>
   );
 }

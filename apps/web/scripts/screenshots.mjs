@@ -120,6 +120,19 @@ try {
       await page.getByRole("heading", { name: "Pagamento confirmado" }).waitFor();
       await shoot(page, `web-checkout-paid-${viewport.name}.png`);
 
+      // The tickets just bought: the list, one ticket and its full-screen QR.
+      await page.goto(`${baseUrl}/ingressos`);
+      await page.getByRole("listitem").first().waitFor();
+      await shoot(page, `web-tickets-${viewport.name}.png`);
+      await page.getByRole("listitem").first().getByRole("link").click();
+      await page.getByRole("img", { name: /QR Code do ingresso/ }).waitFor();
+      await page.waitForLoadState("networkidle");
+      await shoot(page, `web-ticket-${viewport.name}.png`);
+      await page.getByRole("button", { name: "Tela cheia" }).click();
+      await page.getByRole("dialog").waitFor();
+      await shoot(page, `web-ticket-fullscreen-${viewport.name}.png`, false);
+      await page.keyboard.press("Escape");
+
       await page.goto(`${baseUrl}/eventos/jazz-no-teatro`);
       await page.getByRole("radio", { name: /Plateia/ }).check();
       await page.getByRole("button", { name: "Comprar ingresso", exact: true }).click();

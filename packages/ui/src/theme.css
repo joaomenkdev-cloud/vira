@@ -111,16 +111,18 @@
   --container-page: var(--vira-width-page);
   --container-event: var(--vira-width-event);
   --container-checkout: var(--vira-width-checkout);
+  --container-ticket: var(--vira-width-ticket);
   --container-reading: var(--vira-width-reading);
   --container-empty-state: var(--vira-width-empty-state);
   --container-dialog: var(--vira-width-dialog);
   --container-dialog-wide: var(--vira-width-dialog-wide);
 
-  /* Photo proportions: aspect-card (3:2), aspect-banner (16:9), aspect-banner-sm (4:3), aspect-hero (4:5) */
+  /* Photo proportions: aspect-card (3:2), aspect-banner (16:9), aspect-banner-sm (4:3), aspect-hero (4:5), aspect-ticket (16:6) */
   --aspect-card: var(--vira-aspect-card);
   --aspect-banner: var(--vira-aspect-banner);
   --aspect-banner-sm: var(--vira-aspect-banner-sm);
   --aspect-hero: var(--vira-aspect-hero);
+  --aspect-ticket: var(--vira-aspect-ticket);
 
   /*
    * Animations (docs/DESIGN.md, 2.6 and 3.8). Entrances use the standard easing and
