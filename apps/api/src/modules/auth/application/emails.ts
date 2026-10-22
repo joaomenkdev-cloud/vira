@@ -1,4 +1,4 @@
-import type { MailMessage } from "../../../platform/mail/mailer.js";
+import { type MailMessage, privacyNotice } from "../../../platform/mail/mailer.js";
 
 /**
  * The e-mails of the authentication flows, in Portuguese, as plain text: there is no
@@ -25,6 +25,7 @@ export function verificationEmail(input: {
       link,
       "",
       "Se você não criou uma conta na Vira, ignore esta mensagem.",
+      ...privacyNotice(input.webOrigin),
     ].join("\n"),
   };
 }
@@ -46,6 +47,7 @@ export function accountExistsEmail(input: {
       'Se esqueceu a senha, use a opção "Esqueci a senha" nessa mesma tela.',
       "",
       "Se foi você, é só entrar. Se não foi, pode ignorar esta mensagem.",
+      ...privacyNotice(input.webOrigin),
     ].join("\n"),
   };
 }
@@ -69,6 +71,7 @@ export function passwordResetEmail(input: {
       "",
       "Ao redefinir a senha, você sai da conta em todos os dispositivos.",
       "Se você não pediu isso, ignore esta mensagem: sua senha continua a mesma.",
+      ...privacyNotice(input.webOrigin),
     ].join("\n"),
   };
 }
@@ -88,6 +91,7 @@ export function passwordChangedEmail(input: {
       "",
       "Se foi você, está tudo certo e não precisa fazer nada.",
       `Se não foi, redefina a senha agora em ${input.webOrigin}/esqueci-a-senha: isso encerra todas as sessões abertas na sua conta.`,
+      ...privacyNotice(input.webOrigin),
     ].join("\n"),
   };
 }
@@ -111,6 +115,7 @@ export function emailChangeConfirmationEmail(input: {
       "",
       "Até a confirmação, a conta continua com o e-mail anterior.",
       "Se você não pediu essa troca, ignore esta mensagem.",
+      ...privacyNotice(input.webOrigin),
     ].join("\n"),
   };
 }
@@ -130,6 +135,7 @@ export function emailChangeNoticeEmail(input: {
       "",
       "Se foi você, é só confirmar pelo e-mail que chegou no novo endereço.",
       `Se não foi, troque sua senha agora em ${input.webOrigin}/esqueci-a-senha: alguém pode estar usando a sua conta.`,
+      ...privacyNotice(input.webOrigin),
     ].join("\n"),
   };
 }
@@ -149,6 +155,7 @@ export function emailInUseEmail(input: {
       "",
       `Para entrar: ${input.webOrigin}/entrar`,
       "Se foi você, saiba que cada e-mail só pode estar em uma conta. Se não foi, pode ignorar esta mensagem.",
+      ...privacyNotice(input.webOrigin),
     ].join("\n"),
   };
 }

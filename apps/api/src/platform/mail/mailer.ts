@@ -18,6 +18,14 @@ export interface Mailer {
 export const MAILER = Symbol("MAILER");
 
 /**
+ * The closing lines of every e-mail: where the person reads how the Vira treats their data
+ * (docs/PRIVACY.md#9-política-de-privacidade-no-app).
+ */
+export function privacyNotice(webOrigin: string): string[] {
+  return ["", "--", `Como a Vira trata seus dados: ${webOrigin}/privacidade`];
+}
+
+/**
  * Delivery failed. The message carries no recipient, subject or server response:
  * it ends up in job logs, which must stay free of personal data.
  */

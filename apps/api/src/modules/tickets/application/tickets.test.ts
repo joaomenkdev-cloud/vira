@@ -213,6 +213,7 @@ describe("the tickets e-mail", () => {
     expect(mail.text).toContain("Onde: Circo Voador, Rio de Janeiro/RJ");
     expect(mail.text).toContain("- VIRA-7KQ2-M9XD · Pista · Ana");
     expect(mail.text).toContain("https://vira.example/ingressos");
+    expect(mail.text).toContain("Como a Vira trata seus dados: https://vira.example/privacidade");
     expect(mail.text).not.toMatch(/v1\.[a-z0-9]+\./);
   });
 });
