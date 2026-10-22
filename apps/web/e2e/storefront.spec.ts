@@ -136,7 +136,11 @@ test.describe("explore", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Próximos eventos");
     const cards = page.getByRole("article");
     await expect(cards).toHaveCount(12);
-    await expect(cards.first()).toContainText("Forró na Praça");
+    // Which fixture comes first depends on the weekday the suite runs: check the order.
+    const starts = await cards
+      .locator("time")
+      .evaluateAll((times) => times.map((time) => time.getAttribute("datetime") ?? ""));
+    expect(starts).toEqual([...starts].sort((a, b) => Date.parse(a) - Date.parse(b)));
     // Sold out still shows, with the badge and without a price line.
     const soldOut = cards.filter({ hasText: "Sarau de Poesia" });
     await expect(soldOut).toContainText("Esgotado");
