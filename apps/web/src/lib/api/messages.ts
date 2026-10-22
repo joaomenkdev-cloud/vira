@@ -13,6 +13,8 @@ const MESSAGES: Partial<Record<ProblemCode, string>> = {
   "csrf-failed": "Não foi possível confirmar esta ação. Recarregue a página e tente de novo.",
   "validation-failed": "Confira os campos destacados.",
   "token-expired": "Este link expirou ou já foi usado.",
+  "email-not-verified": "Confirme seu e-mail para comprar. O link está na sua caixa de entrada.",
+  "request-in-progress": "Ainda estamos processando seu pedido. Aguarde um instante.",
 };
 
 /**
@@ -23,6 +25,11 @@ const DETAILED: ReadonlySet<ProblemCode> = new Set([
   "invalid-state-transition",
   "invalid-image",
   "conflict",
+  "sales-closed",
+  "insufficient-inventory",
+  "pending-order-exists",
+  "idempotency-key-reused",
+  "payments-unavailable",
 ]);
 
 /**

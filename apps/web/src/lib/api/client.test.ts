@@ -51,6 +51,19 @@ describe("the API client", () => {
     expect(header(calls[0]?.init, "content-type")).toBe("application/json");
   });
 
+  it("sends the extra headers it is given, keeping its own", async () => {
+    const { fetch, calls } = fakeApi(() => json(201, { id: "1" }));
+    const api = createApiClient({ fetch });
+    await api.request("/orders", {
+      method: "PUT",
+      body: {},
+      headers: { "idempotency-key": "k-1", accept: "text/html" },
+    });
+    expect(calls[0]?.init.method).toBe("PUT");
+    expect(header(calls[0]?.init, "idempotency-key")).toBe("k-1");
+    expect(header(calls[0]?.init, "accept")).toBe("application/json");
+  });
+
   it("returns nothing for 204", async () => {
     const api = createApiClient({
       fetch: fakeApi(() => new Response(null, { status: 204 })).fetch,
