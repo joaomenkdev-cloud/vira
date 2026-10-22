@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 2 — MVP público v1.0 (o Marco 1 terminou com a N13).
-- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V6 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#41) e Dependabot (#4–#7, #9 CodeQL v4). V7 no PR de meus ingressos (`feat/web-tickets`).
-- **Entregas abertas:** V7.
-- **Próximo passo:** V8 — Check-in (`feat/checkin`).
+- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V7 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#42) e Dependabot (#4–#7, #9 CodeQL v4). V8 no PR do check-in (`feat/checkin`).
+- **Entregas abertas:** V8.
+- **Próximo passo:** V9 — Direitos LGPD (`feat/users-privacy`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,25 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-22 — V8: check-in
+
+Auditoria (antes de codar): o QR assinado (ADR-0008) e o `verifyQrToken` já existiam (V5), assim como a ação de auditoria `ticket.checked_in`; faltavam a tabela `checkin_attempts`, as rotas e a tela. O `Permissions-Policy` desligava a câmera em todo o site.
+
+Feito:
+
+- API: módulo `checkin` com `POST /checkin/scan` e `POST /checkin/code` (só o organizador dono do evento; evento alheio responde `404`) e `GET /organizer/events/{id}/checkin/stats`. A entrada é decidida por um único `UPDATE ... WHERE status = 'VALID' AND event_id AND qr_nonce`; toda leitura vai para `checkin_attempts` (migração nova, com `CHECK` de que `VALID`/`ALREADY_USED`/`WRONG_EVENT` sempre nomeiam o ingresso) e cada entrada é auditada. Rate limit por operador: 120/min no QR, 20/min no código, gasto antes de qualquer consulta. O token passa pelo `QrTokens` do módulo `tickets` (API pública nova), que verifica com todas as chaves de `QR_SIGNING_KEYS`.
+- Contratos em `@vira/shared` (`checkin.ts`), com `normalizeTicketCode` (maiúsculas, prefixo, traços e O/I/L lidos como 0/1).
+- Web: `/painel/eventos/{id}/check-in` (link "Abrir check-in" no evento publicado ou encerrado), câmera ligada pelo operador e lida com jsQR (carregado só nessa página), código digitado, resultado em cor + ícone + texto grande (`aria-live="assertive"`, vibração curta), "Ler próximo", contagem de entradas e últimas leituras. Só esse caminho recebe `camera=(self)`.
+- Testes: unidade do `judge` e do caso de uso (corrida simulada, token forjado, limites); integração com Postgres real (duas leituras simultâneas → 1 `VALID` e 1 `ALREADY_USED`; oito misturando QR e código → 1 entrada; byte alterado, nonce trocado, outro evento, cancelado, autorização, 21º código → `429`, auditoria); E2E com a câmera falsa do Chromium lendo um QR de verdade (Y4M gerado no teste), códigos, todos os resultados, `Permissions-Policy`, axe; prints.
+
+Decisões tomadas por conta própria:
+
+- **Código de outro organizador responde `INVALID`**, não `WRONG_EVENT`: assim a digitação manual não serve para descobrir quais códigos existem. Entre eventos do mesmo organizador, e para QR assinado, `WRONG_EVENT`.
+- **Cancelado é `INVALID` com o ingresso** (titular, tipo e código), para o operador saber o que dizer; a resposta não ganhou um quinto resultado.
+- **Leitura pausa depois de cada resultado** até "Ler próximo": o mesmo QR parado na frente da câmera não vira um "Já utilizado" logo depois do "Válido".
+- **Câmera só com um toque** em "Ligar câmera", nunca ao abrir a página; sem câmera ou sem permissão, a tela manda para o código digitado.
+- **Check-in aberto também em evento encerrado** (há quem chegue atrasado); rascunho e cancelado mostram um aviso.
 
 ### 2026-10-22 — V7: meus ingressos e ingresso digital
 

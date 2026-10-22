@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { fakeCameraArgs } from "./e2e/support/fake-camera";
+
 const WEB_PORT = 3101;
 /** The same build against an API with no published event, for the empty states. */
 const EMPTY_WEB_PORT = 3102;
@@ -18,6 +20,8 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${WEB_PORT}`,
     trace: "retain-on-failure",
+    // A camera that always shows the same QR, for the check-in (e2e/checkin.spec.ts).
+    launchOptions: { args: fakeCameraArgs() },
   },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },

@@ -355,8 +355,9 @@ Registro de toda tentativa de validação (válida ou não), para auditoria e de
 | `operator_id` | uuid | Usuário que escaneou |
 | `result` | enum | `VALID`, `ALREADY_USED`, `INVALID`, `WRONG_EVENT` |
 | `method` | enum | `QR`, `CODE` |
+| `created_at` | timestamptz | Momento da leitura |
 
-Índice: `(event_id, created_at)`. Retenção: 90 dias após o fim do evento.
+Índices: `(event_id, created_at)`, `(ticket_id)`, `(operator_id)`. `CHECK`: `VALID`, `ALREADY_USED` e `WRONG_EVENT` sempre têm `ticket_id` (um `INVALID` tem quando o ingresso existe: cancelado ou QR de antes de uma reemissão). Todas as FKs são `ON DELETE RESTRICT`. Criada no V8. Retenção: 90 dias após o fim do evento.
 
 ### `processed_webhook_events`
 

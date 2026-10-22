@@ -449,6 +449,8 @@ O componente mais característico da marca. Inspirado em ingresso físico, com d
 - **Stepper de checkout:** "1 Ingressos · 2 Seus dados · 3 Pagamento", `overline`, etapa atual em `ink` com sublinhado `accent`, concluídas com check. Em `<nav aria-label="Etapas">` com `aria-current="step"`.
 - **Resultado de check-in (tela do organizador):** cartão de largura total com três estados inconfundíveis por cor **e** ícone **e** texto grande: ✓ "Válido" (`success`), ⟲ "Já utilizado às 21:42" (`warning`), ✕ "Inválido" (`danger`). Anunciado via `aria-live="assertive"` e vibração curta no mobile.
 
+**Como ficou implementado (V8).** Em `/painel/eventos/{id}/check-in`: a câmera num quadrado escuro com moldura de mira, ligada só pelo botão "Ligar câmera" (sem permissão ou sem câmera, um alert `warning` manda para o código); ao lado (desktop) ou abaixo (mobile), o resultado, "Validar pelo código" e a contagem "N de M ingressos entraram" com as cinco últimas leituras. Além dos três estados acima, ✕ "Outro evento" e ✕ "Cancelado" (com o titular) em `danger`; todo resultado negativo diz "Não libere a entrada.". O titular aparece em `h2`, tipo e código abaixo. O ícone do resultado tem 40 px, fora das três medidas do sistema, porque é lido a um braço de distância. A leitura pausa depois de cada resultado até "Ler próximo". Vibração: um pulso para válido, três para os outros.
+
 ---
 
 ## 4. Wireframes
