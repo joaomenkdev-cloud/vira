@@ -204,6 +204,32 @@ try {
       await page.goto(`${baseUrl}/painel`);
       await page.getByRole("article").first().waitFor();
       await shoot(page, `web-organizer-list-${viewport.name}.png`);
+
+      // The door: waiting, then a valid ticket, the same one again and an unknown code.
+      const door = await (
+        await fetch(
+          `${fakeApiUrl}/__test/checkin/event?email=${email}&holders=Ana Souza,Caio Lima,Bia Reis`,
+          { method: "POST" },
+        )
+      ).json();
+      await page.goto(`${baseUrl}/painel/eventos/${door.eventId}/check-in`);
+      await page.getByText("0 de 3 ingressos entraram").waitFor();
+      await shoot(page, `web-checkin-${viewport.name}.png`);
+      const typeCode = async (code) => {
+        await page.getByLabel("Código do ingresso").fill(code);
+        await page.getByRole("button", { name: "Validar código" }).click();
+      };
+      await typeCode(door.tickets[0].code);
+      await page.getByText("Entrada liberada.").waitFor();
+      await shoot(page, `web-checkin-valid-${viewport.name}.png`);
+      await page.getByRole("button", { name: "Ler próximo" }).click();
+      await typeCode(door.tickets[0].code);
+      await page.getByText("Este ingresso já entrou. Não libere a entrada.").waitFor();
+      await shoot(page, `web-checkin-used-${viewport.name}.png`);
+      await page.getByRole("button", { name: "Ler próximo" }).click();
+      await typeCode("VIRA-0000-0000");
+      await page.getByText("QR Code ou código não reconhecido. Não libere a entrada.").waitFor();
+      await shoot(page, `web-checkin-invalid-${viewport.name}.png`);
     }
 
     // Open layers cannot show in a full-page capture of the closed page: photograph them
