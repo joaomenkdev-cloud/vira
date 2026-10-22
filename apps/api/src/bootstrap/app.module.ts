@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD, APP_PIPE } from "@nestjs/core";
 import { AuditModule } from "../modules/audit/audit.module.js";
 import { AuthJobsModule, AuthModule } from "../modules/auth/auth.module.js";
 import { CatalogModule } from "../modules/catalog/catalog.module.js";
+import { CheckinModule } from "../modules/checkin/checkin.module.js";
 import { EventsJobsModule, EventsModule } from "../modules/events/events.module.js";
 import { HealthModule } from "../modules/health/health.module.js";
 import { OrdersJobsModule, OrdersModule } from "../modules/orders/orders.module.js";
@@ -59,6 +60,7 @@ export class AppModule {
         CatalogModule,
         OrdersModule,
         TicketsModule,
+        CheckinModule,
         HealthModule,
         // Embedded mode runs the background work inside the API process (ADR-0011).
         ...(config.worker.mode === "embedded"

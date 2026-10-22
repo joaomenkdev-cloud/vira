@@ -146,6 +146,18 @@ describe("every application route declares an access policy", () => {
     });
   });
 
+  it("keeps the door of an event to organizers", () => {
+    const checkinRoutes = collectRoutes(testApp).filter((route) =>
+      route.name.includes("CheckinController"),
+    );
+    const organizer = { kind: "role", role: "ORGANIZER" };
+    expect(Object.fromEntries(checkinRoutes.map((route) => [route.name, route.policy]))).toEqual({
+      "POST CheckinController.scan": organizer,
+      "POST CheckinController.code": organizer,
+      "GET CheckinController.stats": organizer,
+    });
+  });
+
   it("keeps the Stripe webhook public: its signature is what authenticates it", () => {
     const webhookRoutes = collectRoutes(testApp).filter((route) =>
       route.name.includes("StripeWebhookController"),

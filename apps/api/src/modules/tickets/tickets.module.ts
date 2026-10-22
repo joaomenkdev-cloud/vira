@@ -23,6 +23,7 @@ const persistence = [{ provide: TICKET_REPOSITORY, useClass: PrismaTicketReposit
   imports: [OrdersModule, OutboxModule],
   controllers: [TicketsController],
   providers: [IssueTickets, OrderPaidSubscriber, ListTickets, GetTicket, QrTokens, ...persistence],
+  exports: [QrTokens],
 })
 export class TicketsModule {}
 
