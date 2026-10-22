@@ -407,6 +407,15 @@ Emissão (V5): um ingresso por unidade de cada linha, na mesma transação do we
 | POST | `/checkin/code` | ORGANIZER* do evento | `{ eventId, code }` | mesmo formato | 400, 401, 404, 429 | 20/min/operador |
 | GET | `/organizer/events/{id}/checkin/stats` | ORGANIZER* | — | `200 { checkedIn, total, lastScans: [...] }` | 404 | — |
 
+Implementado no V8. O resultado de uma leitura é sempre `200`; o `ticket` traz só `code`, `holderName` e `ticketType` (nada do comprador):
+
+- `VALID`: o ingresso entrou agora. A entrada é decidida por um único `UPDATE ... WHERE status = 'VALID'` (com o `event_id` e, no QR, o `qr_nonce`): de leituras simultâneas, só uma recebe `VALID` e as outras `ALREADY_USED`.
+- `ALREADY_USED`: com `ticket` e `usedAt`.
+- `WRONG_EVENT`: ingresso de outro evento, sem `ticket`. Num código digitado, só quando o outro evento é do mesmo organizador; código de evento alheio responde `INVALID`, para que a digitação não revele quais códigos existem.
+- `INVALID`: token que não é nosso (formato, `kid` ou assinatura; recusado sem consultar o banco), QR de antes de uma reemissão, código inexistente. Com `ticket`, é um ingresso cancelado deste evento.
+
+O código aceita minúsculas, espaços, traços e a falta do prefixo `VIRA`, e lê O como 0 e I ou L como 1 (Crockford); fora disso, `400`. O rate limit é por operador e é gasto antes de qualquer consulta. Toda leitura que passa do rate limit e da posse do evento fica em `checkin_attempts`; cada `VALID` é auditado como `ticket.checked_in`. `total` conta os ingressos `VALID` e `USED`; `lastScans` traz as 5 últimas leituras, com o `ticket` só quando ele é deste evento. As três rotas respondem `Cache-Control: no-store`.
+
 ### Administração (`admin`)
 
 | Método | Rota | Papel | Sucesso | Erros |
