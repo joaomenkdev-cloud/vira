@@ -1,4 +1,4 @@
-import type { MailMessage } from "../../../platform/mail/mailer.js";
+import { type MailMessage, privacyNotice } from "../../../platform/mail/mailer.js";
 import type { IssuedOrder } from "./ports/ticket-repository.js";
 
 /**
@@ -35,6 +35,7 @@ export function ticketsEmail(order: IssuedOrder, webOrigin: string): MailMessage
       "",
       `O QR Code de cada ingresso fica na sua conta: ${webOrigin}/ingressos`,
       "Apresente-o na entrada, no celular ou impresso. Cada ingresso vale para uma entrada.",
+      ...privacyNotice(webOrigin),
     ].join("\n"),
   };
 }

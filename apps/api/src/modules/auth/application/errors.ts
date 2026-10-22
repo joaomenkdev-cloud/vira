@@ -93,3 +93,23 @@ export class SameEmailError extends Error {
     this.name = "SameEmailError";
   }
 }
+
+/**
+ * A step that needs proof of who is at the keyboard, from an account of social login
+ * only (no password to type): the login of this session is too old. Signing in again
+ * with the provider gives a fresh one.
+ */
+export class ReauthenticationRequiredError extends Error {
+  constructor() {
+    super("Recent authentication required");
+    this.name = "ReauthenticationRequiredError";
+  }
+}
+
+/** The account has a password and the request did not bring it. */
+export class PasswordRequiredError extends Error {
+  constructor() {
+    super("Password required");
+    this.name = "PasswordRequiredError";
+  }
+}

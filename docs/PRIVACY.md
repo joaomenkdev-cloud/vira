@@ -92,6 +92,8 @@ Executado em uma transação, auditado como `user.anonymized`:
 
 Testes de integração verificam que, após a exclusão, nenhuma coluna do inventário contém o nome ou o e-mail originais.
 
+**Como ficou implementado (V9).** Módulo `privacy` da API (`DELETE /me` passa pelo `auth`, que reautentica e limpa os cookies). Além do que está acima: `pending_email` é limpo, o slug do organizador deixa de vir do nome (`organizador-removido-<id>`), o pedido ainda `PENDING` expira na hora (a varredura de pedidos devolve o estoque) e os `holder_names` das linhas de pedido também viram `Titular removido`. Ingresso cancelado não volta ao estoque nem é reembolsado. A conta anonimizada deixa de existir para a API: um access token que ainda estivesse válido responde `401`. O teste de integração (`privacy.int.test.ts`) procura o nome, o e-mail e o nome de um terceiro titular em **todas as linhas de todas as tabelas**.
+
 ## 5. Retenção automática
 
 | Job (worker) | Frequência | Ação |
@@ -102,6 +104,8 @@ Testes de integração verificam que, após a exclusão, nenhuma coluna do inven
 | `privacy.anonymize-old-orders` | Mensal | Anonimiza `buyer_name`/`buyer_email` de pedidos com mais de 5 anos |
 | `ops.purge-webhook-events` | Diário | Apaga `processed_webhook_events` com mais de 90 dias |
 | `ops.purge-outbox` | Diário | Apaga mensagens despachadas há mais de 7 dias |
+
+Implementação (V9): as cinco primeiras regras rodam juntas no `RetentionSweeper` do worker (ou da API em modo embutido), a cada 6 horas, todas idempotentes; a anonimização dos pedidos antigos é verificada a cada rodada em vez de mensalmente, o que só a antecipa. A varredura também limpa `users.pending_email` quando não sobra link de troca válido. O `ops.purge-outbox` continua no poller do outbox.
 
 ## 6. Cookies
 

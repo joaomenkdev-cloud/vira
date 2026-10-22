@@ -59,7 +59,7 @@ test.describe("sign-up to sign-in", () => {
     await expect(page).toHaveURL("/entrar?next=/conta");
     await signIn(page, email);
     await expect(page).toHaveURL("/conta");
-    await expect(page.getByRole("heading", { name: "Minha conta" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Minha conta" })).toBeVisible();
   });
 
   test("never redirects to another site after the login", async ({ page }, testInfo) => {

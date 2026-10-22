@@ -97,6 +97,7 @@ Todo erro é `application/problem+json`:
 | <a id="breached-password"></a>`breached-password` | 400 | Senha nova encontrada em vazamentos conhecidos (Have I Been Pwned); `errors[0].path` aponta o campo |
 | <a id="incorrect-password"></a>`incorrect-password` | 400 | Senha atual errada numa troca de senha ou de e-mail (a sessão continua válida, por isso não é `401`) |
 | <a id="unauthenticated"></a>`unauthenticated` | 401 | Sem sessão ou token expirado |
+| <a id="reauthentication-required"></a>`reauthentication-required` | 401 | Excluir conta só de login social com o login da sessão feito há mais de 5 minutos: entrar de novo com o provedor |
 | <a id="invalid-credentials"></a>`invalid-credentials` | 401 | Login falhou. Mensagem genérica: vale para e-mail inexistente, senha errada, conta sem senha e **conta bloqueada** (nunca diz qual) |
 | <a id="csrf-failed"></a>`csrf-failed` | 403 | Token CSRF ausente/inválido ou origem não permitida |
 | <a id="email-not-verified"></a>`email-not-verified` | 403 | Senha correta, mas e-mail ainda não verificado (só revelado a quem acertou a senha) |
@@ -105,6 +106,7 @@ Todo erro é `application/problem+json`:
 | <a id="conflict"></a>`conflict` | 409 | Genérico: a operação conflita com o estado atual do recurso |
 | <a id="password-not-set"></a>`password-not-set` | 409 | Conta só de login social, sem senha para confirmar ou trocar (crie uma por "esqueci a senha") |
 | <a id="already-organizer"></a>`already-organizer` | 409 | A conta já tem perfil de organizador |
+| <a id="organizer-has-upcoming-events"></a>`organizer-has-upcoming-events` | 409 | Excluir a conta de quem organiza evento publicado que ainda não terminou: cancele-o antes |
 | <a id="token-expired"></a>`token-expired` | 410 | Link de uso único expirado, já usado ou desconhecido (não diz qual) |
 | <a id="insufficient-inventory"></a>`insufficient-inventory` | 409 | Estoque não comporta a quantidade |
 | <a id="pending-order-exists"></a>`pending-order-exists` | 409 | Já existe pedido PENDING do comprador para o evento |
@@ -247,8 +249,8 @@ Páginas do web (N7) que os e-mails apontam: `/redefinir-senha` e `/confirmar-em
 | POST | `/me/password` | BUYER | `{ currentPassword, newPassword }` | `204`; revoga as outras sessões | 400 (`incorrect-password`, `breached-password`), 401, 409 `password-not-set`, 429 (5/15 min/conta) |
 | POST | `/me/email` | BUYER | `{ email, currentPassword }` | `202 { status: "accepted" }`; link de confirmação para o novo endereço | 400 (`incorrect-password`, mesmo e-mail), 401, 409 `password-not-set`, 429 (3/h/conta) |
 | POST | `/me/organizer` | BUYER | `{ displayName }` | `201 { organizerProfile: { displayName, slug } }`; papel → ORGANIZER | 400, 409 `already-organizer` |
-| GET | `/me/export` | BUYER | — | `200` JSON com todos os dados pessoais do titular (conta, pedidos, ingressos, perfil de organizador) — `Content-Disposition: attachment` | 401, 429 (3/dia) |
-| DELETE | `/me` | BUYER + reautenticação | `{ password }` ou reautenticação OAuth recente (< 5 min), `{ confirm: "EXCLUIR" }` | `202`; conta anonimizada, sessões revogadas, ingressos futuros cancelados | 400, 401, 409 (organizador com eventos futuros publicados) |
+| GET | `/me/export` | BUYER | — | `200` JSON `DataExport` (`format: "vira.data-export.v1"`): conta, logins sociais, sessões ativas, perfil de organizador e seus eventos, pedidos e ingressos — `Content-Disposition: attachment`, `Cache-Control: no-store`; auditado (`user.data_exported`) | 401, 429 (3/dia/conta) |
+| DELETE | `/me` | BUYER + reautenticação | `{ password, confirm: "EXCLUIR" }`; conta sem senha manda só `confirm` e precisa de login feito há menos de 5 min | `202 { status: "accepted" }`; conta anonimizada (PRIVACY.md), sessões apagadas, ingressos futuros cancelados, cookies limpos; auditado (`user.anonymized`) | 400 (`validation-failed`, `incorrect-password` em `password`), 401 (`reauthentication-required`), 409 `organizer-has-upcoming-events`, 429 (o mesmo limite da senha atual) |
 
 ### Vitrine (`catalog`) — somente eventos publicados
 

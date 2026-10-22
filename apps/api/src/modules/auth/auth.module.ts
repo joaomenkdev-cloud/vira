@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 
 import { AuditModule } from "../audit/audit.module.js";
 import { OutboxModule } from "../outbox/outbox.module.js";
+import { PrivacyModule } from "../privacy/privacy.module.js";
 import { APP_CONFIG } from "../../platform/config/config.module.js";
 import type { AppConfig } from "../../platform/config/config.schema.js";
 import { CLOCK, type Clock } from "../../platform/runtime/runtime.js";
@@ -10,6 +11,7 @@ import { ChangePassword } from "./application/change-password.js";
 import { CompleteOAuthLogin } from "./application/complete-oauth-login.js";
 import { ConfirmEmailChange } from "./application/confirm-email-change.js";
 import { CurrentPassword } from "./application/current-password.js";
+import { DeleteAccount } from "./application/delete-account.js";
 import { EndSession } from "./application/end-session.js";
 import { ListSessions } from "./application/list-sessions.js";
 import { LoginUser } from "./application/login-user.js";
@@ -61,13 +63,14 @@ export class AuthDataModule {}
  * password reset and the account's credentials (password and e-mail changes).
  */
 @Module({
-  imports: [AuthDataModule, AuditModule, OutboxModule],
+  imports: [AuthDataModule, AuditModule, OutboxModule, PrivacyModule],
   controllers: [AuthController, OAuthController, AccountSecurityController],
   providers: [
     RegisterUser,
     RequestPasswordReset,
     ResetPassword,
     ChangePassword,
+    DeleteAccount,
     RequestEmailChange,
     ConfirmEmailChange,
     CurrentPassword,

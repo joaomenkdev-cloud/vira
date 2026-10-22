@@ -297,7 +297,11 @@ function PendingCheckout({
             <fieldset className="mt-6 flex flex-col gap-4" disabled={step === 2}>
               <legend className="mb-1 text-h3">Titulares</legend>
               <p className="text-body-sm text-ink-muted">
-                O nome de cada ingresso, conferido na entrada do evento.
+                O nome de cada ingresso, conferido na entrada e apagado 90 dias depois do evento (
+                <Link href="/privacidade" className="underline underline-offset-4">
+                  política de privacidade
+                </Link>
+                ).
               </p>
               {holders.map((holder, index) => (
                 <Input

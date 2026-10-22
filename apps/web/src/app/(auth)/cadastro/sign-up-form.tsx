@@ -98,6 +98,16 @@ export function SignUpForm() {
         >
           Criar conta
         </Button>
+        <p className="text-body-sm text-ink-muted">
+          Ao criar a conta, você declara ter lido a{" "}
+          <Link
+            href="/privacidade"
+            className="text-ink underline underline-offset-4 hover:text-accent-ink"
+          >
+            política de privacidade
+          </Link>
+          .
+        </p>
       </form>
 
       <p className="text-body text-ink-muted">

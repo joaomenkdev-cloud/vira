@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 2 — MVP público v1.0 (o Marco 1 terminou com a N13).
-- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V7 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#42) e Dependabot (#4–#7, #9 CodeQL v4). V8 no PR do check-in (`feat/checkin`).
-- **Entregas abertas:** V8.
-- **Próximo passo:** V9 — Direitos LGPD (`feat/users-privacy`).
+- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V8 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#43) e Dependabot (#4–#7, #9 CodeQL v4). V9 no PR dos direitos LGPD (`feat/users-privacy`).
+- **Entregas abertas:** V9.
+- **Próximo passo:** V10 — Endurecimento (`chore/security-hardening`).
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,25 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-22 — V9: direitos LGPD
+
+Auditoria (antes de codar): o desenho estava pronto em PRIVACY.md (seções 4, 5 e 9) e no API.md; `users.anonymized_at`, o motivo de revogação `ACCOUNT_DELETED` e as ações `user.data_exported`/`user.anonymized` do catálogo de auditoria já existiam. Faltavam as rotas, a varredura de retenção, a página `/privacidade` e a tela na conta.
+
+Feito:
+
+- API: módulo `privacy` com `GET /me/export` (JSON `vira.data-export.v1` com conta, logins sociais, sessões ativas, perfil de organizador e seus eventos, pedidos e ingressos; `Content-Disposition: attachment`; 3/dia/conta; auditado) e a anonimização, numa transação que trava a conta: nome e e-mail trocados em `users` e nos pedidos, `holder_names` e `holder_name` viram "Titular removido", ingressos `VALID` de eventos que não terminaram são cancelados, pedido pendente expira na hora, sessões, logins sociais e links apagados, perfil de organizador vira "Organizador removido" (com slug novo). `DELETE /me` fica no `auth` (reautenticação e cookies): senha de novo, ou, em conta só social, login feito há menos de 5 minutos (`401 reauthentication-required`); organizador com evento publicado por acontecer recebe `409 organizer-has-upcoming-events` e nada muda. Conta anonimizada some para `findById` (auth e users): o access token que sobrou não abre nada.
+- Retenção: `RetentionSweeper` no worker (e no modo embutido) aplica a cada 6 h as regras da seção 5 do PRIVACY.md, todas idempotentes; o `ops.purge-outbox` continua no poller do outbox.
+- E-mails: todos terminam com o link da política de privacidade.
+- Web: `/privacidade` (inventário em linguagem simples, com data), link no rodapé, no cadastro e nos titulares do checkout; seção "Privacidade" em Minha conta com "Baixar meus dados" e "Excluir minha conta" (modal que diz o que acontece, pede senha e a palavra EXCLUIR, e explica o bloqueio do organizador e a reautenticação); `/conta-excluida`.
+- Testes: unidade (casos de uso, reautenticação, limites, e-mails); integração com Postgres que **varre todas as linhas de todas as tabelas** atrás do nome, do e-mail e do nome de um terceiro titular depois da exclusão, prova o bloqueio do organizador com rollback, a reautenticação e as regras de retenção (segunda rodada não muda nada); E2E das telas com axe; prints.
+
+Decisões tomadas por conta própria:
+
+- **Ingresso cancelado na exclusão não devolve o lugar ao estoque nem o dinheiro**: não há reembolso automático no MVP, e o modal diz isso com todas as letras.
+- **Conta com senha sempre digita a senha**; o caminho "login recente" vale só para contas sem senha.
+- **Slug do organizador removido também muda**, porque vinha do nome.
+- **E-mail novo pendente sai junto com o link vencido** na varredura, não só os tokens.
 
 ### 2026-10-22 — V8: check-in
 

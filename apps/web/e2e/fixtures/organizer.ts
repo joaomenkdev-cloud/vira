@@ -484,6 +484,15 @@ export function seedPublishedEvent(
   return event;
 }
 
+/** Whether the organizer has a published event that has not ended (account deletion, V9). */
+export function hasUpcomingPublishedEvents(ownerId: string): boolean {
+  const now = Date.now();
+  return [...events.values()].some(
+    ({ ownerId: owner, event }) =>
+      owner === ownerId && event.status === "PUBLISHED" && Date.parse(event.endsAt) > now,
+  );
+}
+
 /** Who owns an event of the panel, for the check-in routes. */
 export function organizerEventOwner(id: string): string | undefined {
   return events.get(id)?.ownerId;

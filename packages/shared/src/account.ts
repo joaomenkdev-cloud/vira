@@ -18,7 +18,7 @@ import {
 export const ORGANIZER_DISPLAY_NAME_MAX_LENGTH = 80;
 
 /** A password the caller already has: any non-empty value up to the maximum length. */
-const currentPasswordSchema = z
+export const currentPasswordSchema = z
   .string()
   .min(1)
   .max(PASSWORD_MAX_LENGTH)

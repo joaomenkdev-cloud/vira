@@ -10,6 +10,7 @@ import { HealthModule } from "../modules/health/health.module.js";
 import { OrdersJobsModule, OrdersModule } from "../modules/orders/orders.module.js";
 import { OutboxModule, OutboxPollerModule } from "../modules/outbox/outbox.module.js";
 import { PaymentsJobsModule } from "../modules/payments/payments.module.js";
+import { PrivacyJobsModule, PrivacyModule } from "../modules/privacy/privacy.module.js";
 import { TicketsJobsModule, TicketsModule } from "../modules/tickets/tickets.module.js";
 import { UsersModule } from "../modules/users/users.module.js";
 import type { AppConfig } from "../platform/config/config.schema.js";
@@ -61,6 +62,7 @@ export class AppModule {
         OrdersModule,
         TicketsModule,
         CheckinModule,
+        PrivacyModule,
         HealthModule,
         // Embedded mode runs the background work inside the API process (ADR-0011).
         ...(config.worker.mode === "embedded"
@@ -71,6 +73,7 @@ export class AppModule {
               EventsJobsModule,
               OrdersJobsModule,
               PaymentsJobsModule,
+              PrivacyJobsModule,
               TicketsJobsModule,
             ]
           : []),

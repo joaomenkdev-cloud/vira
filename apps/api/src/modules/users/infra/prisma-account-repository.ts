@@ -20,7 +20,8 @@ export class PrismaAccountRepository implements AccountRepository {
 
   async findById(id: string): Promise<Account | null> {
     const row = await this.prisma.user.findUnique({
-      where: { id },
+      // An erased account (V9) is no account: a leftover access token reaches nothing.
+      where: { id, anonymizedAt: null },
       select: {
         id: true,
         name: true,

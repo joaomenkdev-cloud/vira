@@ -493,4 +493,4 @@ stateDiagram-v2
 | `orders` | `buyer_name`, `buyer_email` | Comprovante e envio dos ingressos |
 | `tickets` | `holder_name` | Identificar o titular na entrada |
 
-Nenhuma outra tabela guarda dado pessoal direto. IDs (`user_id`, `actor_id`) são pseudônimos. Inventário completo, bases legais e retenção em [PRIVACY.md](PRIVACY.md).
+Também `users.pending_email`, `verification_tokens.new_email` e `order_items.holder_names`. Nenhuma outra tabela guarda dado pessoal direto. IDs (`user_id`, `actor_id`) são pseudônimos. Inventário completo, bases legais e retenção em [PRIVACY.md](PRIVACY.md).

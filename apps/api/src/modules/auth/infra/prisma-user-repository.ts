@@ -35,7 +35,8 @@ export class PrismaUserRepository implements UserRepository {
   }
 
   async findById(id: string): Promise<User | null> {
-    const row = await this.prisma.user.findUnique({ where: { id } });
+    // An erased account (V9) is no account: a leftover access token reaches nothing.
+    const row = await this.prisma.user.findUnique({ where: { id, anonymizedAt: null } });
     return row && toDomain(row);
   }
 
