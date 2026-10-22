@@ -2,6 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import { Logger } from "nestjs-pino";
 
 import { ConfigValidationError, loadConfig } from "../platform/config/load-config.js";
+import { initErrorReporting } from "../platform/observability/error-reporting.js";
 import { WorkerModule } from "./worker.module.js";
 
 export interface RunWorkerOptions {
@@ -27,6 +28,7 @@ export async function runWorker(
     writeError(error.message);
     return 1;
   }
+  initErrorReporting(config, "worker");
 
   const app = await NestFactory.createApplicationContext(WorkerModule.register({ config }), {
     bufferLogs: true,

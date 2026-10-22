@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Options } from "pino-http";
 
 import type { AppConfig } from "../config/config.schema.js";
+import { reportError } from "../observability/error-reporting.js";
 
 export const REQUEST_ID_HEADER = "x-request-id";
 
@@ -60,6 +61,19 @@ function pathOf(url: string | undefined): string | undefined {
   return url?.split("?", 1)[0];
 }
 
+/** pino's numeric level of `error`; `fatal` is above it. */
+const ERROR_LEVEL = 50;
+
+/**
+ * Sends the error of a log line at `error` or above to error reporting. The access line
+ * of a failed request (it has `res`) is skipped: the handler already logged the cause.
+ */
+export function reportLoggedError(entry: unknown, level: number): void {
+  if (level < ERROR_LEVEL || typeof entry !== "object" || entry === null) return;
+  if ("res" in entry || !("err" in entry) || !(entry.err instanceof Error)) return;
+  reportError(entry.err);
+}
+
 export function pinoHttpOptions(config: AppConfig): Options {
   return {
     level: config.log.level,
@@ -68,6 +82,12 @@ export function pinoHttpOptions(config: AppConfig): Options {
     // Top-level request id on every line, including logs written inside handlers.
     customProps: (req) => ({ requestId: req.id }),
     redact: { paths: REDACT_PATHS, censor: REDACTED },
+    hooks: {
+      logMethod(args, method, level) {
+        reportLoggedError(args[0], level);
+        method.apply(this, args);
+      },
+    },
     // Only what is needed to trace a request: no headers, body or client IP.
     serializers: {
       req: (req: { id: unknown; method: string; url?: string }) => ({
