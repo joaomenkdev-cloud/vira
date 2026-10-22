@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 import { isLoopback, resolveApiOrigin, resolveStorageOrigin } from "./src/config/api-origin";
-import { securityHeaders } from "./src/config/security-headers";
+import { CHECKIN_PATH, checkinHeaders, securityHeaders } from "./src/config/security-headers";
 
 const apiOrigin = resolveApiOrigin(process.env);
 const storageOrigin = new URL(resolveStorageOrigin(process.env));
@@ -41,6 +41,8 @@ const config: NextConfig = {
   headers() {
     return Promise.resolve([
       { source: "/:path*", headers: securityHeaders.map(({ key, value }) => ({ key, value })) },
+      // Later rules win for the same header: this one turns the camera on for the door.
+      { source: CHECKIN_PATH, headers: checkinHeaders.map(({ key, value }) => ({ key, value })) },
     ]);
   },
 };

@@ -1,8 +1,17 @@
 "use client";
 
 import type { OrganizerEvent } from "@vira/shared";
-import { Alert, Badge, Button, EmptyState, Icon, Skeleton, SkeletonText } from "@vira/ui";
-import { ChevronLeft } from "lucide-react";
+import {
+  Alert,
+  Badge,
+  Button,
+  buttonClassName,
+  EmptyState,
+  Icon,
+  Skeleton,
+  SkeletonText,
+} from "@vira/ui";
+import { ChevronLeft, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 
@@ -144,6 +153,15 @@ function Editor({ id }: { id: string }) {
         <p className="text-body text-ink-muted">
           {formatDateRange(event.startsAt, event.endsAt, event.timezone)}
         </p>
+        {phase === "PUBLISHED" || phase === "ENDED" ? (
+          <Link
+            href={`/painel/eventos/${encodeURIComponent(event.id)}/check-in`}
+            className={buttonClassName("secondary", "md", "self-start")}
+          >
+            <Icon icon={ScanLine} />
+            Abrir check-in
+          </Link>
+        ) : null}
       </header>
 
       <div className="mt-8">

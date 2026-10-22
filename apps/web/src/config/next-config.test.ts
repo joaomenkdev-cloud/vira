@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import config from "../../next.config";
 import { isLoopback, resolveApiOrigin, resolveStorageOrigin } from "./api-origin";
-import { securityHeaders } from "./security-headers";
+import { checkinHeaders, securityHeaders } from "./security-headers";
 
 describe("next.config", () => {
   it("proxies /api/v1 to the API before any page can match", async () => {
@@ -19,11 +19,14 @@ describe("next.config", () => {
     });
   });
 
-  it("sends the security headers on every path", async () => {
+  it("sends the security headers on every path, and the camera only on the door", async () => {
     const headers = await config.headers?.();
-    expect(headers).toHaveLength(1);
+    expect(headers).toHaveLength(2);
     expect(headers?.[0]?.source).toBe("/:path*");
     expect(headers?.[0]?.headers).toEqual(securityHeaders);
+    // Last, so its Permissions-Policy replaces the general one on that path.
+    expect(headers?.[1]?.source).toBe("/painel/eventos/:id/check-in");
+    expect(headers?.[1]?.headers).toEqual(checkinHeaders);
   });
 
   it("does not advertise the framework", () => {
@@ -44,6 +47,16 @@ describe("security headers", () => {
   it("turn off powerful browser features nothing uses yet", () => {
     const policy = byKey.get("Permissions-Policy") ?? "";
     for (const feature of ["camera", "microphone", "geolocation", "payment"]) {
+      expect(policy).toContain(`${feature}=()`);
+    }
+  });
+});
+
+describe("check-in headers", () => {
+  it("allow the camera to the page itself, and nothing else", () => {
+    const policy = checkinHeaders.find((h) => h.key === "Permissions-Policy")?.value ?? "";
+    expect(policy).toContain("camera=(self)");
+    for (const feature of ["microphone", "geolocation", "payment"]) {
       expect(policy).toContain(`${feature}=()`);
     }
   });
