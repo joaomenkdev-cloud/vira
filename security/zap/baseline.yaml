@@ -1,0 +1,44 @@
+# OWASP ZAP baseline (passive) scan of the web app, run by the "zap" job of
+# .github/workflows/ci.yml and locally (docs/SECURITY_MODEL.md, "Varredura ZAP").
+# ZAP only crawls and reads the responses: nothing is attacked.
+env:
+  contexts:
+    - name: vira
+      urls:
+        - ${TARGET}
+      includePaths:
+        - ${TARGET}.*
+  parameters:
+    failOnError: true
+    progressToStdout: true
+jobs:
+  # Reviewed alerts (docs/SECURITY_MODEL.md, "Varredura ZAP"). The forms use POST only so
+  # nothing typed lands in the URL before the script loads; the script sends them with
+  # fetch and the X-CSRF-Token header, and a POST to a page changes nothing.
+  - type: alertFilter
+    alertFilters:
+      - ruleId: 10202
+        ruleName: Absence of Anti-CSRF Tokens
+        context: vira
+        newRisk: False Positive
+  - type: spider
+    parameters:
+      context: vira
+      maxDuration: 2
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: ${REPORT_DIR}
+      reportFile: zap-baseline
+  - type: report
+    parameters:
+      template: traditional-md
+      reportDir: ${REPORT_DIR}
+      reportFile: zap-baseline
+  # A medium or high alert fails the run; low and informational ones are only reported.
+  - type: exitStatus
+    parameters:
+      errorLevel: Medium
