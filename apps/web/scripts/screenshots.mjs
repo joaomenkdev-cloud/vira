@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { chromium, devices } from "@playwright/test";
 
 import { encodePng } from "../e2e/fixtures/png.ts";
+import { stubStripe } from "../e2e/support/stripe.ts";
 
 const baseUrl = process.env["WEB_URL"] ?? "http://127.0.0.1:3001";
 const outDir =
@@ -95,6 +96,48 @@ try {
       await page.waitForTimeout(500);
       await shoot(page, `web-account-menu-${viewport.name}.png`, false);
       await page.keyboard.press("Escape");
+
+      // The purchase: the choice on the event page, the checkout (holders, then the
+      // Payment Element, here Stripe's stand-in), the confirmation and an expired reservation.
+      await stubStripe(page);
+      await page.goto(`${baseUrl}/eventos/forro-na-praca`);
+      await page.getByRole("radio", { name: /Camarote/ }).check();
+      await page.getByRole("button", { name: "Aumentar quantidade" }).click();
+      await page.waitForLoadState("networkidle");
+      await shoot(page, `web-event-selected-${viewport.name}.png`, false);
+      await page.getByRole("button", { name: "Comprar ingresso", exact: true }).click();
+      await page.getByText(/Reservado por/).waitFor();
+      const orderId = /\/checkout\/([0-9a-f-]{36})/.exec(page.url())?.[1];
+      await page.getByLabel("Titular do ingresso 2 (Camarote)").fill("Caio Lima");
+      await shoot(page, `web-checkout-holders-${viewport.name}.png`);
+      await page.getByRole("button", { name: "Continuar para o pagamento" }).click();
+      await page.getByLabel("Número do cartão").fill("4242 4242 4242 4242");
+      await shoot(page, `web-checkout-payment-${viewport.name}.png`);
+      await page.getByRole("button", { name: "Pagar R$ 400,00" }).click();
+      await page.getByRole("heading", { name: "Confirmando pagamento…" }).waitFor();
+      await shoot(page, `web-checkout-confirming-${viewport.name}.png`);
+      await fetch(`${fakeApiUrl}/__test/orders/pay?id=${orderId}`, { method: "POST" });
+      await page.getByRole("heading", { name: "Pagamento confirmado" }).waitFor();
+      await shoot(page, `web-checkout-paid-${viewport.name}.png`);
+
+      await page.goto(`${baseUrl}/eventos/jazz-no-teatro`);
+      await page.getByRole("radio", { name: /Plateia/ }).check();
+      await page.getByRole("button", { name: "Comprar ingresso", exact: true }).click();
+      await page.getByText(/Reservado por/).waitFor();
+      const expiring = /\/checkout\/([0-9a-f-]{36})/.exec(page.url())?.[1];
+      await fetch(`${fakeApiUrl}/__test/orders/expire-in?id=${expiring}&seconds=95`, {
+        method: "POST",
+      });
+      await page.reload();
+      await page.getByRole("button", { name: "Manter reserva" }).waitFor();
+      await shoot(page, `web-checkout-warning-${viewport.name}.png`, false);
+      await fetch(`${fakeApiUrl}/__test/orders/expire-in?id=${expiring}&seconds=1`, {
+        method: "POST",
+      });
+      await page.reload();
+      await page.getByRole("dialog").waitFor();
+      await page.waitForTimeout(500);
+      await shoot(page, `web-checkout-expired-${viewport.name}.png`, false);
 
       // The organizer panel: empty, the new event form, a draft, a published event.
       await fetch(`${fakeApiUrl}/__test/make-organizer?email=${email}`, { method: "POST" });

@@ -343,3 +343,9 @@ export function catalogPhoto(path: string): Buffer {
   }
   return photo;
 }
+
+/** The page of a storefront event by id, as an order needs it (fixtures/orders.ts). */
+export function catalogEventById(id: string): CatalogEventDetail | undefined {
+  const event = buildEvents(Date.now()).all.find((e) => e.id === id);
+  return event ? detail(event) : undefined;
+}

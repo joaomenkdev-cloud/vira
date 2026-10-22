@@ -280,9 +280,7 @@ test.describe("event page", () => {
     ).toContainText("nenhuma cobrança é feita");
   });
 
-  test("lists the ticket types with their price and state, and sells nothing yet", async ({
-    page,
-  }) => {
+  test("lists the ticket types with their price and state, to choose one", async ({ page }) => {
     await page.goto("/eventos/forro-na-praca");
     const tickets = page.getByRole("complementary", { name: "Ingressos" }).getByRole("listitem");
 
@@ -291,10 +289,9 @@ test.describe("event page", () => {
     await expect(tickets.nth(0)).toContainText("R$ 80,00");
     await expect(tickets.nth(1)).toContainText("Últimos ingressos");
     await expect(tickets.nth(2)).toContainText("Esgotado");
-    await expect(page.getByText("A compra pelo site ainda não está aberta")).toBeVisible();
-    // The checkout (V6) does not exist yet: no button pretends otherwise.
-    await expect(page.getByRole("button", { name: /Comprar/ })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: /Comprar/ })).toHaveCount(0);
+    await expect(page.getByRole("radio", { name: /Meia-entrada/ })).toBeDisabled();
+    // Nothing is chosen yet: the button leads to the choice (the checkout has its own spec).
+    await expect(page.getByRole("button", { name: "Ver ingressos" })).toBeVisible();
   });
 
   test("says when the sales of a ticket type open", async ({ page }) => {
