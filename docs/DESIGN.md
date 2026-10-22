@@ -593,6 +593,8 @@ A barra fixa sempre mostra o total e o CTA; antes de selecionar um tipo, o CTA �
 
 **Como ficou implementado (N11).** Home, Explorar e a página do evento seguem estes wireframes, com quatro diferenças até o checkout (V6) existir: os tipos de ingresso aparecem como linhas só de leitura (nome, preço e estado em texto: "Últimos ingressos" abaixo de 10, "Esgotado", "Vendas a partir de…", "Vendas encerradas"), sem radio, stepper, total, CTA nem barra fixa no mobile, e um alert diz que a compra pelo site ainda não está aberta; o header do mobile continua o global (logo e "Buscar"), sem o "‹ Voltar ⤴" da página do evento; a busca da home não tem o seletor de cidade (não há lista de cidades na API) — a cidade é um campo de texto em Explorar; dos chips, só "Este fim de semana" existe, porque é o único que os dados sustentam. A seção "Informações" (classificação, acessibilidade) não aparece porque esses campos não existem no evento.
 
+**Como ficou implementado (V6).** O seletor substituiu as linhas só de leitura: cada tipo é uma linha com radio, preço à direita e, selecionado, fundo `accent-soft`, borda `accent` e o stepper; esgotado ou fora de venda fica desabilitado com o estado em texto. O total e "Comprar ingresso" ficam abaixo da lista no desktop e na barra fixa do mobile ("Ver ingressos" antes da escolha, que leva o foco ao seletor). A escolha vai no endereço (`?ingresso=&quantidade=`), para o login e o "Tentar de novo" voltarem a ela.
+
 ### 4.3 Checkout
 
 Fluxo: **seleção na página do evento → reserva (10 min) → dados → pagamento → confirmação**. Exige login (ADR-0005); se o visitante não estiver logado, o login preserva a seleção.
@@ -656,6 +658,8 @@ Fluxo: **seleção na página do evento → reserva (10 min) → dados → pagam
 │ [    Pagar R$ 160,00     ]   │ CTA fixo no rodapé, safe-area
 └──────────────────────────────┘
 ```
+
+**Como ficou implementado (V6).** Header de checkout (logo e "Pagamento seguro", sem navegação), etapas e contador na mesma linha, resumo fixo à direita no desktop e recolhível (`<details>`) no topo do mobile, sem a miniatura do evento. Nome e e-mail do comprador aparecem só para leitura (vêm da conta); os titulares são um campo por ingresso, o primeiro com o nome do comprador, e "Continuar para o pagamento" salva os nomes e revela o Payment Element na mesma página, com o alerta do modo de teste e "Pagar R$ X". Depois de pagar, a confirmação mostra o pedido e os códigos dos ingressos (o ingresso completo chega com a V7).
 
 **Pós-pagamento:** tela "Confirmando pagamento…" → quando o webhook marca o pedido como `PAID`, redireciona para o ingresso com o feedback de sucesso. **Reserva expirada:** modal "Sua reserva expirou" com "Tentar de novo" (volta à página do evento com a seleção preservada se ainda houver estoque).
 

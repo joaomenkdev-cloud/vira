@@ -115,6 +115,7 @@ erDiagram
         uuid ticket_type_id FK
         int quantity
         int unit_price_cents
+        text_array holder_names "PII"
     }
     tickets {
         uuid id PK
@@ -322,6 +323,7 @@ Regra anti-açambarcamento: no máximo **1 pedido `PENDING` por comprador por ev
 | `ticket_type_id` | uuid | FK → ticket_types (`ON DELETE RESTRICT`: um tipo que já esteve num pedido não é excluído) |
 | `quantity` | int | `CHECK (quantity BETWEEN 1 AND 20)`, ≤ `max_per_order` |
 | `unit_price_cents` | int | Cópia do preço no momento da reserva (lido na mesma linha que o `UPDATE` da reserva atualiza) |
+| `holder_names` | text[] | `NOT NULL DEFAULT '{}'`. Vazio até o comprador informar os titulares (V6); depois, exatamente `quantity` nomes de 1–120 caracteres sem espaços nas pontas (`CHECK order_items_holder_names`, função `holder_names_valid`). **Dado pessoal**; copiado para `tickets.holder_name` na emissão |
 
 `UNIQUE(order_id, ticket_type_id)`; índice `(ticket_type_id)`.
 
