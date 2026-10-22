@@ -344,7 +344,7 @@ sequenceDiagram
 | Segurança HTTP | Helmet, CSP (no web, com nonce), CORS restrito à origem do web, limite de body (100 kB JSON; webhook com body bruto), `trust proxy` configurado para o provedor. Detalhes em [SECURITY_MODEL.md](SECURITY_MODEL.md). |
 | Tempo e dinheiro | Datas em UTC (`timestamptz`) com o fuso IANA do evento salvo à parte; formatação para exibição sempre no fuso do evento. Dinheiro em centavos (`int`), moeda `BRL`. |
 | IDs e tempo | Portas `IdGenerator` (UUID v7, pacote `uuid`) e `Clock` em `platform/runtime`, injetadas nos casos de uso para que os testes controlem ids e horário. UUID v7 (ordenáveis) como chave primária; nunca expostos como única proteção de um recurso (autorização sempre verificada). Códigos públicos legíveis (`VIRA-XXXX-XXXX`) são aleatórios (Crockford Base32, 40 bits) e não substituem autenticação. |
-| Observabilidade | Sentry (API, worker, web) com `sendDefaultPii: false`, `beforeSend` que remove usuário, cookies, headers e corpo; health checks `/health/live` e `/health/ready`. |
+| Observabilidade | Sentry na API e no worker (opcional, `SENTRY_DSN`), sem coleta automática e com `beforeSend` que remove usuário, requisição, dados extras e breadcrumbs e mascara e-mails; o web fica com os logs da Vercel. Health checks `/health/live` e `/health/ready`. |
 
 ## 8. Aplicação web
 

@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 2 — MVP público v1.0 (o Marco 1 terminou com a N13).
-- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V8 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#43) e Dependabot (#4–#7, #9 CodeQL v4). V9 no PR dos direitos LGPD (`feat/users-privacy`).
-- **Entregas abertas:** V9.
-- **Próximo passo:** V10 — Endurecimento (`chore/security-hardening`).
+- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V9 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#44) e Dependabot (#4–#7, #9 CodeQL v4). V10 no PR do endurecimento (`chore/security-hardening`).
+- **Entregas abertas:** V10.
+- **Próximo passo:** V11 — Deploy da demo e v1.0.0 (`chore/deploy`), **só com autorização explícita do mantenedor**.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,24 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-22 — V10: endurecimento
+
+Auditoria (antes de codar): o SECURITY_MODEL prometia Sentry sem PII, `pnpm audit` no CI e timeout de requisição de 10 s, e nenhum dos três existia; o checklist ASVS ainda tinha onze capítulos em ⬜ ou 🟨 já entregues.
+
+Feito:
+
+- Sentry na API e no worker (`@sentry/node`), ligado só com `SENTRY_DSN` (`SENTRY_ENVIRONMENT`, `SENTRY_RELEASE` ou `RENDER_GIT_COMMIT`): só as integrações de exceção não capturada e promessa rejeitada, `dataCollection` todo desligado, sem breadcrumbs nem tracing, e `beforeSend` puro (`scrubEvent`) que apaga usuário, requisição, extras, breadcrumbs, servidor e variáveis dos frames e mascara e-mails. Um hook do pino manda ao Sentry todo log `error` com `err` (menos a linha de acesso); job que esgota as tentativas também vai. Testes do `scrubEvent`, do hook e do envelope real que sairia (transporte falso).
+- Varredura OWASP ZAP 2.16.1 (planos em `security/zap`): o web, no job `zap` novo do CI, e a API, pelo OpenAPI, local. Nenhum alerta alto ou médio real. O rastreamento mostrou que um formulário enviado antes do script carregar caía em `GET` e punha e-mail e senha na URL: todos os formulários tratados por script ganharam `method="post"` (E2E com JavaScript desligado). "Absence of Anti-CSRF Tokens" é falso positivo e fica filtrado no plano com a justificativa.
+- Rate limits e CSP revisados: CSP sem mudança (nonce, `strict-dynamic`, sem `unsafe-inline` em produção); novo limite de 30 rascunhos por hora por conta; 10 s para mandar a requisição inteira.
+- `pnpm audit --prod --audit-level high` no CI; overrides tiram `deepmerge-ts` e `mysql2` (trazidos pelo CLI do Prisma) das versões com alerta.
+- SECURITY_MODEL: checklist ASVS revisado com evidência (só V12 fica em andamento até o deploy), seção da varredura ZAP com as decisões e riscos residuais.
+
+Decisões tomadas por conta própria:
+
+- **Sem Sentry no web**: exigiria abrir o `connect-src` da CSP para o Sentry e mandar erros do navegador; os erros do servidor do web ficam nos logs da Vercel.
+- **Vitrine sem limite por IP**: as páginas são desenhadas no servidor do web, e as chamadas chegariam de poucos IPs da Vercel.
+- **`TRUST_PROXY_HOPS=2` em produção** (rewrite da Vercel + proxy do Render), a conferir no V11; o risco de forjar o IP chamando o Render direto ficou registrado.
 
 ### 2026-10-22 — V9: direitos LGPD
 
