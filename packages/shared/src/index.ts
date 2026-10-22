@@ -5,6 +5,7 @@ export * from "./checkin.js";
 export * from "./events.js";
 export * from "./health.js";
 export * from "./orders.js";
+export * from "./privacy.js";
 export * from "./problem-details.js";
 export * from "./queues.js";
 export * from "./roles.js";
