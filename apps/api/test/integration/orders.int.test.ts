@@ -1049,10 +1049,10 @@ describe.skipIf(!dockerAvailable)("orders (PostgreSQL)", () => {
       ]);
       expect(list.data[0]).toMatchObject({
         orderId: order.id,
-        holderName: expect.stringMatching(/^Titular [1-3]$/),
         event: { id: eventId, title: "Noite de forró", venueCity: "Rio de Janeiro" },
         usedAt: null,
       });
+      expect(list.data[0]?.holderName).toMatch(/^Titular [1-3]$/);
       expect(JSON.stringify(list)).not.toContain("qrToken");
       expect(
         ticketListSchema.parse((await ana.get("/tickets?when=past").expect(200)).body).data,
