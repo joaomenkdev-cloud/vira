@@ -142,6 +142,26 @@ export const envSchema = z
       .trim()
       .regex(/^whsec_[A-Za-z0-9]{10,255}$/, "must be a webhook signing secret (whsec_...)")
       .optional(),
+    // Error reporting (Sentry): off without a DSN. RENDER_GIT_COMMIT is set by Render.
+    SENTRY_DSN: z
+      .url({ protocol: /^https$/ })
+      .max(500)
+      .optional(),
+    SENTRY_ENVIRONMENT: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9_-]{1,64}$/)
+      .optional(),
+    SENTRY_RELEASE: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9._@+-]{1,200}$/)
+      .optional(),
+    RENDER_GIT_COMMIT: z
+      .string()
+      .trim()
+      .regex(/^[a-f0-9]{7,64}$/)
+      .optional(),
   })
   .superRefine((env, ctx) => {
     // One key per purpose: a CSRF token must never verify as a JWT signature, or vice versa.
@@ -242,6 +262,14 @@ export const envSchema = z
       level: env.LOG_LEVEL,
       pretty: env.NODE_ENV === "development",
     },
+    /** Unexpected errors go to Sentry, scrubbed of personal data (docs/PRIVACY.md). */
+    errorReporting: env.SENTRY_DSN
+      ? {
+          dsn: env.SENTRY_DSN,
+          environment: env.SENTRY_ENVIRONMENT ?? env.NODE_ENV,
+          release: env.SENTRY_RELEASE ?? env.RENDER_GIT_COMMIT,
+        }
+      : undefined,
     docs: {
       enabled: env.API_DOCS_ENABLED ?? env.NODE_ENV !== "production",
     },

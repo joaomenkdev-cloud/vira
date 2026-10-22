@@ -148,6 +148,7 @@ export function EventDetailsForm({
 
   return (
     <form
+      method="post"
       noValidate
       aria-label="Detalhes do evento"
       onSubmit={(submitEvent) => void handleSubmit(submitEvent)}

@@ -106,6 +106,7 @@ export function EventImageSection({ event, readOnly, onUpdated }: EventImageSect
 
       {readOnly ? null : (
         <form
+          method="post"
           noValidate
           aria-label="Enviar imagem"
           onSubmit={(submitEvent) => void handleSubmit(submitEvent)}

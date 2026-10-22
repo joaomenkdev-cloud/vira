@@ -163,14 +163,15 @@ Decisões tomadas e riscos aceitos, para o revisor não precisar redescobri-los:
 | Markdown | `markdown-it` com HTML desligado → `sanitize-html` com allowlist (`p`, `strong`, `em`, `ul`, `ol`, `li`, `a[href]`, `h3`, `h4`, `blockquote`, `br`); links com `rel="noopener noreferrer nofollow ugc"`; só `https:` e `mailto:`. Renderizado no servidor e salvo; o web não usa `dangerouslySetInnerHTML` com conteúdo não sanitizado. Títulos `#` e `##` viram `h3` (o `h1` e o `h2` são da página); imagens somem; link para outro esquema fica só com o texto. Testado com payloads XSS em `sanitized-markdown-renderer.test.ts` e, contra o banco, em `events.int.test.ts`. |
 | Cabeçalhos | Helmet na API; no web: CSP com nonce gerado a cada requisição em `src/proxy.ts` (implementado no F7 com `default-src 'self'`, `script-src 'self' 'nonce-…' 'strict-dynamic'`, `object-src 'none'`, `base-uri 'none'`, `frame-ancestors 'none'`; os domínios do Stripe entram no checkout, V6). O `style-src` leva só `self` e o nonce (sem `unsafe-inline` em produção): por isso os componentes de interface não escrevem `style` inline no HTML do servidor e o `<style>` do travamento de rolagem dos modais recebe o nonce (N2). Desenho completo: (`default-src 'self'; script-src 'self' 'nonce-…' https://js.stripe.com; frame-src https://js.stripe.com https://hooks.stripe.com; img-src 'self' data: <cdn do R2>; connect-src 'self' https://api.stripe.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`), HSTS, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (câmera só na rota de check-in: `camera=(self)` em `/painel/eventos/:id/check-in`, `camera=()` no resto, V8). |
 | CORS | Somente a origem do web; credenciais permitidas; webhook sem CORS. |
-| Limites | Body JSON 100 kB; paginação máx. 50; timeouts de requisição 10 s; consultas com `statement_timeout` de 5 s. |
+| Limites | Body JSON 100 kB; paginação máx. 50; 10 s para o cliente mandar a requisição inteira; consultas com `statement_timeout` de 5 s. Rate limit por IP nas rotas públicas que custam caro (cadastro, login, links por e-mail, OAuth, pedido) e por conta onde há conta (login, senha atual, compra, pagamento, check-in, imagem, rascunhos, exportação). A vitrine não tem limite por IP de propósito: as páginas são desenhadas no servidor do web, e todas as chamadas chegariam de poucos IPs. |
 | Upload | URL pré-assinada de `PUT` com `Content-Type` e `Content-Length` fixados na assinatura, expiração de 5 min, chave gerada pelo servidor; bucket privado, com CORS só para o `WEB_ORIGIN` e só `PUT`; confirmação lê o objeto pela chave guardada (nunca uma URL do cliente), valida tamanho, magic bytes e dimensões, decodifica com limite de 40 megapixels (contra "pixel bombs"); imagens re-encodadas para WebP (remove EXIF/GPS) antes de servir, e o original é apagado; servidas por URL assinada de `GET` (1 h); job apaga envios abandonados e imagens trocadas. Implementado na N9 e testado contra SeaweedFS real (`event-images.int.test.ts`): assinatura recusando outro tipo e outro tamanho, preflight CORS, arquivo falso, imagem pequena, EXIF removido. |
 | Vitrine (API3) | Rotas públicas leem só eventos publicados (rascunho é `404`, igual a slug inexistente) e respondem com schemas estritos próprios: nada de `descriptionMd`, motivo do cancelamento, id do organizador, chave da imagem nem vendidos e reservados separados. A busca e o filtro de cidade escapam `%` e `_` antes do `ILIKE`; o cursor é assinado e preso à busca. Testado em `catalog.int.test.ts` e `catalog.e2e.test.ts` (N10). |
 | SSRF (API7) | O servidor nunca busca URLs informadas por usuário; imagens só chegam por upload direto. |
 | Segredos | Somente variáveis de ambiente, validadas no boot; nunca no repositório (gitleaks no pre-commit e no CI); chaves separadas por ambiente; rotação documentada. |
 | Dependências | Dependabot semanal, `pnpm audit` no CI, CodeQL, lockfile congelado no CI, actions de terceiros fixadas no SHA do commit (o Dependabot mantém os pins atualizados) e as do GitHub por versão. |
 | Auditoria | `AuditLog.record()` (módulo `audit`) grava ações sensíveis em `audit_logs`, append-only por trigger; cada ação tem schema de `metadata` estrito, sem dados pessoais. |
-| Logs | Sem dados pessoais nem segredos (redação no pino); `requestId` em tudo; Sentry com `sendDefaultPii: false` e `beforeSend` sanitizando. |
+| Logs | Sem dados pessoais nem segredos (redação no pino); `requestId` em tudo. |
+| Erros (Sentry) | API e worker, só com `SENTRY_DSN`. Só as integrações de exceção não capturada e promessa rejeitada; `dataCollection` todo desligado (usuário, cookies, headers, corpo, query, variáveis dos frames); sem tracing nem breadcrumbs. `beforeSend` (`scrubEvent`) apaga `user`, `request`, `extra`, `breadcrumbs`, `server_name` e as variáveis dos frames e mascara e-mails nas mensagens. Vão ao Sentry o log `error` que carrega `err` (menos a linha de acesso do pino-http, que repetiria o erro) e o job que esgotou as tentativas. Testado com um transporte falso que lê o envelope que sairia (`error-reporting.sdk.test.ts`). O web não usa Sentry: os erros dele ficam nos logs da Vercel. |
 | Banco | Usuário da aplicação sem privilégio de DDL em produção (migrations com outro papel); `audit_logs` só `INSERT`/`SELECT`; TLS obrigatório (a API recusa subir em produção sem `sslmode=require` no `DATABASE_URL` e sem `rediss://` no `REDIS_URL`); `statement_timeout` de 5 s e timeout de conexão de 5 s. |
 | Inventário (API9) | OpenAPI gerado do código, versão única `/api/v1`, `/docs` protegido em produção; rotas não documentadas falham no teste de contrato. |
 | Consumo de APIs (API10) | Respostas do Stripe e dos provedores OAuth validadas com Zod; timeouts e retentativas com limite. |
@@ -197,28 +198,49 @@ Status: ⬜ planejado · 🟨 em andamento · ✅ implementado e testado. O marc
 
 | Capítulo | Controles principais para o Vira | Marco | Status |
 | --- | --- | --- | --- |
-| V1 Encoding and Sanitization | Escapamento por contexto (React), markdown sanitizado com allowlist, Prisma parametrizado (sem SQL cru concatenado), saída JSON sempre serializada. | Núcleo | ⬜ |
-| V2 Validation and Business Logic | Zod estrito em toda entrada; regras de negócio no `domain`; limites anti-abuso no fluxo de compra; operações sensíveis em ordem garantida (transições condicionais). | Núcleo / MVP | ⬜ |
-| V3 Web Frontend Security | CSP com nonce, cookies `__Host-`, `SameSite`, HSTS, proteção contra clickjacking, `Sec-Fetch-*`. | Fundação / MVP | 🟨 |
-| V4 API and Web Service | Métodos HTTP corretos, `Content-Type` verificado, limites de tamanho, OpenAPI coerente com o código. | Fundação | 🟨 |
-| V5 File Handling | Upload pré-assinado com tipo e tamanho fixados, verificação de magic bytes, re-encode, bucket privado, nomes gerados pelo servidor. | Núcleo | ⬜ |
+| V1 Encoding and Sanitization | Escapamento por contexto (React), markdown sanitizado com allowlist, Prisma parametrizado (sem SQL cru concatenado), saída JSON sempre serializada. Verificado no V10: nenhum `$queryRawUnsafe`/`$executeRawUnsafe` (SQL cru só por template parametrizado); `dangerouslySetInnerHTML` só no markdown sanitizado e no JSON-LD, que escapa `<`. | Núcleo | ✅ |
+| V2 Validation and Business Logic | Zod estrito em toda entrada; regras de negócio no `domain`; limites anti-abuso no fluxo de compra; operações sensíveis em ordem garantida (transições condicionais). Limites por conta na compra, no pagamento, no envio de imagem e, desde o V10, na criação de rascunhos (30/h). | Núcleo / MVP | ✅ |
+| V3 Web Frontend Security | CSP com nonce, cookies `__Host-`, `SameSite`, HSTS, proteção contra clickjacking, `Sec-Fetch-*`. V10: formulários com `method="post"`, para que um envio antes do script carregar não ponha e-mail e senha na URL (achado da varredura ZAP). | Fundação / MVP | ✅ |
+| V4 API and Web Service | Métodos HTTP corretos, `Content-Type` verificado, limites de tamanho, OpenAPI coerente com o código. V10: 10 s para o cliente mandar a requisição inteira (`requestTimeout` e `headersTimeout`). | Fundação | ✅ |
+| V5 File Handling | Upload pré-assinado com tipo e tamanho fixados, verificação de magic bytes, re-encode, bucket privado, nomes gerados pelo servidor. Entregue na N9 e testado contra SeaweedFS real. | Núcleo | ✅ |
 | V6 Authentication | argon2id, política de senha (8–128, checagem contra senhas vazadas via k-anonymity HIBP), anti-enumeração, rate limit e bloqueio, redefinição com token de uso único. N3 entregou argon2id, política 8–128, anti-enumeração, rate limit, bloqueio e verificação de e-mail; N6, a checagem HIBP e a redefinição (mais a reautenticação para trocar senha e e-mail). | Núcleo | ✅ |
 | V7 Session Management | Refresh opaco com hash, rotação, detecção de reuso, expiração ociosa e absoluta, logout e logout global, revogação ao trocar senha. N4 entregou tudo menos a revogação ao trocar senha, que veio na N6 (a redefinição revoga todas; a troca, todas menos a atual). | Núcleo | ✅ |
-| V8 Authorization | Negar por padrão, papel por função, posse por recurso, testes de autorização em toda rota. | Núcleo / MVP | ⬜ |
+| V8 Authorization | Negar por padrão, papel por função, posse por recurso, testes de autorização em toda rota. O teste de política de acesso lista toda rota e falha com rota sem declaração. | Núcleo / MVP | ✅ |
 | V9 Self-contained Tokens | JWT com `alg` fixo, `iss`/`aud`/`exp` validados, vida curta; token do QR com HMAC e `kid`. N4 entregou o JWT; V5 o token do QR (`v1.<kid>.<payload>.<sig>`, só codificação canônica, várias chaves para rotação). | Núcleo / MVP | ✅ |
 | V10 OAuth and OIDC | Authorization Code + PKCE, `state`, validação do `id_token` (Google), vínculo só com e-mail verificado, sem guardar tokens do provedor. N5 entregou tudo. | Núcleo | ✅ |
-| V11 Cryptography | Bibliotecas padrão (`node:crypto`, argon2), aleatoriedade com CSPRNG, comparação em tempo constante, chaves ≥ 256 bits, rotação por `kid`. N3: argon2id (`@node-rs/argon2`) e tokens de 256 bits do CSPRNG guardados só como SHA-256. | Núcleo / MVP | 🟨 |
-| V12 Secure Communication | TLS em todos os saltos (web, API, banco, Redis), HSTS. | MVP (deploy) | 🟨 |
-| V13 Configuration | Config validada no boot, segredos fora do código, gitleaks, dependências monitoradas, modo debug desligado em produção. | Fundação | 🟨 |
-| V14 Data Protection | Minimização (LGPD), inventário de dados, exportação e anonimização, sem PII em logs/Sentry/outbox, `Cache-Control: no-store` em respostas com dados pessoais. | MVP | ⬜ |
-| V15 Secure Coding and Architecture | Camadas com dependências para dentro verificadas no CI, integrações atrás de portas, revisão de dependências, documentação de ameaças (este arquivo). | Fundação | 🟨 |
-| V16 Security Logging and Error Handling | Logs estruturados com `requestId`, auditoria append-only, eventos de segurança registrados, erros RFC 9457 sem detalhes internos. | Fundação | 🟨 |
+| V11 Cryptography | Bibliotecas padrão (`node:crypto`, argon2), aleatoriedade com CSPRNG, comparação em tempo constante, chaves ≥ 256 bits, rotação por `kid`. N3: argon2id (`@node-rs/argon2`) e tokens de 256 bits do CSPRNG guardados só como SHA-256. V5: HMAC do QR com `kid`; comparações de MAC e tokens com `timingSafeEqual` (QR, CSRF, cursor, check-in, `id_token`). | Núcleo / MVP | ✅ |
+| V12 Secure Communication | TLS em todos os saltos (web, API, banco, Redis), HSTS. A config recusa subir em produção sem TLS no banco, no Redis, no SMTP e no storage; falta conferir no ambiente publicado (V11). | MVP (deploy) | 🟨 |
+| V13 Configuration | Config validada no boot, segredos fora do código, gitleaks, dependências monitoradas, modo debug desligado em produção. V10: `pnpm audit --prod` no CI falha com alerta alto. | Fundação | ✅ |
+| V14 Data Protection | Minimização (LGPD), inventário de dados, exportação e anonimização, sem PII em logs/Sentry/outbox, `Cache-Control: no-store` em respostas com dados pessoais. V9: exportação, anonimização e retenção; V10: Sentry sem dados pessoais, testado no envelope que sairia. | MVP | ✅ |
+| V15 Secure Coding and Architecture | Camadas com dependências para dentro verificadas no CI, integrações atrás de portas, revisão de dependências, documentação de ameaças (este arquivo). | Fundação | ✅ |
+| V16 Security Logging and Error Handling | Logs estruturados com `requestId`, auditoria append-only, eventos de segurança registrados, erros RFC 9457 sem detalhes internos. V10: erros inesperados (log `error` com `err` e job que esgotou as tentativas) vão ao Sentry. | Fundação | ✅ |
 | V17 WebRTC | Não se aplica (sem WebRTC). | — | — |
 
 A cada marco, a coluna de status é atualizada no mesmo PR que entrega o controle.
 
 ## 7. Verificação contínua
 
-- **CI:** gitleaks, CodeQL (`security-extended`), `pnpm audit --prod`, testes de autorização, teste de concorrência de estoque, E2E com axe.
-- **Antes do v1.0:** varredura OWASP ZAP baseline contra o ambiente de preview, revisão manual desta tabela, teste do fluxo de webhook com Stripe CLI (`stripe trigger` e reenvio).
+- **CI:** gitleaks, CodeQL (`security-extended`), `pnpm audit --prod --audit-level high`, testes de autorização, teste de concorrência de estoque, E2E com axe e a varredura OWASP ZAP das páginas.
+- **Antes do v1.0:** varredura OWASP ZAP baseline contra o ambiente publicado, revisão manual desta tabela, teste do fluxo de webhook com Stripe CLI (`stripe trigger` e reenvio).
 - **Resposta a incidentes:** rotação de chaves documentada (Stripe, HMAC do QR, JWT, banco); revogação em massa de sessões via `sessions.revoked_at`.
+
+### Varredura ZAP
+
+Os planos ficam em [`security/zap`](../security/zap). `baseline.yaml` rastreia o web e aplica só as regras passivas (nada é atacado); roda no job `zap` do CI contra o web construído e a API falsa dos testes E2E, e um alerta médio ou alto reprova. `api.yaml` faz o mesmo na API a partir do documento OpenAPI (`/docs/json`) e roda à mão contra uma API local:
+
+```sh
+TARGET=http://127.0.0.1:3000 REPORT_DIR=$PWD/zap-report zap.sh -cmd -autorun security/zap/api.yaml
+```
+
+Resultado no V10 (ZAP 2.16.1): nenhum alerta alto ou médio no web nem na API. Achados e decisões:
+
+| Alerta | Risco | Decisão |
+| --- | --- | --- |
+| Formulário enviado por `GET` com e-mail e senha na URL (visto no rastreamento) | — | **Corrigido**: todo formulário tratado por script tem `method="post"`; um envio antes do script carregar não deixa nada na URL, no histórico nem nos logs. Teste E2E com JavaScript desligado. |
+| Absence of Anti-CSRF Tokens (10202) | Médio | Falso positivo, filtrado no plano: o formulário nunca é enviado ao servidor; o script manda os dados com `fetch` e o cabeçalho `X-CSRF-Token` (ADR-0005), e um `POST` na página não muda nada. |
+| Big Redirect Detected (10044) em `/conta` | Baixo | Aceito: o corpo do redirecionamento para o login é o esqueleto público da página, de um visitante sem sessão. |
+| Content-Type Header Missing (10019), Suspicious Comments (10027), User Controllable HTML Element Attribute (10031), Authentication Request Identified (10111), Modern Web Application (10109) | Informativo | Sem ação: `404` sem corpo, comentários de bibliotecas no JavaScript, `next` e filtros refletidos com escape do React. |
+
+### Riscos residuais conhecidos (V10)
+
+- **IP do cliente atrás de dois proxies:** o navegador chega à API pelo rewrite do web (Vercel) e pelo proxy do Render, então `TRUST_PROXY_HOPS` é `2` em produção. Quem chamar a API direto no endereço do Render pode forjar o `X-Forwarded-For` e espalhar tentativas por "IPs" diferentes; os limites por conta e o bloqueio do login continuam valendo. Conferir no deploy (V11) que o `req.ip` vê o cliente.

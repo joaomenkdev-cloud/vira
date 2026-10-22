@@ -78,7 +78,9 @@ export function LoginForm({ next, oauthError, providers }: LoginFormProps) {
         </Alert>
       ) : null}
 
+      {/* POST: a submit before the script loads must not put the password in the address. */}
       <form
+        method="post"
         noValidate
         onSubmit={(event) => void handleSubmit(event)}
         className="flex flex-col gap-6"

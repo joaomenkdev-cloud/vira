@@ -154,6 +154,7 @@ function TicketTypeForm({ event, ticketType, onSaved }: Omit<TicketTypeDialogPro
 
   return (
     <form
+      method="post"
       noValidate
       onSubmit={(submitEvent) => void handleSubmit(submitEvent)}
       className="flex flex-col gap-6"

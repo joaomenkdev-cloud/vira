@@ -42,7 +42,7 @@ Sobre o titular indicado por terceiro: o comprador informa o nome de quem vai us
 ### Onde dado pessoal **não** pode aparecer
 
 - Logs de aplicação (pino redige `email`, `name`, `holderName`, `password`, `token`, cookies e headers de autenticação).
-- Sentry (`sendDefaultPii: false` + `beforeSend` que remove `user`, `request.cookies`, `request.headers`, `request.data`).
+- Sentry, na API e no worker (só com `SENTRY_DSN`): coleta automática desligada (`dataCollection`), sem breadcrumbs nem tracing, e `beforeSend` que remove `user`, `request`, `extra`, `breadcrumbs`, `server_name` e as variáveis dos frames e mascara e-mails nas mensagens ([SECURITY_MODEL.md](SECURITY_MODEL.md#4-controles-transversais)).
 - `outbox_messages.payload` e jobs do BullMQ (só IDs).
 - URLs e query strings (o token do QR e IDs de pedido nunca carregam nome ou e-mail).
 - `metadata` do PaymentIntent no Stripe (só `orderId`).

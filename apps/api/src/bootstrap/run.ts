@@ -2,6 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 
 import { ConfigValidationError, loadConfig } from "../platform/config/load-config.js";
+import { initErrorReporting } from "../platform/observability/error-reporting.js";
 import { AppModule } from "./app.module.js";
 import { configureApp } from "./configure-app.js";
 
@@ -25,6 +26,7 @@ export async function run(env: NodeJS.ProcessEnv, options: RunOptions = {}): Pro
     writeError(error.message);
     return 1;
   }
+  initErrorReporting(config, "api");
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule.register({ config }), {
     bufferLogs: true,

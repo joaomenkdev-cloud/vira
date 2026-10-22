@@ -141,6 +141,7 @@ export class OrganizerEventsController {
   @problem(HttpStatus.BAD_REQUEST)
   @problem(HttpStatus.UNAUTHORIZED)
   @problem(HttpStatus.FORBIDDEN)
+  @problem(HttpStatus.TOO_MANY_REQUESTS)
   async create(
     @Body({ schema: createEventRequestSchema }) body: CreateEventRequest,
     @Req() request: Request,

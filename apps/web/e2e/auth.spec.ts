@@ -146,6 +146,24 @@ test.describe("form errors", () => {
   });
 });
 
+test.describe("before the page script loads", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("a submitted form never puts what was typed in the address", async ({ page }) => {
+    for (const path of ["/entrar", "/cadastro"]) {
+      await page.goto(path);
+      await page.getByLabel("E-mail").fill("ana@example.com");
+      await page.getByLabel("Senha", { exact: true }).fill(PASSWORD);
+      await page
+        .locator("main form")
+        .getByRole("button", { name: /^(Entrar|Criar conta)$/ })
+        .click();
+      await page.waitForLoadState();
+      expect(page.url()).toMatch(new RegExp(`${path}$`));
+    }
+  });
+});
+
 test.describe("e-mail links", () => {
   test("an unknown or used link is explained", async ({ page }) => {
     await page.goto(`/verificar-email#token=${"A".repeat(43)}`);

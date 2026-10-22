@@ -3,6 +3,7 @@ import { type OutboxJobData, outboxJobDataSchema, type QueueName } from "@vira/s
 import type { Job } from "bullmq";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
+import { reportError } from "../observability/error-reporting.js";
 import { JobHandlerRegistry } from "./job-handlers.js";
 import { QueueService } from "./queue.service.js";
 
@@ -47,6 +48,10 @@ export class QueueConsumers implements OnApplicationBootstrap {
           },
           "Job failed",
         );
+        // Retries are expected; a job that used up all of them needs someone to look.
+        if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) {
+          reportError(error, { queue: name, job: job.name });
+        }
       });
     }
   }

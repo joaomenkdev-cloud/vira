@@ -73,7 +73,7 @@ function setup() {
       });
     },
   };
-  const create = new CreateEvent(events, { render: (md) => md }, clock, ids, scope);
+  const create = new CreateEvent(events, { render: (md) => md }, limiter, clock, ids, scope);
   const requestUpload = new RequestImageUpload(
     events,
     uploads,

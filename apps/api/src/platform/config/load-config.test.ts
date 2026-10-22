@@ -56,6 +56,7 @@ describe("loadConfig", () => {
       env: "development",
       http: { host: "0.0.0.0", port: 3000, webOrigin: "http://localhost:3001", trustProxyHops: 0 },
       log: { level: "info", pretty: true },
+      errorReporting: undefined,
       docs: { enabled: true },
       database: { url: validEnv.DATABASE_URL },
       redis: { url: validEnv.REDIS_URL },
@@ -97,6 +98,30 @@ describe("loadConfig", () => {
   it("normalizes the web origin", () => {
     const config = loadConfig({ ...validEnv, WEB_ORIGIN: "https://vira.example/some/path" });
     expect(config.http.webOrigin).toBe("https://vira.example");
+  });
+
+  it("turns error reporting on with a DSN, defaulting the environment and the release", () => {
+    const dsn = "https://public@o1.ingest.sentry.io/1";
+    expect(loadConfig({ ...validEnv, SENTRY_DSN: dsn }).errorReporting).toEqual({
+      dsn,
+      environment: "development",
+      release: undefined,
+    });
+    expect(
+      loadConfig({ ...validEnv, SENTRY_DSN: dsn, RENDER_GIT_COMMIT: "0123abc" }).errorReporting,
+    ).toEqual({ dsn, environment: "development", release: "0123abc" });
+    expect(
+      loadConfig({
+        ...validEnv,
+        SENTRY_DSN: dsn,
+        SENTRY_ENVIRONMENT: "staging",
+        SENTRY_RELEASE: "vira@1.0.0",
+        RENDER_GIT_COMMIT: "0123abc",
+      }).errorReporting,
+    ).toEqual({ dsn, environment: "staging", release: "vira@1.0.0" });
+    expect(
+      captureError({ ...validEnv, SENTRY_DSN: "http://public@o1.ingest.sentry.io/1" }).message,
+    ).toContain("SENTRY_DSN");
   });
 
   it("reads the worker mode and the outbox polling interval", () => {

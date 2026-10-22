@@ -68,6 +68,7 @@ export function SignUpForm() {
       {problem ? <Alert variant="danger" title={problem} /> : null}
 
       <form
+        method="post"
         noValidate
         onSubmit={(event) => void handleSubmit(event)}
         className="flex flex-col gap-6"

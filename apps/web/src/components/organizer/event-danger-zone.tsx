@@ -113,6 +113,7 @@ export function CancelEvent({
         description="O cancelamento é definitivo: as vendas param e a página do evento passa a dizer que ele foi cancelado."
       >
         <form
+          method="post"
           noValidate
           onSubmit={(submitEvent) => void handleSubmit(submitEvent)}
           className="flex flex-col gap-6"

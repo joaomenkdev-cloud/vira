@@ -58,6 +58,7 @@ export function OrganizerSection({ account }: { account: Account }) {
       description="Quer vender ingressos para os seus eventos? Escolha o nome que o público vai ver."
     >
       <form
+        method="post"
         noValidate
         onSubmit={(event) => void handleSubmit(event)}
         className="flex flex-col gap-6"

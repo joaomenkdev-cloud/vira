@@ -1,0 +1,35 @@
+# OWASP ZAP passive scan of the API, driven by its OpenAPI document. Run locally against
+# an API started with API_DOCS_ENABLED (docs/SECURITY_MODEL.md, "Varredura ZAP").
+env:
+  contexts:
+    - name: vira-api
+      urls:
+        - ${TARGET}
+      includePaths:
+        - ${TARGET}.*
+  parameters:
+    failOnError: true
+    progressToStdout: true
+jobs:
+  - type: openapi
+    parameters:
+      apiUrl: ${TARGET}/docs/json
+      targetUrl: ${TARGET}
+      context: vira-api
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: ${REPORT_DIR}
+      reportFile: zap-api
+  - type: report
+    parameters:
+      template: traditional-md
+      reportDir: ${REPORT_DIR}
+      reportFile: zap-api
+  # A medium or high alert fails the run; low and informational ones are only reported.
+  - type: exitStatus
+    parameters:
+      errorLevel: Medium

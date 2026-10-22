@@ -283,7 +283,7 @@ Páginas do web (N7) que os e-mails apontam: `/redefinir-senha` e `/confirmar-em
 | Método | Rota | Papel | Corpo | Sucesso | Erros |
 | --- | --- | --- | --- | --- | --- |
 | GET | `/organizer/events` | ORGANIZER | `status`, `limit`, `cursor` | `200 { data, page }` — só eventos do próprio organizador | 401, 403 |
-| POST | `/organizer/events` | ORGANIZER | `{ title, descriptionMd, startsAt, endsAt, timezone, venue }` | `201 Event` (DRAFT) | 400, 401, 403 |
+| POST | `/organizer/events` | ORGANIZER | `{ title, descriptionMd, startsAt, endsAt, timezone, venue }` | `201 Event` (DRAFT) | 400, 401, 403, 429 (30 rascunhos/h/conta) |
 | GET | `/organizer/events/{id}` | ORGANIZER* | — | `200 Event` | 404 |
 | PATCH | `/organizer/events/{id}` | ORGANIZER* | campos parciais | `200 Event` | 400, 404, 409 |
 | DELETE | `/organizer/events/{id}` | ORGANIZER* | — | `204` (só DRAFT) | 404, 409 |

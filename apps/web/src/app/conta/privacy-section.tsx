@@ -167,6 +167,7 @@ function DeleteAccount({ account }: { account: Account }) {
           description="A exclusão é definitiva. Antes de confirmar, veja o que acontece:"
         >
           <form
+            method="post"
             noValidate
             onSubmit={(event) => void handleSubmit(event)}
             className="flex flex-col gap-6"

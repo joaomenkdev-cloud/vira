@@ -59,6 +59,7 @@ export function PasswordSection({ account }: { account: Account }) {
     <AccountSection title="Senha">
       {account.hasPassword ? (
         <form
+          method="post"
           noValidate
           onSubmit={(event) => void handleSubmit(event)}
           className="flex flex-col gap-6"
