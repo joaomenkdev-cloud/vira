@@ -95,6 +95,20 @@ describe("loadConfig", () => {
     expect(config.log).toEqual({ level: "warn", pretty: false });
   });
 
+  it("treats a variable set to nothing as unset", () => {
+    const config = loadConfig({
+      ...validEnv,
+      LOG_LEVEL: "",
+      GOOGLE_CLIENT_ID: "",
+      GOOGLE_CLIENT_SECRET: " ",
+      SENTRY_DSN: "",
+    });
+    expect(config.log.level).toBe("info");
+    expect(config.auth.oauth.google).toBeUndefined();
+    expect(config.errorReporting).toBeUndefined();
+    expect(captureError({ ...validEnv, DATABASE_URL: "" }).message).toContain("DATABASE_URL");
+  });
+
   it("normalizes the web origin", () => {
     const config = loadConfig({ ...validEnv, WEB_ORIGIN: "https://vira.example/some/path" });
     expect(config.http.webOrigin).toBe("https://vira.example");
