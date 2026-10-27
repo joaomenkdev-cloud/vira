@@ -37,7 +37,7 @@
     "ioredis": "^6.0.0",
     "markdown-it": "^15.0.3",
     "nestjs-pino": "^5.3.1",
-    "nodemailer": "^10.1.0",
+    "nodemailer": "^10.2.1",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
     "pino-http": "^11.0.0",
@@ -47,7 +47,7 @@
     "sharp": "^0.35.5",
     "stripe": "^23.0.0",
     "uuid": "^14.0.2",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@nestjs/cli": "^12",
