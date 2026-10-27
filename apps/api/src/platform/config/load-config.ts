@@ -18,8 +18,16 @@ export class ConfigValidationError extends Error {
   }
 }
 
+/**
+ * A variable that is set but empty counts as unset: hosting dashboards often keep the key
+ * of an optional variable with no value (an OAuth provider left off, say).
+ */
+function withoutEmptyValues(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(env).filter(([, value]) => value?.trim() !== ""));
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
-  const result = envSchema.safeParse(env, { reportInput: false });
+  const result = envSchema.safeParse(withoutEmptyValues(env), { reportInput: false });
   if (result.success) return result.data;
 
   throw new ConfigValidationError(

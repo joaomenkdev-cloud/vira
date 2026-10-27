@@ -1,0 +1,31 @@
+name: Smoke test
+
+# Checks the public demo after a deploy (docs/DEPLOY.md). Reads public pages only.
+on:
+  workflow_dispatch:
+    inputs:
+      web_url:
+        description: Address of the web app (https)
+        required: true
+      api_url:
+        description: Address of the API (https)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - name: Check the deployed demo
+        env:
+          WEB_URL: ${{ inputs.web_url }}
+          API_URL: ${{ inputs.api_url }}
+        run: node scripts/smoke.mjs
