@@ -1,0 +1,81 @@
+# Render Blueprint of the API (docs/DEPLOY.md, ADR-0011). Variables marked `sync: false`
+# are asked for when the Blueprint is created and then live only in the Render dashboard.
+# Deploys are manual: no push deploys the demo by itself (ADR-0011).
+services:
+  - type: web
+    name: vira-api
+    runtime: node
+    plan: free
+    # Same AWS region as the database (Neon) and Redis (Upstash): every request talks to both.
+    region: virginia
+    autoDeploy: false
+    buildCommand: >-
+      npx --yes pnpm@9.15.0 install --frozen-lockfile --prod=false &&
+      npx --yes pnpm@9.15.0 turbo run build --filter=@vira/api
+    # Migrations run before the server starts; `prisma migrate deploy` only applies new ones.
+    startCommand: cd apps/api && npx prisma migrate deploy && node dist/main.js
+    healthCheckPath: /api/v1/health/ready
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # The free plan has no background worker: the consumers run inside the API.
+      - key: WORKER_MODE
+        value: embedded
+      # The browser reaches the API through the web's rewrite (Vercel) and Render's proxy.
+      - key: TRUST_PROXY_HOPS
+        value: "2"
+      - key: API_DOCS_ENABLED
+        value: "false"
+      - key: LOG_LEVEL
+        value: info
+      # https://<project>.vercel.app or the custom domain of the web app.
+      - key: WEB_ORIGIN
+        sync: false
+      # Neon, direct (not pooled) connection string with sslmode=require.
+      - key: DATABASE_URL
+        sync: false
+      # Upstash, rediss://default:<password>@<host>:6379
+      - key: REDIS_URL
+        sync: false
+      # Resend: smtps://resend:<api key>@smtp.resend.com:465
+      - key: SMTP_URL
+        sync: false
+      # Vira <no-reply@your-domain>
+      - key: MAIL_FROM
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CSRF_SECRET
+        generateValue: true
+      # q1:<openssl rand -base64 32>
+      - key: QR_SIGNING_KEYS
+        sync: false
+      # Cloudflare R2: https://<account id>.r2.cloudflarestorage.com, bucket and API token.
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      # Stripe, test mode only (sk_test_, pk_test_, whsec_).
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      # Optional: leave empty to turn a provider off.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
