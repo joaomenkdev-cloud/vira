@@ -72,6 +72,7 @@ Detalhes e critérios de pronto em [docs/ROADMAP.md](docs/ROADMAP.md).
 | [API](docs/API.md) | Endpoints, papéis e respostas |
 | [Modelo de segurança](docs/SECURITY_MODEL.md) | STRIDE, controles e checklist ASVS |
 | [Privacidade](docs/PRIVACY.md) | Inventário LGPD, retenção e direitos do titular |
+| [Deploy](docs/DEPLOY.md) | Como a demo pública é montada, publicada e verificada |
 | [Design system](docs/DESIGN.md) | Tokens, componentes, wireframes e acessibilidade |
 | [Briefing visual](docs/DESIGN_BRIEF.md) | Fonte da verdade da identidade visual |
 | [ADRs](docs/adr/) | Decisões de arquitetura |

@@ -72,6 +72,7 @@ Technical documentation is written in Portuguese.
 | [API](docs/API.md) | Endpoints, roles and responses |
 | [Security model](docs/SECURITY_MODEL.md) | STRIDE, controls and ASVS checklist |
 | [Privacy](docs/PRIVACY.md) | LGPD inventory, retention and data subject rights |
+| [Deploy](docs/DEPLOY.md) | How the public demo is set up, published and checked (in Portuguese) |
 | [Design system](docs/DESIGN.md) | Tokens, components, wireframes and accessibility |
 | [ADRs](docs/adr/) | Architecture decision records |
 

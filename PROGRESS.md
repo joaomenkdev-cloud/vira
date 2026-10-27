@@ -5,9 +5,9 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 ## Estado atual
 
 - **Marco:** 2 — MVP público v1.0 (o Marco 1 terminou com a N13).
-- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V9 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#44) e Dependabot (#4–#7, #9 CodeQL v4). V10 no PR do endurecimento (`chore/security-hardening`).
-- **Entregas abertas:** V10.
-- **Próximo passo:** V11 — Deploy da demo e v1.0.0 (`chore/deploy`), **só com autorização explícita do mantenedor**.
+- **Concluído (mergeado):** F1 a F7, N1 a N13, V1 a V10 (PRs #1, #2, #8, #10–#17, #26–#30, #32–#45) e Dependabot (#4–#7, #9 CodeQL v4).
+- **Entregas abertas:** V11 (autorizado pelo mantenedor em 27/10), em duas partes: configuração do deploy (`chore/deploy`) e, depois do deploy, README com link e prints e a tag `v1.0.0`.
+- **Próximo passo:** o mantenedor cria as contas e segredos do [docs/DEPLOY.md](docs/DEPLOY.md) (passos 1 a 7); o projeto na Vercel, o seed e o smoke test seguem daqui.
 - **Bloqueios / pendências do mantenedor:** Docker Desktop não sobe nesta máquina pela sessão do agente (precisa ser iniciado pelo usuário); os testes de integração (Testcontainers) e o job de `docker compose` rodam só no CI até lá.
 
 ## Regras que valem sempre
@@ -22,6 +22,26 @@ Arquivo para retomar o trabalho em outra sessão. **No início de cada sessão:*
 - Código e commits em inglês; documentação em português (README também em inglês).
 
 ## Registro
+
+### 2026-10-27 — V11 (parte 1): configuração do deploy
+
+Auditoria: o ADR-0011 fixava os serviços, mas não havia `render.yaml`, configuração da Vercel, guia nem smoke test. O `pnpm audit` acusava 13 alertas novos desde o V10, dois deles críticos no Next.js 16.4.0 (execução remota no otimizador de imagens e no `use cache`), e o próprio `next build` parava por causa deles.
+
+Feito:
+
+- `render.yaml`: API no plano gratuito, região `virginia`, worker embutido, migrations no start, health check em `/health/ready`, `TRUST_PROXY_HOPS=2`, segredos pedidos na criação do Blueprint (`JWT_SECRET` e `CSRF_SECRET` gerados pelo Render), sem deploy por push.
+- `apps/web/vercel.json`: build pelo Turborepo a partir da raiz, sem deploy por push.
+- Workflows manuais: "Demo data" (seed e reset dos eventos de demonstração, com os segredos do ambiente `demo`) e "Smoke test" (`scripts/smoke.mjs`, só leitura de páginas e rotas públicas).
+- `docs/DEPLOY.md`: passo a passo de Neon, Upstash, R2, Resend, Stripe, chave do QR, Render, Vercel, login social, webhook, seed e smoke test, mais operação (rollback, troca de segredos, limites dos planos).
+- API: variável de ambiente vazia conta como não definida (painéis guardam a chave de opcionais sem valor).
+- Dependências: Next 16.4.3, zod 4.6.6, nodemailer 10.1.4, body-parser, multer (override) e fast-uri atualizados; `pnpm audit` limpo.
+
+Decisões:
+
+- **Sem domínio próprio (escolha do mantenedor):** e-mails saem por `onboarding@resend.dev`, que só entrega para a conta do Resend; a demo divulga o login com Google e GitHub.
+- **Seed pelo GitHub Actions**, não por máquina local: os segredos ficam no ambiente `demo` do repositório; as variáveis que o seed não usa recebem valores descartáveis gerados no próprio job.
+- **Bucket e CORS do R2 pelo painel**, com token só de objetos do bucket (o `storage:setup` exigiria um token de administrador).
+- **Tudo no leste dos EUA**, perto do banco e do Redis.
 
 ### 2026-10-22 — V10: endurecimento
 
